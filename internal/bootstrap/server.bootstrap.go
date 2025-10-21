@@ -10,20 +10,20 @@ import (
 	userRepo "github.com/api-monolith-template/internal/repository/user"
 	authSvc "github.com/api-monolith-template/internal/service/auth"
 	httpTransport "github.com/api-monolith-template/internal/transport/http"
-	authCtrl "github.com/api-monolith-template/internal/transport/http/auth"
+	authHttp "github.com/api-monolith-template/internal/transport/http/auth"
+	userHttp "github.com/api-monolith-template/internal/transport/http/user"
 )
 
 func StartServer() {
-	// Infra
 	gormDB := infrastructure.InitializeDBConn()
 	rdb := infrastructure.NewRedisClient()
 	r := infrastructure.NewGinEngine()
 
-	// Repo
+	// repos
 	uRepo := userRepo.NewRepository(gormDB)
 	rRepo := roleRepo.NewRepository(gormDB)
 
-	// SMTP config + defaults
+	// SMTP sender
 	host := config.Env.SMTP.Host
 	if host == "" {
 		host = "smtp.gmail.com"
@@ -38,7 +38,8 @@ func StartServer() {
 	if fromEmail == "" {
 		fromEmail = "no-reply@medikaone.id"
 	}
-	emCfg := &email.Config{
+
+	sender := email.NewSMTPSender(&email.Config{
 		Enabled:     true,
 		Provider:    "smtp",
 		Host:        host,
@@ -47,20 +48,22 @@ func StartServer() {
 		Password:    password,
 		FromEmail:   fromEmail,
 		FromName:    "MedikaOne",
-		Timeout:     15 * time.Second,
 		UseSTARTTLS: true,
-	}
-	sender := email.NewSMTPSender(emCfg)
+		Timeout:     15 * time.Second,
+	})
 
-	// Service
+	// service
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
 
-	// Transport
-	authController := authCtrl.NewController(authService)
-	httpTransport.
-		NewTransport().
+	// controllers
+	authController := authHttp.NewController(authService)
+	userController := userHttp.NewController(authService)
+
+	// transport
+	httpTransport.NewTransport().
 		WithGinEngine(r).
 		WithAuthController(authController).
+		WithUserController(userController).
 		InitRoute()
 
 	_ = r.Run(":" + config.Env.Server.Port)

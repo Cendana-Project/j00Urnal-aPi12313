@@ -9,17 +9,18 @@ import (
 type User struct {
 	ID           string         `json:"id" gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	Email        string         `json:"email" gorm:"type:varchar(190);uniqueIndex;not null"`
-	FirstName    string         `json:"first_name" gorm:"type:varchar(100);not null"`
-	LastName     string         `json:"last_name" gorm:"type:varchar(100);not null"`
-	Phone        *string        `json:"phone" gorm:"type:varchar(32)"`
+	Username     *string        `json:"username" gorm:"type:varchar(64);uniqueIndex"`
+	FirstName    string         `json:"first_name"`
+	LastName     string         `json:"last_name"`
+	Phone        *string        `json:"phone"`
 	DOB          *time.Time     `json:"dob"`
-	Address      *string        `json:"address" gorm:"type:text"`
-	Gender       *string        `json:"gender" gorm:"type:varchar(1)"` // L | P
-	NIK          *string        `json:"nik" gorm:"type:varchar(16);uniqueIndex"`
-	PasswordHash string         `json:"-" gorm:"type:text;not null"`
+	Address      *string        `json:"address"`
+	Gender       *string        `json:"gender"` // L|P
+	NIK          *string        `json:"nik"`
+	PasswordHash string         `json:"-" gorm:"not null"`
 	Status       string         `json:"status" gorm:"type:varchar(16);not null;default:'pending'"`
 	VerifiedAt   *time.Time     `json:"verified_at"`
-	CreatedAt    time.Time      `json:"created_at" gorm:"not null;autoCreateTime"`
-	UpdatedAt    *time.Time     `json:"updated_at" gorm:"autoUpdateTime"`
+	CreatedAt    time.Time      `json:"created_at" gorm:"not null;default:now()"`
+	UpdatedAt    *time.Time     `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }

@@ -217,5 +217,11 @@ var (
 		StatusCode: http.StatusBadRequest,
 		Message:    "new password cannot be the same as old password",
 	}
+	ErrPasswordNotMatch = response.CustomError{
+		Code:       "PASSWORD_NOT_MATCH",
+		StatusCode: http.StatusUnauthorized,
+		Message:    "password not match",
+		Detail:     GetMessageDetail(MsgPasswordNotMatch),
+	}
 	// Tambahkan error di bawah ini jika masih dipakai modul lain (field, slot, booking, dsb.)
 )
