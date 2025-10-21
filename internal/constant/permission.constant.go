@@ -1,99 +1,111 @@
 package constant
 
-// Permission slugs
+// ==========================
+// PERMISSION SLUGS — MedikaOne
+// ==========================
+
+// User & Role & Permission (admin area)
 const (
-	// User & Auth
-	PermUserView   = "user.view"
-	PermUserCreate = "user.create"
-	PermUserUpdate = "user.update"
-	PermUserDelete = "user.delete"
+	PermissionUserView   = "user.view"
+	PermissionUserCreate = "user.create"
+	PermissionUserUpdate = "user.update"
+	PermissionUserDelete = "user.delete"
 
-	// Roles & Permissions
-	PermRoleView   = "role.view"
-	PermRoleAssign = "role.assign"
-	PermPermView   = "permission.view"
+	PermissionRoleView   = "role.view"
+	PermissionRoleAssign = "role.assign" // assign role ke user
 
-	// Patient data
-	PermPatientView = "patient.view"
-	PermPatientEdit = "patient.edit"
-
-	// Doctor data
-	PermDoctorView = "doctor.view"
-	PermDoctorEdit = "doctor.edit"
-
-	// Medical records (EMR)
-	PermEMRView = "emr.view"
-	PermEMREdit = "emr.edit"
-
-	// Appointments & Schedules
-	PermAppointmentView = "appointment.view"
-	PermAppointmentEdit = "appointment.edit"
-
-	// Billing
-	PermBillingView = "billing.view"
-	PermBillingEdit = "billing.edit"
+	PermissionPermissionView = "permission.view"
 )
 
-// All permissions set helper
-func allPermsSlice() []string {
-	return []string{
-		PermUserView, PermUserCreate, PermUserUpdate, PermUserDelete,
-		PermRoleView, PermRoleAssign, PermPermView,
-		PermPatientView, PermPatientEdit,
-		PermDoctorView, PermDoctorEdit,
-		PermEMRView, PermEMREdit,
-		PermAppointmentView, PermAppointmentEdit,
-		PermBillingView, PermBillingEdit,
-	}
+// Patient / Doctor profile
+const (
+	PermissionPatientView = "patient.view"
+	PermissionPatientEdit = "patient.edit"
+
+	PermissionDoctorView = "doctor.view"
+	PermissionDoctorEdit = "doctor.edit"
+)
+
+// EMR & Billing
+const (
+	PermissionEMRView = "emr.view"
+	PermissionEMREdit = "emr.edit"
+
+	PermissionBillingView = "billing.view"
+	PermissionBillingEdit = "billing.edit"
+)
+
+// Appointment
+const (
+	PermissionAppointmentView = "appointment.view"
+	PermissionAppointmentEdit = "appointment.edit"
+)
+
+// ==========================
+// DEFAULT ROLE → PERMISSIONS
+// ==========================
+//
+// Catatan:
+// - super_admin mendapat SEMUA permission
+// - admin (rumah sakit) = manajemen RS
+// - nurse & receptionist hak operasional
+// - bod pengawasan & laporan (read mostly)
+// - patient & doctor minimal yang diperlukan
+var DefaultRolePermissions = map[string][]string{
+	// super admin: semua
+	RoleSuperAdmin: {
+		PermissionUserView, PermissionUserCreate, PermissionUserUpdate, PermissionUserDelete,
+		PermissionRoleView, PermissionRoleAssign, PermissionPermissionView,
+		PermissionPatientView, PermissionPatientEdit,
+		PermissionDoctorView, PermissionDoctorEdit,
+		PermissionEMRView, PermissionEMREdit,
+		PermissionBillingView, PermissionBillingEdit,
+		PermissionAppointmentView, PermissionAppointmentEdit,
+	},
+
+	// admin RS
+	RoleAdmin: {
+		PermissionUserView, PermissionUserCreate, PermissionUserUpdate,
+		PermissionRoleView, PermissionRoleAssign, PermissionPermissionView,
+		PermissionPatientView, PermissionPatientEdit,
+		PermissionDoctorView, PermissionDoctorEdit,
+		PermissionEMRView, PermissionEMREdit,
+		PermissionBillingView, PermissionBillingEdit,
+		PermissionAppointmentView, PermissionAppointmentEdit,
+	},
+
+	// nurse
+	RoleNurse: {
+		PermissionPatientView, PermissionPatientEdit,
+		PermissionEMRView, PermissionEMREdit,
+		PermissionBillingView,
+		PermissionAppointmentView, PermissionAppointmentEdit,
+	},
+
+	// receptionist
+	RoleReceptionist: {
+		PermissionAppointmentView, PermissionAppointmentEdit,
+		PermissionPatientView,
+		PermissionBillingView, PermissionBillingEdit,
+	},
+
+	// BOD (direksi)
+	RoleBOD: {
+		PermissionBillingView,
+		PermissionPermissionView, PermissionRoleView,
+		PermissionDoctorView, PermissionPatientView,
+		PermissionAppointmentView,
+	},
+
+	// patient (minimum)
+	RolePatient: {
+		PermissionAppointmentView, PermissionPatientView,
+	},
+
+	// doctor (minimum)
+	RoleDoctor: {
+		PermissionAppointmentView,
+		PermissionDoctorView,
+		PermissionEMRView,
+	},
 }
-
-// Matrix per role
-var (
-	PermissionsPatient = []string{
-		PermUserView,
-		PermAppointmentView,
-	}
-
-	PermissionsDoctor = []string{
-		PermUserView,
-		PermPatientView, PermPatientEdit,
-		PermEMRView, PermEMREdit,
-		PermAppointmentView, PermAppointmentEdit,
-	}
-
-	PermissionsNurse = []string{
-		PermUserView,
-		PermPatientView, PermPatientEdit,
-		PermEMRView,
-		PermAppointmentView, PermAppointmentEdit,
-	}
-
-	PermissionsReceptionist = []string{
-		PermUserView,
-		PermPatientView,
-		PermAppointmentView, PermAppointmentEdit,
-	}
-
-	PermissionsBOD = []string{
-		PermUserView, PermRoleView, PermPermView,
-		PermPatientView, PermDoctorView,
-		PermAppointmentView,
-		PermBillingView,
-	}
-
-	PermissionsAdmin = []string{
-		PermUserView, PermUserCreate, PermUserUpdate, PermUserDelete,
-		PermRoleView, PermRoleAssign, PermPermView,
-		PermPatientView, PermPatientEdit,
-		PermDoctorView, PermDoctorEdit,
-		PermEMRView, PermEMREdit,
-		PermAppointmentView, PermAppointmentEdit,
-		PermBillingView, PermBillingEdit,
-	}
-
-	// super_admin = semua permission
-	PermissionsSuperAdmin = allPermsSlice()
-)
-
-// AllPermissions merangkum semua slug untuk seeding
-func AllPermissions() []string { return allPermsSlice() }

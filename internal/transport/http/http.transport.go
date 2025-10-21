@@ -8,12 +8,17 @@ import (
 	userCtrl "github.com/api-monolith-template/internal/transport/http/user"
 	transportmw "github.com/api-monolith-template/internal/transport/middleware"
 	"github.com/api-monolith-template/internal/util"
+
+	rolerepo "github.com/api-monolith-template/internal/repository/role"
 )
 
 type Transport struct {
 	router         *gin.Engine
 	authController *authCtrl.Controller
 	userController *userCtrl.Controller
+
+	// >>> tambahkan ini
+	roleRepo *rolerepo.Repository
 }
 
 func NewTransport() *Transport { return new(Transport) }
@@ -28,6 +33,12 @@ func (t *Transport) WithUserController(c *userCtrl.Controller) *Transport {
 	return t
 }
 
+// >>> builder baru untuk inject role repo
+func (t *Transport) WithRoleRepository(repo *rolerepo.Repository) *Transport {
+	t.roleRepo = repo
+	return t
+}
+
 func (t *Transport) InitRoute() {
 	if t.router == nil {
 		panic("gin engine is nil")
@@ -35,13 +46,6 @@ func (t *Transport) InitRoute() {
 
 	// middlewares
 	t.router.Use(transportmw.TraceID())
-
-	// health
-	//t.router.GET("/_internal/healthz", func(c *gin.Context) {
-	//	resp := response.NewResponseOK()
-	//	resp.Data = gin.H{"status": "ok"}
-	//	util.HandleResponse(c, resp, nil)
-	//})
 
 	v1 := t.router.Group("/v1")
 
@@ -60,8 +64,16 @@ func (t *Transport) InitRoute() {
 	protected.Use(transportmw.AuthRequired())
 	{
 		protected.POST("/auth/choose-role", func(c *gin.Context) { t.authController.ChooseRole(c) })
-		protected.PUT("/profile/patient", func(c *gin.Context) { t.userController.UpdatePatientProfile(c) })
-		protected.PUT("/profile/doctor", func(c *gin.Context) { t.userController.UpdateDoctorProfile(c) })
+
+		// >>> TANAM PERMISSION DI SINI
+		protected.PUT("/profile/patient",
+			transportmw.RequirePermissions(t.roleRepo, constant.PermissionPatientEdit),
+			func(c *gin.Context) { t.userController.UpdatePatientProfile(c) },
+		)
+		protected.PUT("/profile/doctor",
+			transportmw.RequirePermissions(t.roleRepo, constant.PermissionDoctorEdit),
+			func(c *gin.Context) { t.userController.UpdateDoctorProfile(c) },
+		)
 	}
 
 	// 404

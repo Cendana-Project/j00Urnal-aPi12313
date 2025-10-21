@@ -1,6 +1,7 @@
 package role
 
 import (
+	"context"
 	"errors"
 
 	"gorm.io/gorm"
@@ -36,4 +37,20 @@ func (r *Repository) UserHasRole(userID, roleSlug string) (bool, error) {
 		Where("ur.user_id = ? AND r.slug = ?", userID, roleSlug).
 		Count(&cnt).Error
 	return cnt > 0, err
+}
+
+func (r *Repository) ListPermissionsByUser(ctx context.Context, userID string) ([]entity.Permission, error) {
+	var perms []entity.Permission
+	// Ambil kolom yg ada di entity.Permission (id, name, slug, description, is_active, created_at, updated_at, deleted_at)
+	q := `
+SELECT DISTINCT p.id, p.name, p.slug, p.description, p.is_active, p.created_at, p.updated_at, p.deleted_at
+FROM user_roles ur
+JOIN role_permissions rp ON rp.role_id = ur.role_id
+JOIN permissions p ON p.id = rp.permission_id
+WHERE ur.user_id = ? AND p.is_active = TRUE
+`
+	if err := r.db.WithContext(ctx).Raw(q, userID).Scan(&perms).Error; err != nil {
+		return nil, err
+	}
+	return perms, nil
 }

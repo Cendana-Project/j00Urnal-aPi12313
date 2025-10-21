@@ -15,15 +15,16 @@ import (
 )
 
 func StartServer() {
+	// Infra
 	gormDB := infrastructure.InitializeDBConn()
 	rdb := infrastructure.NewRedisClient()
 	r := infrastructure.NewGinEngine()
 
-	// repos
+	// Repositories
 	uRepo := userRepo.NewRepository(gormDB)
 	rRepo := roleRepo.NewRepository(gormDB)
 
-	// SMTP sender
+	// SMTP sender config (fallback default)
 	host := config.Env.SMTP.Host
 	if host == "" {
 		host = "smtp.gmail.com"
@@ -52,19 +53,22 @@ func StartServer() {
 		Timeout:     15 * time.Second,
 	})
 
-	// service
+	// Services
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
 
-	// controllers
+	// Controllers
 	authController := authHttp.NewController(authService)
 	userController := userHttp.NewController(authService)
 
-	// transport
-	httpTransport.NewTransport().
+	// HTTP Transport + routes
+	httpTransport.
+		NewTransport().
 		WithGinEngine(r).
 		WithAuthController(authController).
 		WithUserController(userController).
+		WithRoleRepository(rRepo). // penting untuk middleware RequirePermissions
 		InitRoute()
 
+	// Start server
 	_ = r.Run(":" + config.Env.Server.Port)
 }
