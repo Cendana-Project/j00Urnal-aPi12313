@@ -1,28 +1,23 @@
 package request
 
-import "github.com/google/uuid"
-
-type RegisterReq struct {
-	Username string `json:"username" binding:"required,min=3,max=30,unique_db=users:username"`
-	Email    string `json:"email" binding:"required,email,unique_db=users:email"`
-	Password string `json:"password" binding:"required,min=8,max=30"`
+type RegisterRequest struct {
+	Email       string  `json:"email" validate:"required,email"`
+	Password    string  `json:"password" validate:"required,min=8"` // validasi kombo di service (huruf+angka)
+	FirstName   string  `json:"first_name" validate:"required"`
+	LastName    string  `json:"last_name" validate:"required"`
+	Phone       *string `json:"phone" validate:"omitempty,numeric"`
+	DOB         *string `json:"dob" validate:"omitempty"` // "YYYY-MM-DD"
+	Address     *string `json:"address" validate:"omitempty"`
+	Gender      *string `json:"gender" validate:"omitempty,oneof=L P"`
+	NIK         *string `json:"nik" validate:"omitempty,len=16,numeric"`
+	AccountRole string  `json:"account_role" validate:"required,oneof=patient doctor"`
 }
 
-type LoginReq struct {
-	Identifier string `json:"identifier" binding:"required"`
-	Password   string `json:"password" binding:"required"`
+type VerifyEmailRequest struct {
+	Token string `json:"token" validate:"required"`
 }
 
-type AuthInfoReq struct {
-	UserID uuid.UUID `json:"-"`
-}
-
-type AuthRefreshReq struct {
-	UserID  uuid.UUID `json:"-"`
-	TokenID uuid.UUID `json:"-"`
-}
-
-type AuthLogoutReq struct {
-	UserID  uuid.UUID `json:"-"`
-	TokenID uuid.UUID `json:"-"`
+type VerifyPINRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	PIN   string `json:"pin"   binding:"required,len=6"`
 }

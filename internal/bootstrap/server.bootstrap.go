@@ -1,97 +1,67 @@
 package bootstrap
 
 import (
-	"context"
-	"fmt"
-	"net/http"
+	"time"
 
 	"github.com/api-monolith-template/internal/config"
+	"github.com/api-monolith-template/internal/email"
 	"github.com/api-monolith-template/internal/infrastructure"
-	cacheRepo "github.com/api-monolith-template/internal/repository/cache"
+	roleRepo "github.com/api-monolith-template/internal/repository/role"
 	userRepo "github.com/api-monolith-template/internal/repository/user"
 	authSvc "github.com/api-monolith-template/internal/service/auth"
 	httpTransport "github.com/api-monolith-template/internal/transport/http"
 	authCtrl "github.com/api-monolith-template/internal/transport/http/auth"
-	middlewareCtrl "github.com/api-monolith-template/internal/transport/http/middleware"
-	"github.com/api-monolith-template/internal/util"
-	"github.com/sirupsen/logrus"
 )
 
 func StartServer() {
-	ctx := context.Background()
-
-	// init infra
-	infrastructure.InitializeDBConn()
-	db, err := infrastructure.DB.DB()
-	util.ContinueOrFatal(err)
-
-	err = db.Ping()
-	util.ContinueOrFatal(err)
-
+	// Infra
+	gormDB := infrastructure.InitializeDBConn()
 	rdb := infrastructure.NewRedisClient()
-	if !config.Env.Redis.IsCacheDisable {
-		_, err = rdb.Ping(ctx).Result()
-		util.ContinueOrFatal(err)
-	}
-
 	r := infrastructure.NewGinEngine()
 
-	// init repository
-	cacheRepository := cacheRepo.
-		NewRepository().
-		WithRedisDB(rdb)
-	userRepository := userRepo.
-		NewRepository().
-		WithGormDB(infrastructure.DB).
-		WithCacheRepository(cacheRepository)
+	// Repo
+	uRepo := userRepo.NewRepository(gormDB)
+	rRepo := roleRepo.NewRepository(gormDB)
 
-	// init service
-	authService := authSvc.
-		NewService().
-		WithUserRepository(userRepository).
-		WithCacheRepository(cacheRepository)
+	// SMTP config + defaults
+	host := config.Env.SMTP.Host
+	if host == "" {
+		host = "smtp.gmail.com"
+	}
+	port := config.Env.SMTP.Port
+	if port == 0 {
+		port = 587
+	}
+	username := config.Env.SMTP.Username
+	password := config.Env.SMTP.Password
+	fromEmail := username
+	if fromEmail == "" {
+		fromEmail = "no-reply@medikaone.id"
+	}
+	emCfg := &email.Config{
+		Enabled:     true,
+		Provider:    "smtp",
+		Host:        host,
+		Port:        port,
+		Username:    username,
+		Password:    password,
+		FromEmail:   fromEmail,
+		FromName:    "MedikaOne",
+		Timeout:     15 * time.Second,
+		UseSTARTTLS: true,
+	}
+	sender := email.NewSMTPSender(emCfg)
 
-	// init controller
-	middlewareController := middlewareCtrl.
-		NewController().
-		WithAuthService(authService).
-		WithCacheRepository(cacheRepository)
-	authController := authCtrl.
-		NewController().
-		WithAuthService(authService)
+	// Service
+	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
 
-	// init http transport
+	// Transport
+	authController := authCtrl.NewController(authService)
 	httpTransport.
 		NewTransport().
 		WithGinEngine(r).
-		WithMiddlewareController(middlewareController).
 		WithAuthController(authController).
 		InitRoute()
 
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.Env.Server.Port),
-		Handler: r.Handler(),
-	}
-	// start http server
-	go func() {
-		logrus.Info(fmt.Sprintf("running at http://0.0.0.0:%s", config.Env.Server.Port))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			util.ContinueOrFatal(err)
-		}
-	}()
-
-	wait := gracefulShutdown(ctx, config.Env.GracefulShutdownTimeout, map[string]operation{
-		"database connection": func(ctx context.Context) error {
-			infrastructure.StopTickerCh <- true
-			return db.Close()
-		},
-		"redis connection": func(ctx context.Context) error {
-			return rdb.Close()
-		},
-		"gin server": func(ctx context.Context) error {
-			return srv.Shutdown(ctx)
-		},
-	})
-
-	<-wait
+	_ = r.Run(":" + config.Env.Server.Port)
 }

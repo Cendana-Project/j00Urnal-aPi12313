@@ -21,18 +21,39 @@ func NewGinEngine() *gin.Engine {
 	}
 
 	r.Use(gin.Recovery())
-	r.Use(cors.New(cors.Config{
-		AllowAllOrigins:        true,
-		AllowOrigins:           nil,
-		AllowOriginFunc:        nil,
+
+	corsConfig := cors.Config{
 		AllowMethods:           []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 		AllowHeaders:           []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
 		AllowCredentials:       true,
-		AllowWildcard:          true,
-		AllowBrowserExtensions: true,
+		AllowWildcard:          false,
+		AllowBrowserExtensions: false,
 		AllowWebSockets:        true,
-		AllowFiles:             true,
-	}))
+		AllowFiles:             false,
+	}
+
+	if config.Env.Env == constant.ProductionEnvironment {
+		corsConfig.AllowOrigins = []string{
+			"https://dashboard-staging.soccernearu.tech",
+			"https://www.dashboard-staging.soccernearu.tech",
+		}
+		if config.Env.Server.FrontendURL != "" {
+			corsConfig.AllowOrigins = append(corsConfig.AllowOrigins, config.Env.Server.FrontendURL)
+		}
+	} else {
+		corsConfig.AllowOrigins = []string{
+			"http://localhost:3000",
+			"http://localhost:3001",
+			"http://localhost:8080",
+			"https://dashboard-staging.soccernearu.tech",
+			"https://www.dashboard-staging.soccernearu.tech",
+		}
+		if config.Env.Server.FrontendURL != "" {
+			corsConfig.AllowOrigins = append(corsConfig.AllowOrigins, config.Env.Server.FrontendURL)
+		}
+	}
+
+	r.Use(cors.New(corsConfig))
 
 	// register custom validation
 	util.AddValidation(DB)
@@ -76,10 +97,9 @@ func NewGinEngine() *gin.Engine {
 
 		resp := response.BaseResponse{
 			StatusCode: http.StatusOK,
-			Message:    "Health Check",
 			Data:       healthInfo,
 		}
-		c.JSON(resp.StatusCode, resp)
+		util.HandleResponse(c, &resp, nil)
 	})
 
 	return r
