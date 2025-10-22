@@ -53,7 +53,13 @@ func init() {
 		})
 	}
 
-	logLevel, err := logrus.ParseLevel(config.Env.LogLevel)
+	// Set default log level if empty
+	logLevelStr := config.Env.LogLevel
+	if logLevelStr == "" {
+		logLevelStr = "info"
+	}
+	
+	logLevel, err := logrus.ParseLevel(logLevelStr)
 	if err != nil {
 		logrus.Fatal(err)
 	}
