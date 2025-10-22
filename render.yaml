@@ -1,0 +1,54 @@
+# Render deployment configuration
+version: 2
+
+services:
+  web:
+    type: web
+    name: medikaone-api
+    env: go
+    buildCommand: go build -o main .
+    startCommand: ./main server
+    envVars:
+      - key: ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: SERVER_PORT
+        value: 8081
+      - key: GRACEFUL_SHUTDOWN_TIMEOUT
+        value: 30s
+      - key: DATABASE_DSN
+        fromDatabase:
+          name: medikaone-db
+          property: connectionString
+      - key: REDIS_CACHE_DSN
+        fromService:
+          type: redis
+          name: medikaone-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TOKEN_PASSWORD_SALT
+        generateValue: true
+      - key: TOKEN_ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: TOKEN_REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: SMTP_HOST
+        value: smtp.sendgrid.net
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        value: apikey
+      - key: SMTP_PASSWORD
+        sync: false
+
+databases:
+  - name: medikaone-db
+    databaseName: medikaone
+    user: medikaone_user
+
+services:
+  - type: redis
+    name: medikaone-redis
+    plan: free

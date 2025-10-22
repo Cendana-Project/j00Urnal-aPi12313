@@ -7,6 +7,14 @@ import (
 
 func (t *Transport) InitRoute() {
 	t.router.Use(t.middlewareController.CustomPanicHandler(), t.middlewareController.LoggingMiddleware())
+	bu
+	// Health check endpoint
+	t.router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"service": "medikaone-api",
+		})
+	})
 
 	v1Group := t.router.Group("/v1")
 
