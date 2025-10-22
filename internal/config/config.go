@@ -67,14 +67,15 @@ func LoadConfig() error {
 	viper.AddConfigPath(".")
 	replacer := strings.NewReplacer(".", "_")
 	viper.SetEnvKeyReplacer(replacer)
+	viper.AutomaticEnv()
 
-	err := viper.ReadInConfig()
-	if err != nil {
-		logrus.Fatal("failed to read config file: ", err)
+	// Make config file optional in environments like Render; allow ENV-only config
+	if err := viper.ReadInConfig(); err != nil {
+		logrus.Warn("config.yml not found or unreadable; relying on environment variables")
 	}
 
-	err = viper.Unmarshal(&Env)
-	if err != nil {
+	// Unmarshal combined config (file + overridden by ENV)
+	if err := viper.Unmarshal(&Env); err != nil {
 		logrus.Fatal("failed to unmarshal config file: ", err)
 		return err
 	}
