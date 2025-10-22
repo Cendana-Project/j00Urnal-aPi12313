@@ -2,53 +2,98 @@
 version: 2
 
 services:
-  web:
-    type: web
+  - type: web
     name: medikaone-api
     env: go
     buildCommand: go build -o main .
     startCommand: ./main server
     envVars:
+      # Environment
       - key: ENV
         value: production
       - key: LOG_LEVEL
         value: info
-      - key: SERVER_PORT
-        value: 8081
       - key: GRACEFUL_SHUTDOWN_TIMEOUT
         value: 30s
+      
+      # Server
+      - key: SERVER_PORT
+        value: 8081
+      - key: SERVER_BASE_URL
+        sync: false
+      
+      # Database
       - key: DATABASE_DSN
-        fromDatabase:
-          name: medikaone-db
-          property: connectionString
+        sync: false
+      - key: DATABASE_PING_INTERVAL
+        value: 10s
+      - key: DATABASE_RECONNECT_FACTOR
+        value: "2"
+      - key: DATABASE_MIN_JITTER
+        value: 200ms
+      - key: DATABASE_MAX_JITTER
+        value: 500ms
+      - key: DATABASE_MAX_RETRY
+        value: "5"
+      - key: DATABASE_MAX_IDLE_CONNS
+        value: "10"
+      - key: DATABASE_MAX_OPEN_CONNS
+        value: "30"
+      - key: DATABASE_MAX_CONN_LIFETIME
+        value: 30m
+      
+      # Redis
       - key: REDIS_CACHE_DSN
         fromService:
           type: redis
           name: medikaone-redis
           property: connectionString
-      - key: JWT_SECRET
-        generateValue: true
+      - key: REDIS_IS_CACHE_DISABLE
+        value: "false"
+      - key: REDIS_DEFAULT_CACHE_DURATION
+        value: 15m
+      - key: REDIS_MAX_RETRY
+        value: "5"
+      - key: REDIS_MAX_IDLE_CONNS
+        value: "5"
+      - key: REDIS_MAX_ACTIVE_CONNS
+        value: "20"
+      - key: REDIS_MAX_CONN_LIFETIME
+        value: 1h
+      
+      # Token/JWT
       - key: TOKEN_PASSWORD_SALT
         generateValue: true
       - key: TOKEN_ACCESS_TOKEN_SECRET
         generateValue: true
+      - key: TOKEN_ACCESS_TOKEN_DURATION
+        value: 1h
       - key: TOKEN_REFRESH_TOKEN_SECRET
         generateValue: true
+      - key: TOKEN_REFRESH_TOKEN_DURATION
+        value: 30h
+      - key: TOKEN_FORGOT_PASSWORD_RATE_LIMIT
+        value: "3"
+      - key: TOKEN_FORGOT_PASSWORD_RATE_WINDOW
+        value: 1h
+      
+      # JWT (if used separately from Token)
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL_MINUTES
+        value: "15"
+      - key: JWT_REFRESH_TTL_DAYS
+        value: "30"
+      
+      # SMTP
       - key: SMTP_HOST
-        value: smtp.sendgrid.net
+        value: smtp.gmail.com
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_USERNAME
-        value: apikey
+        sync: false
       - key: SMTP_PASSWORD
         sync: false
-
-databases:
-  - name: medikaone-db
-    databaseName: medikaone
-    user: medikaone_user
-
-services:
   - type: redis
     name: medikaone-redis
     plan: free
