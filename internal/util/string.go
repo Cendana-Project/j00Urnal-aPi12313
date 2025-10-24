@@ -1,16 +1,24 @@
 package util
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
-	"github.com/api-monolith-template/internal/model/entity"
+	"github.com/api-monolith-template/internal/constant"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/scrypt"
 )
+
+type TokenClaims struct {
+	UserID string             `json:"user_id"`
+	Type   constant.TokenType `json:"type"`
+	jwt.RegisteredClaims
+}
 
 func HashPassword(password string, salt []byte) (string, error) {
 	hash, err := scrypt.Key([]byte(password), salt, 32768, 8, 1, 32)
@@ -46,23 +54,49 @@ func ComparePassword(hashedPassword, password string) (bool, error) {
 	return subtle.ConstantTimeCompare(hash, newHash) == 1, nil
 }
 
-func GenerateToken(secret string, userID string, tokenID string, expirationTime time.Duration) (string, time.Time, error) {
-	issuedAt := time.Now().UTC()
-	expiration := issuedAt.Add(expirationTime)
+func GenerateToken(secret, userID, tokenID string, duration time.Duration, tokenType constant.TokenType) (string, time.Time, error) {
+	expiredAt := time.Now().Add(duration)
 
-	claims := &entity.Claims{
+	claims := TokenClaims{
 		UserID: userID,
+		Type:   tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        tokenID,
-			IssuedAt:  jwt.NewNumericDate(issuedAt),
-			ExpiresAt: jwt.NewNumericDate(expiration),
+			ExpiresAt: jwt.NewNumericDate(expiredAt),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
-	// Convert secret to []byte
-	signingKey := []byte(secret)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(secret))
+	return tokenString, expiredAt, err
+}
 
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	token, err := jwtToken.SignedString(signingKey)
-	return token, issuedAt, err
+func GenerateRandomToken(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	result := make([]byte, length)
+	for i := range result {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			return "", err
+		}
+		result[i] = charset[num.Int64()]
+	}
+	return string(result), nil
+}
+
+func GenerateOTP(length int) string {
+	const charset = "0123456789"
+	result := make([]byte, length)
+
+	for i := range result {
+		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			index = big.NewInt(time.Now().UnixNano() % int64(len(charset)))
+		}
+		result[i] = charset[index.Int64()]
+	}
+
+	return string(result)
 }

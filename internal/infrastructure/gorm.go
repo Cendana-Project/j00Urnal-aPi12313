@@ -18,7 +18,7 @@ var (
 	StopTickerCh chan bool
 )
 
-func InitializeDBConn() {
+func InitializeDBConn() *gorm.DB {
 	conn, err := openDBConn(config.Env.Database.DSN)
 	if err != nil {
 		logrus.WithField("databaseDSN", config.Env.Database.DSN).Fatal("failed to connect  database: ", err)
@@ -52,6 +52,7 @@ func InitializeDBConn() {
 	}
 
 	logrus.Info("connection to database Server success...")
+	return DB
 }
 
 func checkConnection(ticker *time.Ticker) {

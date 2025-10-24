@@ -25,6 +25,14 @@ type EnvConfig struct {
 	Server                  Server        `mapstructure:"server"`
 	Database                Database      `mapstructure:"database"`
 	Redis                   Redis         `mapstructure:"redis"`
+	SMTP                    SMTP          `mapstructure:"smtp"`
+	JWT                     JWTConfig     `mapstructure:"jwt"`
+}
+
+type JWTConfig struct {
+	Secret           string `mapstructure:"secret"`
+	AccessTTLMinutes int    `mapstructure:"access_ttl_minutes"`
+	RefreshTTLDays   int    `mapstructure:"refresh_ttl_days"`
 }
 
 type Redis struct {
@@ -38,15 +46,20 @@ type Redis struct {
 }
 
 type Token struct {
-	PasswordSalt         string        `mapstructure:"password_salt"`
-	AccessTokenSecret    string        `mapstructure:"access_token_secret"`
-	AccessTokenDuration  time.Duration `mapstructure:"access_token_duration"`
-	RefreshTokenDuration time.Duration `mapstructure:"refresh_token_duration"`
-	RefreshTokenSecret   string        `mapstructure:"refresh_token_secret"`
+	PasswordSalt             string        `mapstructure:"password_salt"`
+	AccessTokenSecret        string        `mapstructure:"access_token_secret"`
+	AccessTokenDuration      time.Duration `mapstructure:"access_token_duration"`
+	RefreshTokenDuration     time.Duration `mapstructure:"refresh_token_duration"`
+	RefreshTokenSecret       string        `mapstructure:"refresh_token_secret"`
+	ForgotPasswordDuration   time.Duration `mapstructure:"forgot_password_duration" env:"FORGOT_PASSWORD_DURATION" envDefault:"1h"`
+	ForgotPasswordRateLimit  int           `mapstructure:"forgot_password_rate_limit" env:"FORGOT_PASSWORD_RATE_LIMIT" envDefault:"3"`
+	ForgotPasswordRateWindow time.Duration `mapstructure:"forgot_password_rate_window" env:"FORGOT_PASSWORD_RATE_WINDOW" envDefault:"1h"`
 }
 
 type Server struct {
-	Port string `mapstructure:"port"`
+	Port        string `mapstructure:"port"`
+	BaseURL     string `mapstructure:"base_url"`
+	FrontendURL string `mapstructure:"frontend_url"`
 }
 
 type Database struct {
@@ -59,6 +72,14 @@ type Database struct {
 	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
 	MaxOpenConns    int           `mapstructure:"max_open_conns"`
 	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
+}
+
+type SMTP struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	From     string `mapstructure:"from"`
 }
 
 func LoadConfig() error {

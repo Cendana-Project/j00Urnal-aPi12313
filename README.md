@@ -250,6 +250,260 @@ curl --request GET \
 }
 ```
 
+### User Management Endpoints
+
+### Get All Users
+#### Request
+
+**Method:** `GET`
+
+**URL:** `${{HOST}}/v1/users`
+
+**Headers:**
+- `Content-Type: application/json`
+
+**Example cURL Command:**
+
+```bash
+curl --request GET \
+  --url ${{HOST}}/v1/users \
+  --header 'Content-Type: application/json'
+```
+
+**Example Response:**
+```json
+{
+	"message": "ok",
+	"data": {
+		"users": [
+			{
+				"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
+				"username": "username",
+				"firstName": "First",
+				"lastName": "Last",
+				"email": "email@gmail.com",
+				"phone": "1234567890",
+				"location": "Jakarta",
+				"createdAt": "2024-06-16T10:46:25Z",
+				"updatedAt": "2024-06-16T10:46:25Z"
+			}
+		],
+		"total": 1
+	},
+	"validationErrors": null
+}
+```
+
+### Get User by ID
+#### Request
+
+**Method:** `GET`
+
+**URL:** `${{HOST}}/v1/users/:id`
+
+**Headers:**
+- `Content-Type: application/json`
+
+**Example cURL Command:**
+
+```bash
+curl --request GET \
+  --url ${{HOST}}/v1/users/6759e56a-fa7c-49ee-9854-f32ab38083ae \
+  --header 'Content-Type: application/json'
+```
+
+**Example Response:**
+```json
+{
+	"message": "ok",
+	"data": {
+		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
+		"username": "username",
+		"firstName": "First",
+		"lastName": "Last",
+		"email": "email@gmail.com",
+		"phone": "1234567890",
+		"location": "Jakarta",
+		"createdAt": "2024-06-16T10:46:25Z",
+		"updatedAt": "2024-06-16T10:46:25Z"
+	},
+	"validationErrors": null
+}
+```
+
+### Find User by Email
+#### Request
+
+**Method:** `GET`
+
+**URL:** `${{HOST}}/v1/users/email/:email`
+
+**Headers:**
+- `Content-Type: application/json`
+
+**Example cURL Command:**
+
+```bash
+curl --request GET \
+  --url ${{HOST}}/v1/users/email/email@gmail.com \
+  --header 'Content-Type: application/json'
+```
+
+**Example Response:**
+```json
+{
+	"message": "ok",
+	"data": {
+		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
+		"username": "username",
+		"firstName": "First",
+		"lastName": "Last",
+		"email": "email@gmail.com",
+		"phone": "1234567890",
+		"location": "Jakarta",
+		"createdAt": "2024-06-16T10:46:25Z",
+		"updatedAt": "2024-06-16T10:46:25Z"
+	},
+	"validationErrors": null
+}
+```
+
+### Find User by Username
+#### Request
+
+**Method:** `GET`
+
+**URL:** `${{HOST}}/v1/users/username/:username`
+
+**Headers:**
+- `Content-Type: application/json`
+
+**Example cURL Command:**
+
+```bash
+curl --request GET \
+  --url ${{HOST}}/v1/users/username/username \
+  --header 'Content-Type: application/json'
+```
+
+**Example Response:**
+```json
+{
+	"message": "ok",
+	"data": {
+		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
+		"username": "username",
+		"firstName": "First",
+		"lastName": "Last",
+		"email": "email@gmail.com",
+		"phone": "1234567890",
+		"location": "Jakarta",
+		"createdAt": "2024-06-16T10:46:25Z",
+		"updatedAt": "2024-06-16T10:46:25Z"
+	},
+	"validationErrors": null
+}
+```
+
+### Find User by Identifier
+#### Request
+
+**Method:** `GET`
+
+**URL:** `${{HOST}}/v1/users/identifier/:identifier`
+
+**Headers:**
+- `Content-Type: application/json`
+
+**Example cURL Command:**
+
+```bash
+curl --request GET \
+  --url ${{HOST}}/v1/users/identifier/username \
+  --header 'Content-Type: application/json'
+```
+
+**Example Response:**
+```json
+{
+	"message": "ok",
+	"data": {
+		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
+		"username": "username",
+		"firstName": "First",
+		"lastName": "Last",
+		"email": "email@gmail.com",
+		"phone": "1234567890",
+		"location": "Jakarta",
+		"createdAt": "2024-06-16T10:46:25Z",
+		"updatedAt": "2024-06-16T10:46:25Z"
+	},
+	"validationErrors": null
+}
+```
+
+### Update User
+#### Request
+
+**Method:** `POST`
+
+**URL:** `${{HOST}}/v1/users`
+
+**Headers:**
+- `Content-Type: application/json`
+- `Authorization: Bearer <ACCESS_TOKEN>`
+
+**Body:**
+```json
+{
+	"username": "newusername",
+	"firstName": "New",
+	"lastName": "Name",
+	"email": "newemail@gmail.com",
+	"phone": "1234567890",
+	"location": "Jakarta"
+}
+```
+
+**Example cURL Command:**
+
+```bash
+curl --request POST \
+  --url ${{HOST}}/v1/users \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <ACCESS_TOKEN>' \
+  --data '{
+	"username": "newusername",
+	"firstName": "New",
+	"lastName": "Name",
+	"email": "newemail@gmail.com",
+	"phone": "1234567890",
+	"location": "Jakarta"
+}'
+```
+
+**Example Response:**
+```json
+{
+	"message": "Username or email already exists",
+	"data": null,
+	"validationErrors": null
+}
+```
+
+```json
+{
+	"message": "ok",
+	"data": {
+		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
+		"username": "newusername",
+		"email": "newemail@gmail.com",
+		"updatedAt": "2024-06-16T10:46:25Z"
+	},
+	"validationErrors": null
+}
+```
+
 ## Create new domain
 
 ### Define contract
@@ -459,3 +713,92 @@ httpTransport.
     WithAuthController(authController).
     InitRoute()
 ```
+
+# Role-Based Access Control API
+
+This repository implements a role-based access control (RBAC) system for a Go application, allowing for fine-grained permission management based on user roles within specific buildings.
+
+## Features
+
+- User authentication (register, login, logout)
+- Role management (create, update, delete roles)
+- Building-specific role assignments (assign/remove roles to users in specific buildings)
+- Permission-based access control with granular permissions (e.g., "owner:show", "owner:create")
+- Role hierarchy (Admin, Manager, User)
+
+## Testing the API
+
+### Prerequisites
+
+- Ensure PostgreSQL is installed and running
+- Create a database named "Medikaone"
+- Set up the configuration in `config.yml`
+
+### Setup
+
+1. Initialize and seed the database:
+
+```bash
+make seed
+```
+
+This creates:
+- Default roles (Admin, Manager, User)
+- Default permissions (owner:show, owner:create, user:list)
+- Test users with passwords "password123":
+  - admin@example.com (Admin role)
+  - manager@example.com (Manager role)
+  - user@example.com (User role)
+- Test buildings (Building A, Building B)
+- Role assignments for users in buildings
+
+2. Start the server:
+
+```bash
+make run
+```
+
+### Testing with Postman
+
+Import the provided Postman collection:
+
+1. Open Postman
+2. Click "Import" and select the `role_management_api.postman_collection.json` file
+3. Create a Postman environment with the variables:
+   - `access_token` (leave it empty, it will be filled automatically)
+   - `refresh_token` (leave it empty, it will be filled automatically)
+   - `user_id` (default: bf7ad1c8-a873-4915-9e60-2cd15b451292)
+   - `role_id` (default: e52b1dac-7751-451c-98d5-f81401926cf7)
+   - `building_id` (default: e0ffcd6c-a2f2-453f-801e-cbb351850932)
+4. Start with the "Login" request to get an access token
+5. After successful login, the environment variables will be automatically updated
+6. Test the other endpoints as needed
+
+### Testing Flow
+
+1. Login as admin user
+2. Create a new role
+3. Assign the role to a user in a building
+4. Verify the role assignment by fetching user roles for that building
+5. Remove the role from the user
+6. Verify the role was removed
+
+## Test Users and Default IDs
+
+After seeding, the following entities are available:
+
+### Users
+- Admin User: `bf7ad1c8-a873-4915-9e60-2cd15b451292`
+- Manager User: `9eff1130-2aa4-40f8-a3f1-cb3d461b6682`
+- Regular User: `40a91ed3-5057-4bca-be65-91c7da59feca`
+
+### Roles
+- Admin Role: `e52b1dac-7751-451c-98d5-f81401926cf7`
+- Manager Role: `63de13e6-9847-4b6c-bcc4-20145d0e1bec`
+- User Role: `b7efdfce-bc6a-451a-9b92-28b42e6eb3bc`
+
+### Buildings
+- Building A: `e0ffcd6c-a2f2-453f-801e-cbb351850932`
+- Building B: `1f66bcdc-8e1e-40a0-a037-1b364c70ac79`
+
+Note: The actual UUIDs may vary based on your seeded data.

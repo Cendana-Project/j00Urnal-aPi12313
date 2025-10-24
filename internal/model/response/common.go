@@ -1,13 +1,23 @@
 package response
 
+import "time"
+
 const (
 	MessageOK = "ok"
 )
+
+type MessageDetail struct {
+	TitleEng string `json:"title_eng,omitempty"`
+	DescEng  string `json:"desc_eng,omitempty"`
+	TitleIdn string `json:"title_idn,omitempty"`
+	DescIdn  string `json:"desc_idn,omitempty"`
+}
 
 type CustomError struct {
 	Code       string
 	Message    string
 	StatusCode int
+	Detail     MessageDetail
 }
 
 func (m CustomError) Error() string {
@@ -15,50 +25,75 @@ func (m CustomError) Error() string {
 }
 
 func (m CustomError) ToResponse() BaseResponse {
+	msg := m.Code
+	if msg == "" {
+		msg = m.Message
+	}
+
+	detail := m.Detail
+	if detail == (MessageDetail{}) && m.Message != "" {
+		detail = MessageDetail{
+			TitleEng: "Error",
+			DescEng:  m.Message,
+			TitleIdn: "Error",
+			DescIdn:  m.Message,
+		}
+	}
+
 	return BaseResponse{
-		StatusCode: m.StatusCode,
-		Message:    m.Message,
+		StatusCode:    m.StatusCode,
+		Message:       msg,
+		MessageDetail: detail,
 	}
 }
 
-type BaseResponse struct {
-	StatusCode       int               `json:"-"`
-	Message          string            `json:"message"`
-	Data             any               `json:"data"`
-	ValidationErrors []ValidationError `json:"validationErrors"`
+type Meta struct {
+	Page      int `json:"page"`
+	PageSize  int `json:"page_size"`
+	TotalData int `json:"total_data"`
 }
 
-type ValidationError struct {
-	Field   string `json:"field"`
-	Tag     string `json:"tag"`
-	Message string `json:"message"`
+type BaseResponse struct {
+	StatusCode    int           `json:"-"`
+	Message       string        `json:"message"`
+	MessageDetail MessageDetail `json:"message_detail"`
+	Data          any           `json:"data"`
+	Meta          any           `json:"meta,omitempty"`
+	TraceID       string        `json:"trace_id"`
+	Timestamp     time.Time     `json:"timestamp"`
 }
 
 func NewResponseOK() *BaseResponse {
 	return &BaseResponse{
 		Message: MessageOK,
+		MessageDetail: MessageDetail{
+			TitleEng: "SUCCESS",
+			DescEng:  "Operation completed successfully",
+			TitleIdn: "SUKSES",
+			DescIdn:  "Operasi berhasil diselesaikan",
+		},
 	}
 }
 
 type GetHealthCheckMemoryResp struct {
 	Alloc      uint64 `json:"alloc"`
-	TotalAlloc uint64 `json:"totalAlloc"`
+	TotalAlloc uint64 `json:"total_alloc"`
 	Sys        uint64 `json:"sys"`
-	HeapAlloc  uint64 `json:"heapAlloc"`
-	HeapSys    uint64 `json:"heapSys"`
+	HeapAlloc  uint64 `json:"heap_alloc"`
+	HeapSys    uint64 `json:"heap_sys"`
 }
 
 type GetHealthCheckServiceStatusResp struct {
 	Name string `json:"name"`
-	IsUp bool   `json:"isUp"`
+	IsUp bool   `json:"is_up"`
 }
 
 type GetHealthCheckResp struct {
 	Status          string                            `json:"status"`
 	Environtment    string                            `json:"environtment"`
 	Version         string                            `json:"version"`
-	GoVersion       string                            `json:"goVersion"`
-	GoRoutine       int                               `json:"goRoutine"`
+	GoVersion       string                            `json:"go_version"`
+	GoRoutine       int                               `json:"go_routine"`
 	Memory          GetHealthCheckMemoryResp          `json:"memory"`
-	ServiceStatuses []GetHealthCheckServiceStatusResp `json:"serviceStatuses"`
+	ServiceStatuses []GetHealthCheckServiceStatusResp `json:"service_statuses"`
 }

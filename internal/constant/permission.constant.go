@@ -1,0 +1,112 @@
+package constant
+
+// ==========================
+// PERMISSION SLUGS — MedikaOne
+// ==========================
+
+// User & Role & Permission (admin area)
+const (
+	PermissionUserView   = "user.view"
+	PermissionUserCreate = "user.create"
+	PermissionUserUpdate = "user.update"
+	PermissionUserDelete = "user.delete"
+
+	PermissionRoleView   = "role.view"
+	PermissionRoleAssign = "role.assign" // assign role ke user
+
+	PermissionPermissionView = "permission.view"
+)
+
+// Patient / Doctor profile
+const (
+	PermissionPatientView = "patient.view"
+	PermissionPatientEdit = "patient.edit"
+
+	PermissionDoctorView = "doctor.view"
+	PermissionDoctorEdit = "doctor.edit"
+)
+
+// EMR & Billing
+const (
+	PermissionEMRView = "emr.view"
+	PermissionEMREdit = "emr.edit"
+
+	PermissionBillingView = "billing.view"
+	PermissionBillingEdit = "billing.edit"
+)
+
+// Appointment
+const (
+	PermissionAppointmentView = "appointment.view"
+	PermissionAppointmentEdit = "appointment.edit"
+)
+
+// ==========================
+// DEFAULT ROLE → PERMISSIONS
+// ==========================
+//
+// Catatan:
+// - super_admin mendapat SEMUA permission
+// - admin (rumah sakit) = manajemen RS
+// - nurse & receptionist hak operasional
+// - bod pengawasan & laporan (read mostly)
+// - patient & doctor minimal yang diperlukan
+var DefaultRolePermissions = map[string][]string{
+	// super admin: semua
+	RoleSuperAdmin: {
+		PermissionUserView, PermissionUserCreate, PermissionUserUpdate, PermissionUserDelete,
+		PermissionRoleView, PermissionRoleAssign, PermissionPermissionView,
+		PermissionPatientView, PermissionPatientEdit,
+		PermissionDoctorView, PermissionDoctorEdit,
+		PermissionEMRView, PermissionEMREdit,
+		PermissionBillingView, PermissionBillingEdit,
+		PermissionAppointmentView, PermissionAppointmentEdit,
+	},
+
+	// admin RS
+	RoleAdmin: {
+		PermissionUserView, PermissionUserCreate, PermissionUserUpdate,
+		PermissionRoleView, PermissionRoleAssign, PermissionPermissionView,
+		PermissionPatientView, PermissionPatientEdit,
+		PermissionDoctorView, PermissionDoctorEdit,
+		PermissionEMRView, PermissionEMREdit,
+		PermissionBillingView, PermissionBillingEdit,
+		PermissionAppointmentView, PermissionAppointmentEdit,
+	},
+
+	// nurse
+	RoleNurse: {
+		PermissionPatientView, PermissionPatientEdit,
+		PermissionEMRView, PermissionEMREdit,
+		PermissionBillingView,
+		PermissionAppointmentView, PermissionAppointmentEdit,
+	},
+
+	// receptionist
+	RoleReceptionist: {
+		PermissionAppointmentView, PermissionAppointmentEdit,
+		PermissionPatientView,
+		PermissionBillingView, PermissionBillingEdit,
+	},
+
+	// BOD (direksi)
+	RoleBOD: {
+		PermissionBillingView,
+		PermissionPermissionView, PermissionRoleView,
+		PermissionDoctorView, PermissionPatientView,
+		PermissionAppointmentView,
+	},
+
+	// patient (minimum untuk update profil)
+	RolePatient: {
+		PermissionAppointmentView,
+		PermissionPatientView, PermissionPatientEdit,
+	},
+
+	// doctor (minimum untuk update profil)
+	RoleDoctor: {
+		PermissionAppointmentView,
+		PermissionDoctorView, PermissionDoctorEdit,
+		PermissionEMRView,
+	},
+}

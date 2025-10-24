@@ -58,7 +58,7 @@ func init() {
 	if logLevelStr == "" {
 		logLevelStr = "info"
 	}
-	
+
 	logLevel, err := logrus.ParseLevel(logLevelStr)
 	if err != nil {
 		logrus.Fatal(err)
