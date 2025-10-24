@@ -6,11 +6,14 @@ import (
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/email"
 	"github.com/api-monolith-template/internal/infrastructure"
+	hospRepo "github.com/api-monolith-template/internal/repository/hospital"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
 	userRepo "github.com/api-monolith-template/internal/repository/user"
 	authSvc "github.com/api-monolith-template/internal/service/auth"
+	hospSvc "github.com/api-monolith-template/internal/service/hospital"
 	httpTransport "github.com/api-monolith-template/internal/transport/http"
 	authHttp "github.com/api-monolith-template/internal/transport/http/auth"
+	hospHttp "github.com/api-monolith-template/internal/transport/http/hospital"
 	userHttp "github.com/api-monolith-template/internal/transport/http/user"
 )
 
@@ -23,6 +26,7 @@ func StartServer() {
 	// Repositories
 	uRepo := userRepo.NewRepository(gormDB)
 	rRepo := roleRepo.NewRepository(gormDB)
+	hRepo := hospRepo.NewRepository(gormDB)
 
 	// SMTP sender config (fallback default)
 	host := config.Env.SMTP.Host
@@ -54,19 +58,22 @@ func StartServer() {
 	})
 
 	// Services
-	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
+	authService := authSvc.NewService(uRepo, rRepo, rdb, sender, hRepo)
+	hospitalService := hospSvc.NewService(uRepo, rRepo, hRepo, rdb)
 
 	// Controllers
 	authController := authHttp.NewController(authService)
 	userController := userHttp.NewController(authService)
+	hospitalController := hospHttp.NewController(hospitalService)
 
 	// HTTP Transport + routes
-	httpTransport.
-		NewTransport().
+	httpTransport.NewTransport().
 		WithGinEngine(r).
 		WithAuthController(authController).
 		WithUserController(userController).
-		WithRoleRepository(rRepo). // penting untuk middleware RequirePermissions
+		WithHospitalController(hospitalController).
+		WithRoleRepository(rRepo).
+		WithHospitalRepository(hRepo).
 		InitRoute()
 
 	// Start server

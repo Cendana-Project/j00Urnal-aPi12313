@@ -1,11 +1,12 @@
 package auth
 
 import (
-	"github.com/api-monolith-template/internal/constant"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
 	"github.com/api-monolith-template/internal/service/auth"
@@ -16,7 +17,10 @@ type Controller struct{ svc *auth.Service }
 
 func NewController(svc *auth.Service) *Controller { return &Controller{svc: svc} }
 
-// POST /v1/auth/register
+// =======================================
+// AUTH — PUBLIC REGISTRATION & OTP FLOW
+// =======================================
+
 func (ctl *Controller) Register(c *gin.Context) {
 	var req request.RegisterLiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -34,78 +38,107 @@ func (ctl *Controller) Register(c *gin.Context) {
 	util.HandleResponse(c, resp, nil)
 }
 
-// POST /v1/auth/resend-pin
 func (ctl *Controller) ResendPIN(c *gin.Context) {
 	var req request.ResendPINRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	if err := ctl.svc.ResendPIN(c.Request.Context(), req.Email); err != nil {
+	email := strings.TrimSpace(req.Email)
+	if err := ctl.svc.ResendPIN(c.Request.Context(), email); err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"email": req.Email, "status": "pending"}
+	resp.Data = gin.H{"email": email, "status": "pending"}
 	util.HandleResponse(c, resp, nil)
 }
 
-// POST /v1/auth/verify-pin
 func (ctl *Controller) VerifyPIN(c *gin.Context) {
 	var req request.VerifyPINRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	pair, err := ctl.svc.VerifyPIN(c.Request.Context(), req.Email, req.PIN)
+	email := strings.TrimSpace(req.Email)
+	pin := strings.TrimSpace(req.PIN)
+	tokens, err := ctl.svc.VerifyPIN(c.Request.Context(), email, pin)
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"access_token": pair.AccessToken, "refresh_token": pair.RefreshToken}
+	resp.Data = gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken}
 	util.HandleResponse(c, resp, nil)
 }
 
-// POST /v1/auth/login
-func (ctl *Controller) Login(c *gin.Context) {
+// =============================
+// AUTH — LOGIN (OPSI A: split)
+// =============================
+
+// Login publik (tanpa hospital hint)
+func (ctl *Controller) LoginPublic(c *gin.Context) {
 	var req request.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	pair, err := ctl.svc.Login(c.Request.Context(), req.Identity, req.Password)
+	identity := strings.TrimSpace(req.Identity)
+	password := strings.TrimSpace(req.Password)
+	tokens, err := ctl.svc.Login(c.Request.Context(), identity, password)
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"access_token": pair.AccessToken, "refresh_token": pair.RefreshToken}
+	resp.Data = gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken}
 	util.HandleResponse(c, resp, nil)
 }
 
-// POST /v1/auth/refresh
+// Login hospital (pakai body: identifier + password + hospital_id/hospital_code)
+func (ctl *Controller) LoginHospital(c *gin.Context) {
+	var req request.LoginHospitalRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	// hospital boleh ID atau code (pilih yang terisi)
+	hint := ""
+	if req.HospitalID != nil && *req.HospitalID != "" {
+		hint = *req.HospitalID
+	} else if req.HospitalCode != nil && *req.HospitalCode != "" {
+		hint = *req.HospitalCode
+	}
+	res, err := ctl.svc.LoginHospital(c.Request.Context(), req.Identifier, req.Password, hint)
+	if err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	resp := response.NewResponseOK()
+	resp.Data = res
+	util.HandleResponse(c, resp, nil)
+}
+
 func (ctl *Controller) Refresh(c *gin.Context) {
 	var req request.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	pair, err := ctl.svc.Refresh(c.Request.Context(), req.RefreshToken)
+	tokens, err := ctl.svc.Refresh(c.Request.Context(), strings.TrimSpace(req.RefreshToken))
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"access_token": pair.AccessToken, "refresh_token": pair.RefreshToken}
+	resp.Data = gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken}
 	util.HandleResponse(c, resp, nil)
 }
 
-// POST /v1/auth/choose-role (protected)
 func (ctl *Controller) ChooseRole(c *gin.Context) {
 	userID := c.GetString("user_id")
 	if userID == "" {
@@ -113,19 +146,18 @@ func (ctl *Controller) ChooseRole(c *gin.Context) {
 		util.HandleResponse(c, &res, nil)
 		return
 	}
-
 	var req request.ChooseRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-
-	if err := ctl.svc.ChooseRole(c.Request.Context(), userID, req.Role); err != nil {
+	role := strings.TrimSpace(req.Role)
+	if err := ctl.svc.ChooseRole(c.Request.Context(), userID, role); err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"role": req.Role}
+	resp.Data = gin.H{"role": role}
 	util.HandleResponse(c, resp, nil)
 }

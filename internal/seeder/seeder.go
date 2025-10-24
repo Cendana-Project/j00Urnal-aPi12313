@@ -11,21 +11,20 @@ import (
 	"github.com/api-monolith-template/internal/constant"
 )
 
-// Run: seed roles → permissions (+mapping) → optional super_admin → sample users
+// Run: seed roles → permissions (+mapping) → optional super_admin → sample users → hospitals → user_hospitals
 func Run(db *gorm.DB) error {
 	start := time.Now()
 
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		// 1) roles (7 role termasuk super_admin)
+		// 1) roles
 		if err := SeedRoles(tx); err != nil {
 			return fmt.Errorf("seed roles: %w", err)
 		}
-		// 2) permissions + mapping (mengacu constant.DefaultRolePermissions)
+		// 2) permissions + mapping
 		if err := SeedPermissions(tx); err != nil {
 			return fmt.Errorf("seed permissions: %w", err)
 		}
-
-		// 3) optional super_admin dari ENV (aktif)
+		// 3) optional super_admin (aktif)
 		if email := os.Getenv("SUPERADMIN_EMAIL"); email != "" {
 			pass := os.Getenv("SUPERADMIN_PASSWORD")
 			if pass == "" {
@@ -43,11 +42,19 @@ func Run(db *gorm.DB) error {
 				return fmt.Errorf("seed super_admin: %w", err)
 			}
 		}
-
-		// 4) sample users (optional – aman idempotent)
+		// 4) sample users
 		if err := SeedSampleUsers(tx); err != nil {
 			return fmt.Errorf("seed sample users: %w", err)
 		}
+		// 5) hospitals
+		if err := SeedHospitals(tx); err != nil {
+			return fmt.Errorf("seed hospitals: %w", err)
+		}
+		// 6) link user ↔ hospital
+		if err := SeedUserHospitals(tx); err != nil {
+			return fmt.Errorf("seed user_hospitals: %w", err)
+		}
+
 		return nil
 	}); err != nil {
 		return err
@@ -123,10 +130,18 @@ func Flush(db *gorm.DB) error {
 		}
 	}
 
+	// 5) (opsional) bersihkan hospital & user_hospitals demo
+	if err := db.Exec(`DELETE FROM user_hospitals WHERE hospital_id IN (SELECT id FROM hospitals WHERE code IN ('HSP-MO-001','HSP-MO-002'))`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`DELETE FROM hospitals WHERE code IN ('HSP-MO-001','HSP-MO-002')`).Error; err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// uniquePermSlugsFromDefaults mengumpulkan & meng-unique-kan slug dari constant.DefaultRolePermissions
+// uniquePermSlugsFromDefaults mengumpulkan & meng-unique-kan slug dari default
 func uniquePermSlugsFromDefaults() []string {
 	var all []string
 	for _, slugs := range constant.DefaultRolePermissions {

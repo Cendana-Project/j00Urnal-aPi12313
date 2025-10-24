@@ -11,12 +11,14 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/scrypt"
 
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/request"
+	hosprepo "github.com/api-monolith-template/internal/repository/hospital"
 	rolerepo "github.com/api-monolith-template/internal/repository/role"
 	userrepo "github.com/api-monolith-template/internal/repository/user"
 )
@@ -29,6 +31,7 @@ type Service struct {
 	users *userrepo.Repository
 	roles *rolerepo.Repository
 	redis *redis.Client
+	hosp  *hosprepo.Repository
 	email EmailSender
 
 	loc        *time.Location
@@ -38,10 +41,9 @@ type Service struct {
 	jwtSecret  []byte
 }
 
-func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *redis.Client, sender EmailSender) *Service {
+func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *redis.Client, sender EmailSender, hosp *hosprepo.Repository) *Service {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 
-	// Ambil dari config.yml (lihat patch config.go di bawah)
 	accessMin := config.Env.JWT.AccessTTLMinutes
 	if accessMin <= 0 {
 		accessMin = 15
@@ -56,6 +58,7 @@ func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *red
 		roles:      roles,
 		redis:      rdb,
 		email:      sender,
+		hosp:       hosp,
 		loc:        loc,
 		pinTTL:     10 * time.Minute,
 		accessTTL:  time.Duration(accessMin) * time.Minute,
@@ -65,6 +68,14 @@ func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *red
 }
 
 /* ==================== Helpers ==================== */
+
+var (
+	errBadCredential = constant.ErrPasswordNotMatch // 401
+	errUserNotFound  = constant.ErrUserNotFound     // 404
+	errForbidden     = constant.ErrForbidden        // 403
+	errValidation    = constant.ErrValidationFailed // 400
+	errNotFound      = constant.ErrRecordNotFound   // 404
+)
 
 func hasLetter(s string) bool {
 	for _, r := range s {
@@ -318,6 +329,56 @@ func (s *Service) Login(ctx context.Context, identity, password string) (jwtPair
 	return pair, nil
 }
 
+// LoginHospital: untuk sekarang login standar + TODO cek hospital & membership.
+// Param hospitalID/hospitalCode opsional; salah satu harus terisi (sudah diverifikasi di controller).
+func (s *Service) LoginHospital(ctx context.Context, identifier, password, hospitalHint string) (*LoginHospitalResult, error) {
+	// 1) resolve hospital
+	hID, err := s.hosp.ResolveHospitalID(ctx, hospitalHint)
+	if err != nil {
+		return nil, errNotFound
+	}
+
+	// 2) get user
+	u, err := s.findUserByIdentity(ctx, identifier)
+	if err != nil {
+		return nil, err
+	}
+	if u.Status != "active" {
+		return nil, errForbidden
+	}
+
+	// 3) verify membership (user harus terhubung ke hospital tsb)
+	ok, err := s.hosp.IsUserLinkedToHospital(ctx, u.ID, hID)
+	if err != nil {
+		return nil, constant.ErrInternalServerError
+	}
+	if !ok {
+		return nil, errForbidden
+	}
+
+	// 4) verify password (scrypt)
+	if err := s.verifyAndMigratePassword(ctx, u, password); err != nil {
+		return nil, errBadCredential
+	}
+
+	// 5) issue tokens (pakai helper kamu yang sudah simpan jti refresh ke Redis)
+	pair, _, err := s.issueJWT(u.ID)
+	if err != nil {
+		return nil, constant.ErrInternalServerError
+	}
+
+	// expires_in = detik sampai kadaluarsa access token (lebih jelas daripada unix timestamp)
+	expiresIn := int64(s.accessTTL / time.Second)
+
+	return &LoginHospitalResult{
+		AccessToken:  pair.AccessToken,
+		RefreshToken: pair.RefreshToken,
+		ExpiresIn:    expiresIn,
+		TokenType:    "Bearer",
+		HospitalID:   hID,
+	}, nil
+}
+
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (jwtPair, error) {
 	tok, err := jwt.Parse(refreshToken, func(t *jwt.Token) (any, error) {
 		if t.Method != jwt.SigningMethodHS256 {
@@ -442,4 +503,117 @@ func buildEmailHTML(firstName, pin string, ttlMin int) string {
   </div>
   <div style="text-align:center;color:#99a; font-size:12px;margin-top:10px">© %d MedikaOne</div>
 </body></html>`, firstName, ttlMin, pin, time.Now().Year())
+}
+
+// ===== Helpers: identity -> user, and password verification =====
+func (s *Service) findUserByIdentity(ctx context.Context, identity string) (*entity.User, error) {
+	id := strings.TrimSpace(identity)
+	if id == "" {
+		return nil, errValidation
+	}
+	// coba email dulu
+	if u, err := s.users.FindByEmail(strings.ToLower(id)); err != nil {
+		return nil, constant.ErrInternalServerError
+	} else if u != nil {
+		return u, nil
+	}
+	// lalu username
+	if u, err := s.users.FindByUsername(strings.ToLower(id)); err != nil {
+		return nil, constant.ErrInternalServerError
+	} else if u != nil {
+		return u, nil
+	}
+	return nil, errUserNotFound
+}
+
+func (s *Service) verifyPassword(stored string, password string) error {
+	s = s // silence staticcheck if needed
+
+	// --- BCRYPT ---
+	if strings.HasPrefix(stored, "$2a$") ||
+		strings.HasPrefix(stored, "$2b$") ||
+		strings.HasPrefix(stored, "$2y$") {
+		if err := bcrypt.CompareHashAndPassword([]byte(stored), []byte(password)); err != nil {
+			return constant.ErrPasswordNotMatch
+		}
+		return nil
+	}
+
+	// --- SCRYPT ---
+	parts := strings.Split(stored, ":")
+	if len(parts) != 2 {
+		return constant.ErrInternalServerError
+	}
+	keyEnc, saltEnc := parts[0], parts[1]
+
+	salt, err := base64.StdEncoding.DecodeString(saltEnc)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	derived, err := scrypt.Key([]byte(password), salt, 1<<15, 8, 1, 64)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	if base64.StdEncoding.EncodeToString(derived) != keyEnc {
+		return constant.ErrPasswordNotMatch
+	}
+	return nil
+}
+
+type LoginHospitalResult struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+	TokenType    string `json:"token_type"`
+	HospitalID   string `json:"hospital_id"`
+}
+
+func (s *Service) hashPasswordScrypt(password string) (string, error) {
+	salt := randBytes(16)
+	key, err := scrypt.Key([]byte(password), salt, 1<<15, 8, 1, 64)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(key) + ":" + base64.StdEncoding.EncodeToString(salt), nil
+}
+
+// verifyAndMigratePassword:
+// - Jika stored bcrypt, verifikasi bcrypt -> kalau OK, rehash ke scrypt & update DB.
+// - Jika stored scrypt, verifikasi scrypt seperti biasa.
+func (s *Service) verifyAndMigratePassword(ctx context.Context, u *entity.User, plain string) error {
+	stored := u.PasswordHash
+
+	// BCRYPT
+	if strings.HasPrefix(stored, "$2a$") ||
+		strings.HasPrefix(stored, "$2b$") ||
+		strings.HasPrefix(stored, "$2y$") {
+		if err := bcrypt.CompareHashAndPassword([]byte(stored), []byte(plain)); err != nil {
+			return constant.ErrPasswordNotMatch
+		}
+		// Rehash -> scrypt & update DB (best-effort)
+		if newHash, err := s.hashPasswordScrypt(plain); err == nil && newHash != "" {
+			_ = s.users.UpdateByID(u.ID, map[string]any{"password_hash": newHash})
+			u.PasswordHash = newHash // keep in-memory consistent
+		}
+		return nil
+	}
+
+	// SCRYPT
+	parts := strings.Split(stored, ":")
+	if len(parts) != 2 {
+		return constant.ErrInternalServerError
+	}
+	keyEnc, saltEnc := parts[0], parts[1]
+	salt, err := base64.StdEncoding.DecodeString(saltEnc)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	derived, err := scrypt.Key([]byte(plain), salt, 1<<15, 8, 1, 64)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	if base64.StdEncoding.EncodeToString(derived) != keyEnc {
+		return constant.ErrPasswordNotMatch
+	}
+	return nil
 }

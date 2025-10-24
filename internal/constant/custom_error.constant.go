@@ -223,5 +223,16 @@ var (
 		Message:    "password not match",
 		Detail:     GetMessageDetail(MsgPasswordNotMatch),
 	}
-	// Tambahkan error di bawah ini jika masih dipakai modul lain (field, slot, booking, dsb.)
+	ErrHospitalNotFound = response.CustomError{
+		Code:       "HOSPITAL_NOT_FOUND",
+		StatusCode: http.StatusNotFound,
+		Message:    "hospital not found",
+		Detail:     GetMessageDetail(MsgNotFound),
+	}
+	ErrUserNotLinkedToHospital = response.CustomError{
+		Code:       "USER_NOT_LINKED_TO_HOSPITAL",
+		StatusCode: http.StatusForbidden,
+		Message:    "user is not linked to this hospital",
+		Detail:     GetMessageDetail(MsgForbidden),
+	}
 )

@@ -17,13 +17,21 @@ type ResendPINRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
 
-// Login & Refresh
+// Login & Refresh (public)
 type LoginRequest struct {
 	Identity string `json:"identity" binding:"required"` // email atau username
 	Password string `json:"password" binding:"required"`
 }
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// Login — Hospital (opsi A: di body, tanpa header)
+type LoginHospitalRequest struct {
+	Identifier   string  `json:"identifier"    binding:"required"` // email/username/phone (sesuai implementasi service)
+	Password     string  `json:"password"      binding:"required,min=8"`
+	HospitalID   *string `json:"hospital_id"   binding:"omitempty,uuid4"`
+	HospitalCode *string `json:"hospital_code" binding:"omitempty,max=40"` // boleh huruf/angka/dash; relaks dulu
 }
 
 // Role choose

@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -85,4 +86,42 @@ func (r *Repository) UpsertDoctorProfile(p map[string]any) error {
 		  specialty  = EXCLUDED.specialty,
 		  updated_at = NOW();
 	`, p).Error
+}
+
+func (r *Repository) GetByID(id string) (*entity.User, error) {
+	var u entity.User
+	if err := r.db.First(&u, "id = ? AND deleted_at IS NULL", id).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *Repository) GetByEmail(email string) (*entity.User, error) { // <=== added
+	var u entity.User
+	err := r.db.First(&u, "email = ? AND deleted_at IS NULL", email).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &u, err
+}
+
+func (r *Repository) Update(u *entity.User) error { // <=== added
+	return r.db.Save(u).Error
+}
+
+type InsertUser struct {
+	ID           string
+	Email        string
+	Phone        string
+	FirstName    string
+	LastName     string
+	PasswordHash string
+	VerifiedAt   time.Time
+}
+
+func (r *Repository) InsertActive(ctx context.Context, in InsertUser) error {
+	return r.db.WithContext(ctx).Exec(`
+		INSERT INTO users (id, email, phone, first_name, last_name, password_hash, status, verified_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NOW())
+	`, in.ID, in.Email, in.Phone, in.FirstName, in.LastName, in.PasswordHash, in.VerifiedAt).Error
 }

@@ -97,15 +97,16 @@ var DefaultRolePermissions = map[string][]string{
 		PermissionAppointmentView,
 	},
 
-	// patient (minimum)
+	// patient (minimum untuk update profil)
 	RolePatient: {
-		PermissionAppointmentView, PermissionPatientView,
+		PermissionAppointmentView,
+		PermissionPatientView, PermissionPatientEdit,
 	},
 
-	// doctor (minimum)
+	// doctor (minimum untuk update profil)
 	RoleDoctor: {
 		PermissionAppointmentView,
-		PermissionDoctorView,
+		PermissionDoctorView, PermissionDoctorEdit,
 		PermissionEMRView,
 	},
 }
