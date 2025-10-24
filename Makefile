@@ -50,4 +50,4 @@ db-reset:
 
 # Seed flush
 seed-flush:
-	$(GO) run main.go seed-flush 
+	$(GO) run main.go seed-flush
