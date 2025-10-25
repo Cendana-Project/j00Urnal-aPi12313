@@ -3,6 +3,7 @@ package hospital
 import (
 	"context"
 	"errors"
+	"github.com/api-monolith-template/internal/model/entity"
 
 	"gorm.io/gorm"
 )
@@ -20,11 +21,8 @@ type Repository struct {
 
 func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 
-func (r *Repository) Create(ctx context.Context, h *Hospital) error {
-	return r.db.WithContext(ctx).Exec(`
-		INSERT INTO hospitals (id, code, name, address, city, province, country, latitude, longitude, phone, description, facilities, is_active)
-		VALUES (gen_random_uuid(), ?, ?, NULL, NULL, NULL, DEFAULT, NULL, NULL, NULL, NULL, '{}'::jsonb, TRUE)
-	`, h.Code, h.Name).Error
+func (r *Repository) Create(ctx context.Context, h *entity.Hospital) error {
+	return r.db.WithContext(ctx).Create(h).Error
 }
 
 func (r *Repository) FindByID(ctx context.Context, id string) (*Hospital, error) {
@@ -110,6 +108,25 @@ func (r *Repository) IsUserLinkedToHospital(ctx context.Context, userID, hospita
 	if err := r.db.WithContext(ctx).
 		Table("user_hospitals").
 		Where("user_id = ? AND hospital_id = ? AND is_active = TRUE", userID, hospitalID).
+		Count(&cnt).Error; err != nil {
+		return false, err
+	}
+	return cnt > 0, nil
+}
+func (r *Repository) IsCodeExists(ctx context.Context, code string) (bool, error) {
+	var cnt int64
+	if err := r.db.WithContext(ctx).Model(&entity.Hospital{}).
+		Where("LOWER(code)=LOWER(?) AND deleted_at IS NULL", code).
+		Count(&cnt).Error; err != nil {
+		return false, err
+	}
+	return cnt > 0, nil
+}
+
+func (r *Repository) IsNameExists(ctx context.Context, name string) (bool, error) {
+	var cnt int64
+	if err := r.db.WithContext(ctx).Model(&entity.Hospital{}).
+		Where("LOWER(name)=LOWER(?) AND deleted_at IS NULL", name).
 		Count(&cnt).Error; err != nil {
 		return false, err
 	}

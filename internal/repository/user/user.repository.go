@@ -112,6 +112,7 @@ func (r *Repository) Update(u *entity.User) error { // <=== added
 type InsertUser struct {
 	ID           string
 	Email        string
+	Username     string
 	Phone        string
 	FirstName    string
 	LastName     string
@@ -121,7 +122,48 @@ type InsertUser struct {
 
 func (r *Repository) InsertActive(ctx context.Context, in InsertUser) error {
 	return r.db.WithContext(ctx).Exec(`
-		INSERT INTO users (id, email, phone, first_name, last_name, password_hash, status, verified_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NOW())
-	`, in.ID, in.Email, in.Phone, in.FirstName, in.LastName, in.PasswordHash, in.VerifiedAt).Error
+		INSERT INTO users (id, email, username, phone, first_name, last_name, password_hash, status, verified_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, NOW())
+	`, in.ID, in.Email, in.Username, in.Phone, in.FirstName, in.LastName, in.PasswordHash, in.VerifiedAt).Error
+}
+func (r *Repository) ExistsNIK(nik string) (bool, error) {
+	if strings.TrimSpace(nik) == "" {
+		return false, nil
+	}
+	var cnt int64
+	if err := r.db.Model(&entity.User{}).
+		Where("nik = ? AND deleted_at IS NULL", nik).
+		Count(&cnt).Error; err != nil {
+		return false, err
+	}
+	return cnt > 0, nil
+}
+
+type InsertUserFull struct {
+	ID            string
+	Email         string
+	Username      *string
+	Phone         *string
+	FirstName     *string
+	LastName      *string
+	DOB           *time.Time
+	Address       *string
+	Gender        *string // "L" | "P"
+	NIK           *string
+	PasswordPlain string // input (akan di-hash di service)
+	PasswordHash  string // hasil scrypt "hash:salt"
+	Status        string // "active"
+	VerifiedAt    *time.Time
+}
+
+// InsertActiveFull: membuat user aktif dengan field lengkap (tanpa verifikasi)
+func (r *Repository) InsertActiveFull(ctx context.Context, in InsertUserFull) error {
+	return r.db.WithContext(ctx).Exec(`
+		INSERT INTO users (
+			id, email, username, first_name, last_name, phone, dob, address, gender, nik,
+			password_hash, status, verified_at, created_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, NOW())
+	`, in.ID, in.Email, in.Username, in.FirstName, in.LastName, in.Phone, in.DOB, in.Address, in.Gender, in.NIK,
+		in.PasswordHash, in.VerifiedAt).Error
 }

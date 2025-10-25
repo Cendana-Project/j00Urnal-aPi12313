@@ -161,3 +161,55 @@ func (ctl *Controller) ChooseRole(c *gin.Context) {
 	resp.Data = gin.H{"role": role}
 	util.HandleResponse(c, resp, nil)
 }
+
+func (ctl *Controller) PasswordForgot(c *gin.Context) {
+	var req request.PasswordForgotRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	if err := ctl.svc.PasswordForgot(c.Request.Context(), &req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	resp := response.NewResponseOK()
+	resp.Data = gin.H{"status": "pin_sent"}
+	util.HandleResponse(c, resp, nil)
+}
+
+// POST /v1/auth/password/reset
+func (ctl *Controller) PasswordReset(c *gin.Context) {
+	var req request.PasswordResetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	if err := ctl.svc.PasswordReset(c.Request.Context(), &req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	resp := response.NewResponseOK()
+	resp.Data = gin.H{"status": "password_updated"}
+	util.HandleResponse(c, resp, nil)
+}
+
+// PUT /v1/auth/password  (AuthRequired)
+func (ctl *Controller) PasswordChange(c *gin.Context) {
+	var req request.PasswordChangeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	userID := util.GetUserID(c) // ambil dari JWT (kita sudah pakai di tempat lain)
+	if userID == "" {
+		util.HandleError(c, constant.ErrUnauthorized)
+		return
+	}
+	if err := ctl.svc.PasswordChange(c.Request.Context(), userID, &req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+	resp := response.NewResponseOK()
+	resp.Data = gin.H{"status": "password_changed"}
+	util.HandleResponse(c, resp, nil)
+}

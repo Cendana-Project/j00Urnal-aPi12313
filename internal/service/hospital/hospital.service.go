@@ -2,16 +2,20 @@ package hospital
 
 import (
 	"context"
-	"errors"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
+	"golang.org/x/crypto/scrypt"
+	"gorm.io/datatypes"
 
 	"github.com/api-monolith-template/internal/constant"
+	"github.com/api-monolith-template/internal/model/entity"
+	"github.com/api-monolith-template/internal/model/request"
 	hrepo "github.com/api-monolith-template/internal/repository/hospital"
 	rrepo "github.com/api-monolith-template/internal/repository/role"
 	urepo "github.com/api-monolith-template/internal/repository/user"
@@ -28,151 +32,257 @@ func NewService(u *urepo.Repository, r *rrepo.Repository, h *hrepo.Repository, c
 	return &Service{userRepo: u, roleRepo: r, hospitalRepo: h, cache: cache}
 }
 
-// ====== Create Hospital (super_admin only) ======
-type CreateHospitalReq struct {
-	Code string `json:"code"`
-	Name string `json:"name"`
+/* ================= Helpers ================= */
+
+func sp(s string) *string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	v := s
+	return &v
 }
 
-func (s *Service) CreateHospital(ctx context.Context, req CreateHospitalReq) (string, error) {
-	req.Code = strings.TrimSpace(req.Code)
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		return "", constant.ErrValidationFailed
+func parseDOB(s *string) (*time.Time, error) {
+	if s == nil || *s == "" {
+		return nil, nil
 	}
-	h := &hrepo.Hospital{Name: req.Name}
-	if req.Code != "" {
-		h.Code = &req.Code
+	tm, err := time.Parse("2006-01-02", *s)
+	if err != nil {
+		return nil, err
 	}
-	if err := s.hospitalRepo.Create(ctx, h); err != nil {
+	return &tm, nil
+}
+
+// scrypt hashing: menghasilkan "key:salt" (base64)
+func hashScrypt(plain string) (string, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	if req.Code != "" {
-		found, err := s.hospitalRepo.FindByCode(ctx, req.Code)
-		if err != nil {
-			return "", err
-		}
-		return found.ID, nil
+	dk, err := scrypt.Key([]byte(plain), salt, 1<<15, 8, 1, 64)
+	if err != nil {
+		return "", err
 	}
-	// NOTE: untuk skenario tanpa code, sebaiknya pakai RETURNING id di repo Create.
-	return "", nil
+	return base64.StdEncoding.EncodeToString(dk) + ":" + base64.StdEncoding.EncodeToString(salt), nil
 }
 
-// ====== Create Admin Hospital (by super_admin) ======
-type CreateHospitalAdminReq struct {
-	HospitalID string `json:"hospital_id"` // UUID atau code (akan di-resolve)
-	Email      string `json:"email"`
-	Phone      string `json:"phone"`
-	Password   string `json:"password"`
-	FirstName  string `json:"first_name"`
-	LastName   string `json:"last_name"`
+/* =============== Hospital =============== */
+
+func (s *Service) CreateHospital(ctx context.Context, in *request.CreateHospitalRequest) (*entity.Hospital, error) {
+	code := strings.ToUpper(strings.TrimSpace(in.Code))
+	name := strings.TrimSpace(in.Name)
+	address := strings.TrimSpace(in.Address)
+	city := strings.TrimSpace(in.City)
+	province := strings.TrimSpace(in.Province)
+	phone := strings.TrimSpace(in.Phone)
+	country := strings.TrimSpace(in.Country)
+	if country == "" {
+		country = "Indonesia"
+	}
+
+	// Wajib
+	if code == "" || name == "" || address == "" || city == "" || province == "" || phone == "" {
+		return nil, constant.ErrValidationFailed
+	}
+	// Range lat/lon jika diisi
+	if in.Latitude != nil && (*in.Latitude < -90 || *in.Latitude > 90) {
+		return nil, constant.ErrValidationFailed
+	}
+	if in.Longitude != nil && (*in.Longitude < -180 || *in.Longitude > 180) {
+		return nil, constant.ErrValidationFailed
+	}
+	// Uniqueness
+	if ok, err := s.hospitalRepo.IsCodeExists(ctx, code); err != nil {
+		return nil, constant.ErrInternalServerError
+	} else if ok {
+		return nil, constant.ErrConflict
+	}
+	if ok, err := s.hospitalRepo.IsNameExists(ctx, name); err != nil {
+		return nil, constant.ErrInternalServerError
+	} else if ok {
+		return nil, constant.ErrConflict
+	}
+
+	// Facilities -> JSONB
+	var facJSON datatypes.JSON
+	if in.Facilities != nil {
+		b, err := json.Marshal(in.Facilities)
+		if err != nil {
+			return nil, constant.ErrValidationFailed
+		}
+		facJSON = datatypes.JSON(b)
+	}
+
+	now := time.Now().UTC()
+	h := &entity.Hospital{
+		// id: default gen_random_uuid() dari DB
+		Code:        sp(code),
+		Name:        name,
+		Address:     sp(address),
+		City:        sp(city),
+		Province:    sp(province),
+		Country:     sp(country),
+		Latitude:    in.Latitude,
+		Longitude:   in.Longitude,
+		Phone:       sp(phone),
+		Description: sp(strings.TrimSpace(in.Description)),
+		Facilities:  facJSON,
+		IsActive:    true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := s.hospitalRepo.Create(ctx, h); err != nil {
+		return nil, constant.ErrInternalServerError
+	}
+	return h, nil
 }
 
-func (s *Service) CreateHospitalAdmin(ctx context.Context, req CreateHospitalAdminReq) (string, error) {
+/* =============== Users (Admin/Staff) =============== */
+
+// CreateHospitalAdmin: hanya super_admin, user baru Wajib Unik (email & username)
+func (s *Service) CreateHospitalAdmin(ctx context.Context, req request.CreateHospitalAdminRequest) (string, error) {
 	hospitalID, err := s.hospitalRepo.ResolveHospitalID(ctx, req.HospitalID)
 	if err != nil {
 		return "", constant.ErrRecordNotFound
 	}
-	if req.Email == "" || req.Password == "" || req.FirstName == "" {
+
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" || strings.TrimSpace(req.Username) == "" {
 		return "", constant.ErrValidationFailed
 	}
 
-	// upsert user (aktif tanpa verifikasi)
-	var uid string
-	u, err := s.userRepo.FindByEmail(req.Email) // <- tanpa context
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", constant.ErrInternalServerError
-	}
-	if u == nil {
-		hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		uid = uuid.NewString()
-		if err := s.userRepo.InsertActive(ctx, urepo.InsertUser{
-			ID:           uid,
-			Email:        req.Email,
-			Phone:        req.Phone,
-			FirstName:    req.FirstName,
-			LastName:     req.LastName,
-			PasswordHash: string(hash),
-			VerifiedAt:   time.Now(),
-		}); err != nil {
-			return "", err
-		}
-	} else {
-		uid = u.ID
+	dob, err := parseDOB(req.DOB)
+	if err != nil {
+		return "", constant.ErrValidationFailed
 	}
 
-	// membership
-	if err := s.hospitalRepo.EnsureMembership(ctx, uid, hospitalID, true); err != nil {
-		return "", err
-	}
-
-	// assign role admin (tenant scoped)
-	roleID, err := s.roleRepo.GetRoleIDBySlug(ctx, constant.RoleAdmin)
+	uid, err := s.ensureUserActiveFull(ctx, urepo.InsertUserFull{
+		Email:         strings.ToLower(strings.TrimSpace(req.Email)),
+		Username:      sp(req.Username), // request bertipe string → konversi ke *string
+		Phone:         req.Phone,
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
+		DOB:           dob,
+		Address:       req.Address,
+		Gender:        req.Gender, // validator menjaga L|P
+		NIK:           req.NIK,    // validator menjaga 16 digit
+		PasswordPlain: req.Password,
+	})
 	if err != nil {
 		return "", err
 	}
+
+	// membership & role admin (tenant)
+	if err := s.hospitalRepo.EnsureMembership(ctx, uid, hospitalID, true); err != nil {
+		return "", constant.ErrInternalServerError
+	}
+	roleID, err := s.roleRepo.GetRoleIDBySlug(ctx, constant.RoleAdmin)
+	if err != nil {
+		return "", constant.ErrInternalServerError
+	}
 	if err := s.hospitalRepo.AssignHospitalRole(ctx, uid, hospitalID, roleID); err != nil {
-		return "", err
+		return "", constant.ErrInternalServerError
 	}
 	return uid, nil
 }
 
-// ====== Create Staff (by tenant admin) ======
-type CreateHospitalStaffReq struct {
-	HospitalHint string `json:"-"` // diisi dari context / path
-	Email        string `json:"email"`
-	Phone        string `json:"phone"`
-	Password     string `json:"password"`
-	FirstName    string `json:"first_name"`
-	LastName     string `json:"last_name"`
-	RoleSlug     string `json:"role"` // doctor|nurse|receptionist|bod|admin
-}
-
-func (s *Service) CreateHospitalStaff(ctx context.Context, req CreateHospitalStaffReq) (string, error) {
-	hospitalID, err := s.hospitalRepo.ResolveHospitalID(ctx, req.HospitalHint)
+// CreateHospitalStaff: admin tenant, user baru Wajib Unik (email & username)
+func (s *Service) CreateHospitalStaff(ctx context.Context, req request.CreateHospitalStaffRequest) (string, error) {
+	hospitalID, err := s.hospitalRepo.ResolveHospitalID(ctx, req.HospitalID)
 	if err != nil {
 		return "", constant.ErrRecordNotFound
 	}
-	if req.Email == "" || req.Password == "" || req.FirstName == "" || req.RoleSlug == "" {
+	if strings.TrimSpace(req.Email) == "" ||
+		strings.TrimSpace(req.Password) == "" ||
+		strings.TrimSpace(req.Role) == "" ||
+		strings.TrimSpace(req.Username) == "" {
 		return "", constant.ErrValidationFailed
 	}
 
-	// find or create user (aktif)
-	var uid string
-	u, err := s.userRepo.FindByEmail(req.Email) // <- tanpa context
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", constant.ErrInternalServerError
-	}
-	if u == nil {
-		hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		uid = uuid.NewString()
-		if err := s.userRepo.InsertActive(ctx, urepo.InsertUser{
-			ID:           uid,
-			Email:        req.Email,
-			Phone:        req.Phone,
-			FirstName:    req.FirstName,
-			LastName:     req.LastName,
-			PasswordHash: string(hash),
-			VerifiedAt:   time.Now(),
-		}); err != nil {
-			return "", err
-		}
-	} else {
-		uid = u.ID
+	dob, err := parseDOB(req.DOB)
+	if err != nil {
+		return "", constant.ErrValidationFailed
 	}
 
-	// membership
-	if err := s.hospitalRepo.EnsureMembership(ctx, uid, hospitalID, false); err != nil {
-		return "", err
-	}
-
-	// assign tenant role
-	roleID, err := s.roleRepo.GetRoleIDBySlug(ctx, req.RoleSlug)
+	uid, err := s.ensureUserActiveFull(ctx, urepo.InsertUserFull{
+		Email:         strings.ToLower(strings.TrimSpace(req.Email)),
+		Username:      sp(req.Username),
+		Phone:         req.Phone,
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
+		DOB:           dob,
+		Address:       req.Address,
+		Gender:        req.Gender,
+		NIK:           req.NIK,
+		PasswordPlain: req.Password,
+	})
 	if err != nil {
 		return "", err
 	}
+
+	if err := s.hospitalRepo.EnsureMembership(ctx, uid, hospitalID, false); err != nil {
+		return "", constant.ErrInternalServerError
+	}
+	roleID, err := s.roleRepo.GetRoleIDBySlug(ctx, req.Role)
+	if err != nil {
+		return "", constant.ErrInternalServerError
+	}
 	if err := s.hospitalRepo.AssignHospitalRole(ctx, uid, hospitalID, roleID); err != nil {
-		return "", err
+		return "", constant.ErrInternalServerError
 	}
 	return uid, nil
+}
+
+/* =============== ensureUserActiveFull =============== */
+
+// Aturan baru: HARUS user baru (tidak “find-or-create”).
+// Jika email/username sudah ada → ErrDuplicateUsernameOrEmail (409).
+func (s *Service) ensureUserActiveFull(ctx context.Context, in urepo.InsertUserFull) (string, error) {
+	// email unik
+	if u, err := s.userRepo.FindByEmail(in.Email); err != nil {
+		return "", constant.ErrInternalServerError
+	} else if u != nil {
+		return "", constant.ErrDuplicateUsernameOrEmail
+	}
+
+	// username unik (jika ada)
+	if in.Username != nil && *in.Username != "" {
+		exists, err := s.userRepo.ExistsUsername(*in.Username)
+		if err != nil {
+			return "", constant.ErrInternalServerError
+		}
+		if exists {
+			return "", constant.ErrDuplicateUsernameOrEmail
+		}
+	}
+
+	// NIK unik (jika ada)
+	if in.NIK != nil && *in.NIK != "" {
+		exists, err := s.userRepo.ExistsNIK(*in.NIK)
+		if err != nil {
+			return "", constant.ErrInternalServerError
+		}
+		if exists {
+			return "", constant.ErrConflict
+		}
+	}
+
+	// Hash scrypt
+	h, err := hashScrypt(in.PasswordPlain)
+	if err != nil {
+		return "", constant.ErrInternalServerError
+	}
+	in.PasswordHash = h
+
+	// defaults
+	in.ID = uuid.NewString()
+	in.Status = "active"
+	now := time.Now().UTC()
+	in.VerifiedAt = &now
+
+	if err := s.userRepo.InsertActiveFull(ctx, in); err != nil {
+		return "", constant.ErrInternalServerError
+	}
+	return in.ID, nil
 }

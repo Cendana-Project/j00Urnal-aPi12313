@@ -63,3 +63,18 @@ type DoctorProfileRequest struct {
 	SIP       string `json:"sip_number" binding:"required"`
 	Specialty string `json:"specialty"  binding:"required"`
 }
+
+type PasswordForgotRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type PasswordResetRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	PIN         string `json:"pin" binding:"required,len=6"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+type PasswordChangeRequest struct {
+	OldPassword string `json:"old_password" binding:"required,min=8"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}

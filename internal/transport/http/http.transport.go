@@ -76,6 +76,8 @@ func (t *Transport) InitRoute() {
 		auth.POST("/login/hospital", func(c *gin.Context) { t.authController.LoginHospital(c) })
 
 		auth.POST("/refresh", func(c *gin.Context) { t.authController.Refresh(c) })
+		auth.POST("/password/forgot", func(c *gin.Context) { t.authController.PasswordForgot(c) })
+		auth.POST("/password/reset", func(c *gin.Context) { t.authController.PasswordReset(c) })
 	}
 
 	// === PROTECTED — USER-LEVEL (tanpa tenant) ===
@@ -88,6 +90,8 @@ func (t *Transport) InitRoute() {
 			transportmw.RequirePermissions(t.roleRepo, constant.PermissionPatientEdit),
 			func(c *gin.Context) { t.userController.UpdatePatientProfile(c) },
 		)
+
+		protected.PUT("/auth/password", func(c *gin.Context) { t.authController.PasswordChange(c) })
 
 		protected.PUT("/profile/doctor",
 			transportmw.RequirePermissions(t.roleRepo, constant.PermissionDoctorEdit),
