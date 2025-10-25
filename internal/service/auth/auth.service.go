@@ -617,3 +617,138 @@ func (s *Service) verifyAndMigratePassword(ctx context.Context, u *entity.User, 
 	}
 	return nil
 }
+
+// ===== Email template khusus reset password
+func buildResetEmailHTML(firstName, pin string, ttlMin int) string {
+	if strings.TrimSpace(firstName) == "" {
+		firstName = "Pengguna"
+	}
+	return fmt.Sprintf(`
+<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f6f9fc;padding:24px">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;border-radius:12px;padding:24px">
+    <h2 style="margin:0 0 8px 0;color:#111">MedikaOne</h2>
+    <p style="color:#555">Halo %s, berikut PIN reset password (berlaku %d menit):</p>
+    <div style="text-align:center;margin:16px 0">
+      <span style="display:inline-block;font-size:28px;letter-spacing:6px;font-weight:700;background:#0ea5e9;color:#fff;padding:12px 16px;border-radius:10px">%s</span>
+    </div>
+    <p style="color:#667">Jika kamu tidak meminta reset ini, abaikan email ini.</p>
+  </div>
+  <div style="text-align:center;color:#99a; font-size:12px;margin-top:10px">© %d MedikaOne</div>
+</body></html>`, firstName, ttlMin, pin, time.Now().Year())
+}
+
+// ====== 2.1 Lupa Password — kirim PIN via email ======
+func (s *Service) PasswordForgot(ctx context.Context, req *request.PasswordForgotRequest) error {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	u, err := s.users.FindByEmail(email)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	// Demi keamanan, jangan bocorkan ada/tidaknya user → tapi kita tetap kirim 200
+	// Namun jika ingin strict:
+	if u == nil {
+		return constant.ErrUserNotFound
+	}
+	if u.Status != "active" {
+		// Bisa juga return email-not-verified; untuk UX lebih aman kita "ok" saja
+		return constant.ErrEmailNotVerified
+		//return nil
+	}
+
+	pin := sixDigitPIN()
+	key := "pwd:pin:" + email
+	if err := s.redis.Set(ctx, key, pin, s.pinTTL).Err(); err != nil {
+		return constant.ErrInternalServerError
+	}
+	if s.email != nil {
+		html := buildResetEmailHTML(u.FirstName, pin, int(s.pinTTL.Minutes()))
+		if err := s.email.Send(email, "PIN Reset Password MedikaOne", html); err != nil {
+			_ = s.redis.Del(ctx, key).Err()
+			return constant.ErrEmailSendFailed
+		}
+	}
+	return nil
+}
+
+// ====== 2.2 Reset Password — verifikasi PIN & set password baru (scrypt) ======
+func (s *Service) PasswordReset(ctx context.Context, req *request.PasswordResetRequest) error {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	newPass := strings.TrimSpace(req.NewPassword)
+	pin := strings.TrimSpace(req.PIN)
+
+	// validation policy
+	if !hasLetter(newPass) || !hasDigit(newPass) || len(newPass) < 8 {
+		return constant.ErrInvalidPassword
+	}
+
+	u, err := s.users.FindByEmail(email)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	if u == nil {
+		return constant.ErrUserNotFound
+	}
+	if u.Status != "active" {
+		return constant.ErrEmailNotVerified
+	}
+
+	val, err := s.redis.Get(ctx, "pwd:pin:"+email).Result()
+	if err != nil || val != pin {
+		return constant.ErrInvalidOTP
+	}
+
+	// hash scrypt
+	newHash, err := s.hashPasswordScrypt(newPass)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	if err := s.users.UpdateByID(u.ID, map[string]any{"password_hash": newHash}); err != nil {
+		return constant.ErrInternalServerError
+	}
+
+	// hapus PIN
+	_ = s.redis.Del(ctx, "pwd:pin:"+email).Err()
+
+	// (opsional) revoke refresh token: jika kamu simpan daftar jti per user, hapus di sini
+	return nil
+}
+
+// ====== 2.3 Ubah Password (authenticated) ======
+func (s *Service) PasswordChange(ctx context.Context, userID string, req *request.PasswordChangeRequest) error {
+	oldPass := strings.TrimSpace(req.OldPassword)
+	newPass := strings.TrimSpace(req.NewPassword)
+
+	if !hasLetter(newPass) || !hasDigit(newPass) || len(newPass) < 8 {
+		return constant.ErrInvalidPassword
+	}
+	if strings.EqualFold(oldPass, newPass) {
+		return constant.ErrNewPasswordSame
+	}
+
+	// ambil user
+	u, err := s.users.GetByID(userID)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	if u == nil {
+		return constant.ErrUserNotFound
+	}
+
+	// verifikasi old password (hybrid + migrate jika bcrypt)
+	if err := s.verifyAndMigratePassword(ctx, u, oldPass); err != nil {
+		return err // ini sudah typed (ErrPasswordNotMatch / Internal)
+	}
+
+	// set new scrypt
+	newHash, err := s.hashPasswordScrypt(newPass)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	if err := s.users.UpdateByID(userID, map[string]any{"password_hash": newHash}); err != nil {
+		return constant.ErrInternalServerError
+	}
+
+	// (opsional) revoke refresh token di sini
+	return nil
+}

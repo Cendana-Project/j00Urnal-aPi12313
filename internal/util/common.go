@@ -109,3 +109,11 @@ func HandleResponse(ctx *gin.Context, resp *response.BaseResponse, err error) {
 
 	ctx.JSON(resp.StatusCode, resp)
 }
+
+func GetUserID(ctx *gin.Context) string {
+	id, err := GetUserIDFromContext(ctx)
+	if err != nil || id == nil {
+		return ""
+	}
+	return id.String()
+}

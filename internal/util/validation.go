@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -288,4 +289,12 @@ func ValidateCurrency(currency string) error {
 
 func GetSupportedCurrencies() []string {
 	return GetGlobalValidator().currencyValidator.GetSupportedCurrencies()
+}
+
+func RegisterCustomValidators(v *validator.Validate) {
+	_ = v.RegisterValidation("alphanumdash", func(fl validator.FieldLevel) bool {
+		s := fl.Field().String()
+		re := regexp.MustCompile(`^[A-Z0-9\-]+$`)
+		return re.MatchString(s)
+	})
 }

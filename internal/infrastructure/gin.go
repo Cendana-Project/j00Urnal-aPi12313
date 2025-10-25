@@ -2,6 +2,8 @@ package infrastructure
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
 	"log"
 	"net/http"
 	"runtime"
@@ -21,6 +23,10 @@ func NewGinEngine() *gin.Engine {
 
 	if config.Env.Env == constant.ProductionEnvironment {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		util.RegisterCustomValidators(v) // pastikan fungsi ini ada di util/validation.go
 	}
 
 	// HANYA middleware umum (tidak ada Auth di sini)
