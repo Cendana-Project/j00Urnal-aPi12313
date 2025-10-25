@@ -15,6 +15,7 @@ import (
 	authHttp "github.com/api-monolith-template/internal/transport/http/auth"
 	hospHttp "github.com/api-monolith-template/internal/transport/http/hospital"
 	userHttp "github.com/api-monolith-template/internal/transport/http/user"
+	warmupHttp "github.com/api-monolith-template/internal/transport/http/warmup"
 )
 
 func StartServer() {
@@ -65,6 +66,7 @@ func StartServer() {
 	authController := authHttp.NewController(authService)
 	userController := userHttp.NewController(authService)
 	hospitalController := hospHttp.NewController(hospitalService)
+	warmupController := warmupHttp.NewController()
 
 	// HTTP Transport + routes
 	httpTransport.NewTransport().
@@ -72,6 +74,7 @@ func StartServer() {
 		WithAuthController(authController).
 		WithUserController(userController).
 		WithHospitalController(hospitalController).
+		WithWarmupController(warmupController).
 		WithRoleRepository(rRepo).
 		WithHospitalRepository(hRepo).
 		InitRoute()

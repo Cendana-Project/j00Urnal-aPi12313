@@ -7,6 +7,7 @@ import (
 	authCtrl "github.com/api-monolith-template/internal/transport/http/auth"
 	hospCtrl "github.com/api-monolith-template/internal/transport/http/hospital"
 	userCtrl "github.com/api-monolith-template/internal/transport/http/user"
+	warmupCtrl "github.com/api-monolith-template/internal/transport/http/warmup"
 	transportmw "github.com/api-monolith-template/internal/transport/middleware"
 	"github.com/api-monolith-template/internal/util"
 
@@ -19,6 +20,7 @@ type Transport struct {
 	authController     *authCtrl.Controller
 	userController     *userCtrl.Controller
 	hospitalController *hospCtrl.Controller
+	warmupController   *warmupCtrl.Controller
 
 	roleRepo *roleRepo.Repository
 	hospRepo *hospRepo.Repository
@@ -46,12 +48,19 @@ func (t *Transport) WithHospitalRepository(repo *hospRepo.Repository) *Transport
 	t.hospRepo = repo
 	return t
 }
+func (t *Transport) WithWarmupController(c *warmupCtrl.Controller) *Transport {
+	t.warmupController = c
+	return t
+}
 
 func (t *Transport) InitRoute() {
 	if t.router == nil {
 		panic("gin engine is nil")
 	}
 	// TIDAK memasang Auth di level router di sini.
+
+	// ========== WARMUP — PUBLIC (untuk cron jobs dan monitoring) ==========
+	t.router.GET("/ping", func(c *gin.Context) { t.warmupController.Ping(c) })
 
 	v1 := t.router.Group("/v1")
 
