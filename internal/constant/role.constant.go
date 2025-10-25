@@ -1,11 +1,11 @@
 package constant
 
 const (
-	RoleSuperAdmin   = "super_admin" // kuasa penuh (global)
-	RoleAdmin        = "admin"       // admin satu rumah sakit (akan discope)
-	RolePatient      = "patient"
-	RoleDoctor       = "doctor"
-	RoleNurse        = "nurse"
-	RoleReceptionist = "receptionist"
-	RoleBOD          = "bod"
+	RoleSuperAdmin   = "SUPER_ADMIN" // kuasa penuh (global)
+	RoleAdmin        = "ADMIN"       // admin satu rumah sakit (akan discope)
+	RolePatient      = "PATIENT"
+	RoleDoctor       = "DOCTOR"
+	RoleNurse        = "NURSE"
+	RoleReceptionist = "RECEPTIONIST"
+	RoleBOD          = "BOD"
 )

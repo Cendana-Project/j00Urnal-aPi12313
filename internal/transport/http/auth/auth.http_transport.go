@@ -87,38 +87,64 @@ func (ctl *Controller) LoginPublic(c *gin.Context) {
 	}
 	identity := strings.TrimSpace(req.Identity)
 	password := strings.TrimSpace(req.Password)
-	tokens, err := ctl.svc.Login(c.Request.Context(), identity, password)
+
+	tokens, roles, err := ctl.svc.Login(c.Request.Context(), identity, password)
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
+
+	// Pilih slug pertama jika ada banyak role
+	roleSlug := ""
+	if len(roles) > 0 {
+		roleSlug = roles[0].Slug // <=== changed: kirim hanya slug
+	}
+
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken}
+	resp.Data = response.LoginResponse{ // <=== changed: gunakan tipe baru
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		Role:         roleSlug,
+	}
 	util.HandleResponse(c, resp, nil)
 }
 
-// Login hospital (pakai body: identifier + password + hospital_id/hospital_code)
 func (ctl *Controller) LoginHospital(c *gin.Context) {
 	var req request.LoginHospitalRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	// hospital boleh ID atau code (pilih yang terisi)
 	hint := ""
 	if req.HospitalID != nil && *req.HospitalID != "" {
 		hint = *req.HospitalID
 	} else if req.HospitalCode != nil && *req.HospitalCode != "" {
 		hint = *req.HospitalCode
 	}
+
 	res, err := ctl.svc.LoginHospital(c.Request.Context(), req.Identifier, req.Password, hint)
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
+
+	// Pilih slug pertama
+	roleSlug := ""
+	if len(res.Roles) > 0 {
+		roleSlug = res.Roles[0].Slug // <=== changed
+	}
+
 	resp := response.NewResponseOK()
-	resp.Data = res
+	resp.StatusCode = http.StatusOK
+	resp.Data = response.LoginHospitalResponse{ // <=== changed
+		AccessToken:  res.AccessToken,
+		RefreshToken: res.RefreshToken,
+		ExpiresIn:    res.ExpiresIn,
+		TokenType:    res.TokenType,
+		HospitalID:   res.HospitalID,
+		Role:         roleSlug,
+	}
 	util.HandleResponse(c, resp, nil)
 }
 
