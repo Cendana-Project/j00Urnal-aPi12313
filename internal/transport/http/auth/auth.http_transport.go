@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -63,14 +64,20 @@ func (ctl *Controller) VerifyPIN(c *gin.Context) {
 	}
 	email := strings.TrimSpace(req.Email)
 	pin := strings.TrimSpace(req.PIN)
-	tokens, err := ctl.svc.VerifyPIN(c.Request.Context(), email, pin)
+	tokens, aexp, rexp, err := ctl.svc.VerifyPIN(c.Request.Context(), email, pin) // <=== changed
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
+
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken}
+	resp.Data = gin.H{
+		"access_token":          tokens.AccessToken,
+		"refresh_token":         tokens.RefreshToken,
+		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339), // <=== added
+		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339), // <=== added
+	}
 	util.HandleResponse(c, resp, nil)
 }
 
@@ -88,7 +95,7 @@ func (ctl *Controller) LoginPublic(c *gin.Context) {
 	identity := strings.TrimSpace(req.Identity)
 	password := strings.TrimSpace(req.Password)
 
-	tokens, roles, err := ctl.svc.Login(c.Request.Context(), identity, password)
+	tokens, roles, aexp, rexp, err := ctl.svc.Login(c.Request.Context(), identity, password) // <=== changed
 	if err != nil {
 		util.HandleError(c, err)
 		return
@@ -102,10 +109,12 @@ func (ctl *Controller) LoginPublic(c *gin.Context) {
 
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = response.LoginResponse{ // <=== changed: gunakan tipe baru
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		Role:         roleSlug,
+	resp.Data = response.LoginResponse{ // <=== changed
+		AccessToken:           tokens.AccessToken,
+		RefreshToken:          tokens.RefreshToken,
+		Role:                  roleSlug,
+		AccessTokenExpiredAt:  aexp.UTC().Format(time.RFC3339),
+		RefreshTokenExpiredAt: rexp.UTC().Format(time.RFC3339),
 	}
 	util.HandleResponse(c, resp, nil)
 }
@@ -138,12 +147,14 @@ func (ctl *Controller) LoginHospital(c *gin.Context) {
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
 	resp.Data = response.LoginHospitalResponse{ // <=== changed
-		AccessToken:  res.AccessToken,
-		RefreshToken: res.RefreshToken,
-		ExpiresIn:    res.ExpiresIn,
-		TokenType:    res.TokenType,
-		HospitalID:   res.HospitalID,
-		Role:         roleSlug,
+		AccessToken:           res.AccessToken,
+		RefreshToken:          res.RefreshToken,
+		ExpiresIn:             res.ExpiresIn,
+		TokenType:             res.TokenType,
+		HospitalID:            res.HospitalID,
+		Role:                  roleSlug,
+		AccessTokenExpiredAt:  res.AccessExp.UTC().Format(time.RFC3339),
+		RefreshTokenExpiredAt: res.RefreshExp.UTC().Format(time.RFC3339),
 	}
 	util.HandleResponse(c, resp, nil)
 }
@@ -154,14 +165,19 @@ func (ctl *Controller) Refresh(c *gin.Context) {
 		util.HandleError(c, err)
 		return
 	}
-	tokens, err := ctl.svc.Refresh(c.Request.Context(), strings.TrimSpace(req.RefreshToken))
+	tokens, aexp, rexp, err := ctl.svc.Refresh(c.Request.Context(), strings.TrimSpace(req.RefreshToken)) // <=== changed
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken}
+	resp.Data = gin.H{
+		"access_token":          tokens.AccessToken,
+		"refresh_token":         tokens.RefreshToken,
+		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339), // <=== added
+		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339), // <=== added
+	}
 	util.HandleResponse(c, resp, nil)
 }
 
