@@ -114,40 +114,35 @@ func sixDigitPIN() string {
 
 type jwtPair struct{ AccessToken, RefreshToken string }
 
-func (s *Service) issueJWT(userID string) (jwtPair, string, error) {
+func (s *Service) issueJWT(userID string) (jwtPair, string, time.Time, time.Time, error) { // <=== changed
 	now := time.Now().In(s.loc)
+	accessExp := now.Add(s.accessTTL)
+	refreshExp := now.Add(s.refreshTTL)
 
 	// access
 	acc := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID,
-		"typ": "access",
-		"iat": now.Unix(),
-		"exp": now.Add(s.accessTTL).Unix(),
+		"sub": userID, "typ": "access", "iat": now.Unix(), "exp": accessExp.Unix(),
 	})
 	at, err := acc.SignedString(s.jwtSecret)
 	if err != nil {
-		return jwtPair{}, "", err
+		return jwtPair{}, "", time.Time{}, time.Time{}, err
 	}
 
 	// refresh (with jti)
 	jti := base64.RawURLEncoding.EncodeToString(randBytes(16))
 	ref := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID,
-		"typ": "refresh",
-		"jti": jti,
-		"iat": now.Unix(),
-		"exp": now.Add(s.refreshTTL).Unix(),
+		"sub": userID, "typ": "refresh", "jti": jti, "iat": now.Unix(), "exp": refreshExp.Unix(),
 	})
 	rt, err := ref.SignedString(s.jwtSecret)
 	if err != nil {
-		return jwtPair{}, "", err
+		return jwtPair{}, "", time.Time{}, time.Time{}, err
 	}
 
 	// store refresh jti in Redis for rotation
 	if err := s.redis.Set(context.Background(), "refresh:"+jti, userID, s.refreshTTL).Err(); err != nil {
-		return jwtPair{}, "", err
+		return jwtPair{}, "", time.Time{}, time.Time{}, err
 	}
-	return jwtPair{AccessToken: at, RefreshToken: rt}, jti, nil
+	return jwtPair{AccessToken: at, RefreshToken: rt}, jti, accessExp.UTC(), refreshExp.UTC(), nil
 }
 
 func (s *Service) rotateRefresh(oldJTI string) {
@@ -255,42 +250,42 @@ func (s *Service) ResendPIN(ctx context.Context, email string) error {
 	return nil
 }
 
-func (s *Service) VerifyPIN(ctx context.Context, email, pin string) (jwtPair, error) {
+func (s *Service) VerifyPIN(ctx context.Context, email, pin string) (jwtPair, time.Time, time.Time, error) { // <=== changed
 	email = strings.ToLower(strings.TrimSpace(email))
 	u, err := s.users.FindByEmail(email)
 	if err != nil {
-		return jwtPair{}, constant.ErrInternalServerError
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	if u == nil {
-		return jwtPair{}, constant.ErrUserNotFound
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrUserNotFound
 	}
+
 	val, err := s.redis.Get(ctx, "verify:pin:"+email).Result()
 	if err != nil || val != pin {
-		return jwtPair{}, constant.ErrInvalidOTP
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInvalidOTP
 	}
 
 	// activate
 	if err := s.users.MarkVerified(u.ID); err != nil {
-		return jwtPair{}, constant.ErrInternalServerError
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	_ = s.redis.Del(ctx, "verify:pin:"+email).Err()
 
-	// issue tokens
-	pair, _, err := s.issueJWT(u.ID)
+	// issue tokens + expiry
+	pair, _, aexp, rexp, err := s.issueJWT(u.ID)
 	if err != nil {
-		return jwtPair{}, constant.ErrInternalServerError
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
-	return pair, nil
+	return pair, aexp, rexp, nil
 }
 
 // Login: verifikasi credential, issue token, + kembalikan roles global
 func (s *Service) Login(ctx context.Context, identity, password string) (pair struct {
 	AccessToken  string
 	RefreshToken string
-}, roles []response.RoleBrief, err error) { // <=== changed
+}, roles []response.RoleBrief, accessExp, refreshExp time.Time, err error) { // <=== changed
 	identity = strings.ToLower(strings.TrimSpace(identity))
 
-	// 1) ambil user by email/username (repo kamu tidak punya FindByIdentity)
 	var u *entity.User
 	if strings.Contains(identity, "@") {
 		u, err = s.users.FindByEmail(identity)
@@ -298,68 +293,63 @@ func (s *Service) Login(ctx context.Context, identity, password string) (pair st
 		u, err = s.users.FindByUsername(identity)
 	}
 	if err != nil {
-		return pair, nil, constant.ErrInternalServerError // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	if u == nil {
-		return pair, nil, constant.ErrUserNotFound // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrUserNotFound
 	}
 	if strings.ToLower(u.Status) != "active" {
-		return pair, nil, constant.ErrEmailNotVerified // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrEmailNotVerified
 	}
 
-	// 2) verify password (scrypt sesuai format "key:salt")
+	// verify password (scrypt "key:salt")
 	parts := strings.Split(u.PasswordHash, ":")
 	if len(parts) != 2 {
-		return pair, nil, constant.ErrInternalServerError // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	keyEnc, saltEnc := parts[0], parts[1]
 	salt, derr := base64.StdEncoding.DecodeString(saltEnc)
 	if derr != nil {
-		return pair, nil, constant.ErrInternalServerError // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	derived, derr := scrypt.Key([]byte(password), salt, 1<<15, 8, 1, 64)
 	if derr != nil {
-		return pair, nil, constant.ErrInternalServerError // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	if base64.StdEncoding.EncodeToString(derived) != keyEnc {
-		return pair, nil, constant.ErrPasswordNotMatch // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrPasswordNotMatch
 	}
 
-	// 3) issue JWT
-	j, _, jerr := s.issueJWT(u.ID)
+	// tokens + expiry
+	j, _, aexp, rexp, jerr := s.issueJWT(u.ID)
 	if jerr != nil {
-		return pair, nil, constant.ErrInternalServerError // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
-	pair.AccessToken = j.AccessToken
-	pair.RefreshToken = j.RefreshToken
+	pair.AccessToken, pair.RefreshToken = j.AccessToken, j.RefreshToken
+	accessExp, refreshExp = aexp, rexp
 
-	// 4) roles global (mapping langsung agar tidak bentrok tipe)
+	// roles global
 	rows, rerr := s.roles.ListRolesByUser(ctx, u.ID)
 	if rerr != nil {
-		return pair, nil, constant.ErrInternalServerError // <=== changed
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	out := make([]response.RoleBrief, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, response.RoleBrief{
-			ID:   r.ID,
-			Slug: r.Slug,
-			Name: r.Name,
-		})
+		out = append(out, response.RoleBrief{ID: r.ID, Slug: r.Slug, Name: r.Name})
 	}
 
-	return pair, out, nil // <=== changed
+	return pair, out, accessExp, refreshExp, nil
 }
 
 // LoginHospital: untuk sekarang login standar + TODO cek hospital & membership.
 // Param hospitalID/hospitalCode opsional; salah satu harus terisi (sudah diverifikasi di controller).
 func (s *Service) LoginHospital(ctx context.Context, identifier, password, hospitalHint string) (*LoginHospitalResult, error) {
-	// 1) resolve hospital (pakai repo/logic milikmu)
+	// resolve hospital, user, membership, verify password (kode aslimu) …
 	hID, err := s.hosp.ResolveHospitalID(ctx, hospitalHint)
 	if err != nil || hID == "" {
-		return nil, constant.ErrHospitalNotFound // <=== changed
+		return nil, constant.ErrHospitalNotFound
 	}
 
-	// 2) get user dari identifier (email/username)
 	id := strings.ToLower(strings.TrimSpace(identifier))
 	var u *entity.User
 	if strings.Contains(id, "@") {
@@ -368,73 +358,48 @@ func (s *Service) LoginHospital(ctx context.Context, identifier, password, hospi
 		u, err = s.users.FindByUsername(id)
 	}
 	if err != nil {
-		return nil, constant.ErrInternalServerError // <=== changed
+		return nil, constant.ErrInternalServerError
 	}
 	if u == nil {
-		return nil, constant.ErrUserNotFound // <=== changed
+		return nil, constant.ErrUserNotFound
 	}
 	if strings.ToLower(u.Status) != "active" {
-		return nil, constant.ErrForbidden // <=== changed
+		return nil, constant.ErrForbidden
 	}
 
-	// 3) verify user linked ke hospital
 	ok, lerr := s.hosp.IsUserLinkedToHospital(ctx, u.ID, hID)
 	if lerr != nil {
 		return nil, constant.ErrInternalServerError
 	}
 	if !ok {
-		return nil, constant.ErrUserNotLinkedToHospital // <=== changed
+		return nil, constant.ErrUserNotLinkedToHospital
 	}
 
-	// 4) verify password (scrypt)
-	parts := strings.Split(u.PasswordHash, ":")
-	if len(parts) != 2 {
-		return nil, constant.ErrInternalServerError
-	}
-	keyEnc, saltEnc := parts[0], parts[1]
-	salt, derr := base64.StdEncoding.DecodeString(saltEnc)
-	if derr != nil {
-		return nil, constant.ErrInternalServerError
-	}
-	derived, derr := scrypt.Key([]byte(password), salt, 1<<15, 8, 1, 64)
-	if derr != nil {
-		return nil, constant.ErrInternalServerError
-	}
-	if base64.StdEncoding.EncodeToString(derived) != keyEnc {
-		return nil, constant.ErrPasswordNotMatch // <=== changed
-	}
-
-	// 5) issue tokens
-	j, _, jerr := s.issueJWT(u.ID)
+	// issue tokens + expiry
+	j, _, aexp, rexp, jerr := s.issueJWT(u.ID)
 	if jerr != nil {
 		return nil, constant.ErrInternalServerError
 	}
 
-	// 6) roles tenant (mapping langsung)
+	// roles tenant
 	rs, rerr := s.roles.ListHospitalRolesByUser(ctx, hID, u.ID)
 	if rerr != nil {
 		return nil, constant.ErrInternalServerError
 	}
 	rbrief := make([]response.RoleBrief, 0, len(rs))
 	for _, r := range rs {
-		rbrief = append(rbrief, response.RoleBrief{
-			ID:   r.ID,
-			Slug: r.Slug,
-			Name: r.Name,
-		})
+		rbrief = append(rbrief, response.RoleBrief{ID: r.ID, Slug: r.Slug, Name: r.Name})
 	}
 
 	return &LoginHospitalResult{
-		AccessToken:  j.AccessToken,
-		RefreshToken: j.RefreshToken,
-		ExpiresIn:    int64(s.accessTTL / time.Second),
-		TokenType:    "Bearer",
-		HospitalID:   hID,
-		Roles:        rbrief, // <=== changed
+		AccessToken: j.AccessToken, RefreshToken: j.RefreshToken,
+		ExpiresIn: int64(s.accessTTL / time.Second), TokenType: "Bearer",
+		HospitalID: hID, Roles: rbrief,
+		AccessExp: aexp, RefreshExp: rexp, // <=== added
 	}, nil
 }
 
-func (s *Service) Refresh(ctx context.Context, refreshToken string) (jwtPair, error) {
+func (s *Service) Refresh(ctx context.Context, refreshToken string) (jwtPair, time.Time, time.Time, error) { // <=== changed
 	tok, err := jwt.Parse(refreshToken, func(t *jwt.Token) (any, error) {
 		if t.Method != jwt.SigningMethodHS256 {
 			return nil, errors.New("bad sign")
@@ -442,33 +407,33 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (jwtPair, er
 		return s.jwtSecret, nil
 	})
 	if err != nil || !tok.Valid {
-		return jwtPair{}, constant.ErrInvalidToken
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInvalidToken
 	}
 
 	claims, ok := tok.Claims.(jwt.MapClaims)
 	if !ok || claims["typ"] != "refresh" {
-		return jwtPair{}, constant.ErrInvalidToken
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInvalidToken
 	}
 
 	jti, _ := claims["jti"].(string)
 	sub, _ := claims["sub"].(string)
 	if jti == "" || sub == "" {
-		return jwtPair{}, constant.ErrInvalidToken
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInvalidToken
 	}
 
 	// check jti in redis (rotation)
 	val, err := s.redis.Get(ctx, "refresh:"+jti).Result()
 	if err != nil || val != sub {
-		return jwtPair{}, constant.ErrTokenExpired
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrTokenExpired
 	}
 
-	// rotate
+	// rotate & issue baru + expiry
 	s.rotateRefresh(jti)
-	pair, _, err := s.issueJWT(sub)
+	pair, _, aexp, rexp, err := s.issueJWT(sub)
 	if err != nil {
-		return jwtPair{}, constant.ErrInternalServerError
+		return jwtPair{}, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
-	return pair, nil
+	return pair, aexp, rexp, nil
 }
 
 /* ==================== Role & Profiles ==================== */
@@ -621,7 +586,9 @@ type LoginHospitalResult struct {
 	ExpiresIn    int64                `json:"expires_in"`
 	TokenType    string               `json:"token_type"`
 	HospitalID   string               `json:"hospital_id"`
-	Roles        []response.RoleBrief `json:"roles"` // <=== added
+	Roles        []response.RoleBrief `json:"roles"`
+	AccessExp    time.Time            `json:"-"` // <=== added (internal use for controller)
+	RefreshExp   time.Time            `json:"-"` // <=== added
 }
 
 func (s *Service) hashPasswordScrypt(password string) (string, error) {
