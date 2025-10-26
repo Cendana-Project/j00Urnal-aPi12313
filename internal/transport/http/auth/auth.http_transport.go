@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -253,5 +254,47 @@ func (ctl *Controller) PasswordChange(c *gin.Context) {
 	}
 	resp := response.NewResponseOK()
 	resp.Data = gin.H{"status": "password_changed"}
+	util.HandleResponse(c, resp, nil)
+}
+
+func (ctl *Controller) SetProfile(c *gin.Context) {
+	var req request.SetProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+
+	// Ambil user ID dari JWT
+	userID := util.GetUserID(c) // <— konsisten dengan handler lain
+	if userID == "" {
+		util.HandleError(c, constant.ErrUnauthorized) // <=== changed
+		return
+	}
+
+	// Normalisasi role ke UPPERCASE
+	req.Role = strings.ToUpper(strings.TrimSpace(req.Role))
+
+	// Pastikan profile terisi
+	if req.Profile == nil || len(*req.Profile) == 0 || string(*req.Profile) == "null" {
+		util.HandleError(c, constant.ErrValidationError) // <=== changed
+		return
+	}
+
+	// Validasi JSON profile (cek well-formed)
+	var tmp json.RawMessage
+	if err := json.Unmarshal(*req.Profile, &tmp); err != nil {
+		util.HandleError(c, constant.ErrValidationError) // <=== changed
+		return
+	}
+
+	res, err := ctl.svc.SetProfile(c.Request.Context(), userID, req.Role, req.Profile)
+	if err != nil {
+		util.HandleError(c, err)
+		return
+	}
+
+	resp := response.NewResponseOK()
+	resp.StatusCode = http.StatusOK
+	resp.Data = res
 	util.HandleResponse(c, resp, nil)
 }

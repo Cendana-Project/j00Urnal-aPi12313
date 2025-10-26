@@ -1,5 +1,7 @@
 package request
 
+import "encoding/json"
+
 // Step-1 register (lite)
 type RegisterLiteRequest struct {
 	Email    string `json:"email"    binding:"required,email"`
@@ -77,4 +79,9 @@ type PasswordResetRequest struct {
 type PasswordChangeRequest struct {
 	OldPassword string `json:"old_password" binding:"required,min=8"`
 	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+type SetProfileRequest struct { // <=== added
+	Role    string           `json:"role" binding:"required"` // wajib: "PATIENT" | "DOCTOR" (UPPERCASE)
+	Profile *json.RawMessage `json:"profile" binding:"required"`
 }
