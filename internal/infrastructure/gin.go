@@ -61,7 +61,6 @@ func NewGinEngine() *gin.Engine {
 	})
 
 	corsConfig := cors.Config{
-		AllowAllOrigins:        true,
 		AllowMethods:           []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 		AllowHeaders:           []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Hospital-ID", "X-Hospital-Code"},
 		AllowCredentials:       true,
@@ -69,6 +68,9 @@ func NewGinEngine() *gin.Engine {
 		AllowBrowserExtensions: false,
 		AllowWebSockets:        true,
 		AllowFiles:             false,
+		AllowOriginFunc: func(origin string) bool {
+			return true
+		},
 	}
 
 	r.Use(cors.New(corsConfig))
