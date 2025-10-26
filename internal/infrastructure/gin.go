@@ -2,12 +2,13 @@ package infrastructure
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin/binding"
-	"github.com/go-playground/validator/v10"
 	"log"
 	"net/http"
 	"runtime"
 	"time"
+
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
@@ -60,6 +61,7 @@ func NewGinEngine() *gin.Engine {
 	})
 
 	corsConfig := cors.Config{
+		AllowAllOrigins:        true,
 		AllowMethods:           []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 		AllowHeaders:           []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Hospital-ID", "X-Hospital-Code"},
 		AllowCredentials:       true,
@@ -67,27 +69,6 @@ func NewGinEngine() *gin.Engine {
 		AllowBrowserExtensions: false,
 		AllowWebSockets:        true,
 		AllowFiles:             false,
-	}
-
-	if config.Env.Env == constant.ProductionEnvironment {
-		corsConfig.AllowOrigins = []string{
-			"https://dashboard-staging.soccernearu.tech",
-			"https://www.dashboard-staging.soccernearu.tech",
-		}
-		if config.Env.Server.FrontendURL != "" {
-			corsConfig.AllowOrigins = append(corsConfig.AllowOrigins, config.Env.Server.FrontendURL)
-		}
-	} else {
-		corsConfig.AllowOrigins = []string{
-			"http://localhost:3000",
-			"http://localhost:3001",
-			"http://localhost:8080",
-			"https://dashboard-staging.soccernearu.tech",
-			"https://www.dashboard-staging.soccernearu.tech",
-		}
-		if config.Env.Server.FrontendURL != "" {
-			corsConfig.AllowOrigins = append(corsConfig.AllowOrigins, config.Env.Server.FrontendURL)
-		}
 	}
 
 	r.Use(cors.New(corsConfig))
