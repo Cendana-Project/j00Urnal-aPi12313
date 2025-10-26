@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/api-monolith-template/internal/model/response"
@@ -774,4 +775,107 @@ func (s *Service) PasswordChange(ctx context.Context, userID string, req *reques
 
 	// (opsional) revoke refresh token di sini
 	return nil
+}
+
+// SetProfile menggabungkan assign role + upsert profile sesuai role, lalu mengembalikan profil lengkap.
+func (s *Service) SetProfile(ctx context.Context, userID, roleSlugUpper string, rawProfile *json.RawMessage) (*response.SetProfileResponse, error) { // <=== changed (isi)
+	if rawProfile == nil {
+		return nil, constant.ErrValidationError
+	}
+	role := strings.ToUpper(strings.TrimSpace(roleSlugUpper))
+	switch role {
+	case constant.RolePatient, constant.RoleDoctor:
+	default:
+		return nil, constant.ErrValidationError
+	}
+
+	// 0) Hard guard: jika profil sudah ada, stop di sini
+	if role == constant.RolePatient {
+		ok, err := s.users.ExistsPatientProfile(userID) // <=== added
+		if err != nil {
+			return nil, constant.ErrInternalServerError
+		}
+		if ok {
+			return nil, constant.ErrProfileAlreadySet // <=== added (409)
+		}
+	} else {
+		ok, err := s.users.ExistsDoctorProfile(userID) // <=== added
+		if err != nil {
+			return nil, constant.ErrInternalServerError
+		}
+		if ok {
+			return nil, constant.ErrProfileAlreadySet // <=== added (409)
+		}
+	}
+
+	// 1) Assign role (idempotent)
+	r, err := s.roles.FindBySlug(role)
+	if err != nil || r == nil || !r.Active {
+		return nil, constant.ErrAccountRoleNotFound
+	}
+	if err := s.roles.Assign(userID, r.ID); err != nil {
+		return nil, constant.ErrInternalServerError
+	}
+
+	// 2) Buat profil pertama kali (gunakan service existing)
+	if role == constant.RolePatient {
+		var req request.PatientProfileRequest
+		if err := json.Unmarshal(*rawProfile, &req); err != nil {
+			return nil, constant.ErrValidationError
+		}
+		// Penting: CompletePatientProfile kamu sebelumnya upsert,
+		// tapi karena kita sudah guard "exists" di atas, pemanggilan pertama aman.
+		if err := s.CompletePatientProfile(ctx, userID, &req); err != nil {
+			return nil, err
+		}
+	} else {
+		var req request.DoctorProfileRequest
+		if err := json.Unmarshal(*rawProfile, &req); err != nil {
+			return nil, constant.ErrValidationError
+		}
+		if err := s.CompleteDoctorProfile(ctx, userID, &req); err != nil {
+			return nil, err
+		}
+	}
+
+	// 3) Ambil dan susun UserProfile untuk response (bagian ini sama seperti sebelumnya)
+	u, err := s.users.GetByID(userID)
+	if err != nil || u == nil {
+		return nil, constant.ErrInternalServerError
+	}
+	var dobStr *string
+	if u.DOB != nil {
+		tmp := u.DOB.In(s.loc).Format("2006-01-02")
+		dobStr = &tmp
+	}
+	prof := response.UserProfile{
+		ID:        u.ID,
+		Email:     u.Email,
+		Username:  u.Username,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
+		Phone:     u.Phone,
+		DOB:       dobStr,
+		Address:   u.Address,
+		Gender:    u.Gender,
+		NIK:       u.NIK,
+	}
+	if role == constant.RolePatient {
+		h, w, a, m, err := s.users.GetPatientProfileByUserID(userID)
+		if err != nil {
+			return nil, constant.ErrInternalServerError
+		}
+		prof.HeightCM, prof.WeightKG, prof.Allergies, prof.MedicalHistory = h, w, a, m
+	} else {
+		sip, spc, err := s.users.GetDoctorProfileByUserID(userID)
+		if err != nil {
+			return nil, constant.ErrInternalServerError
+		}
+		prof.SIPNumber, prof.Specialty = sip, spc
+	}
+
+	return &response.SetProfileResponse{
+		Role:    role,
+		Profile: prof,
+	}, nil
 }

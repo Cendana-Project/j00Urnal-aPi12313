@@ -102,6 +102,8 @@ func (t *Transport) InitRoute() {
 			transportmw.RequirePermissions(t.roleRepo, constant.PermissionUserCreate, constant.PermissionRoleAssign),
 			func(c *gin.Context) { t.hospitalController.CreateHospital(c) },
 		)
+
+		protected.POST("/auth/set-profile", func(c *gin.Context) { t.authController.SetProfile(c) }) // <=== added
 	}
 
 	// === PROTECTED — HOSPITAL SCOPED (JWT + Tenant) ===

@@ -1,5 +1,7 @@
 package response
 
+import "time"
+
 type RegisterResponse struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
@@ -35,4 +37,36 @@ type LoginHospitalResponse struct { // <=== changed
 	Role                  string `json:"role"`                  // hanya slug
 	AccessTokenExpiredAt  string `json:"accessTokenExpiredAt"`  // RFC3339 UTC
 	RefreshTokenExpiredAt string `json:"refreshTokenExpiredAt"` // RFC3339 UTC
+}
+
+type UserProfile struct { // <=== added
+	ID        string  `json:"id"`
+	Email     string  `json:"email"`
+	Username  *string `json:"username,omitempty"`
+	FirstName string  `json:"first_name"`
+	LastName  string  `json:"last_name"`
+	Phone     *string `json:"phone,omitempty"`
+	DOB       *string `json:"dob,omitempty"` // format: YYYY-MM-DD (jika ada)
+	Address   *string `json:"address,omitempty"`
+	Gender    *string `json:"gender,omitempty"` // L|P
+	NIK       *string `json:"nik,omitempty"`
+
+	// Patient-only
+	HeightCM       *int    `json:"height_cm,omitempty"`
+	WeightKG       *int    `json:"weight_kg,omitempty"`
+	Allergies      *string `json:"allergies,omitempty"`
+	MedicalHistory *string `json:"medical_history,omitempty"`
+
+	// Doctor-only
+	SIPNumber *string `json:"sip_number,omitempty"`
+	Specialty *string `json:"specialty,omitempty"`
+
+	// Timestamps opsional (kalau suatu saat diperlukan)
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+type SetProfileResponse struct { // <=== added
+	Role    string      `json:"role"`    // slug UPPERCASE yang dipilih/diassign
+	Profile UserProfile `json:"profile"` // profil lengkap gabungan
 }

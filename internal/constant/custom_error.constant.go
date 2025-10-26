@@ -235,4 +235,10 @@ var (
 		Message:    "user is not linked to this hospital",
 		Detail:     GetMessageDetail(MsgForbidden),
 	}
+	ErrProfileAlreadySet = response.CustomError{
+		Code:       "PROFILE_ALREADY_SET",
+		StatusCode: http.StatusConflict, // 409
+		Message:    "profile has already been set",
+		Detail:     GetMessageDetail(MsgConflict), // gunakan katalog pesan "CONFLICT"
+	}
 )

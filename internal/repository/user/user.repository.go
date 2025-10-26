@@ -167,3 +167,58 @@ func (r *Repository) InsertActiveFull(ctx context.Context, in InsertUserFull) er
 	`, in.ID, in.Email, in.Username, in.FirstName, in.LastName, in.Phone, in.DOB, in.Address, in.Gender, in.NIK,
 		in.PasswordHash, in.VerifiedAt).Error
 }
+
+func (r *Repository) GetPatientProfileByUserID(userID string) (heightCM, weightKG *int, allergies, medicalHist *string, err error) { // <=== added
+	type row struct {
+		HeightCM    *int
+		WeightKG    *int
+		Allergies   *string
+		MedicalHist *string
+	}
+	var out row
+	err = r.db.Raw(`
+		SELECT height_cm, weight_kg, allergies, medical_hist
+		FROM patient_profiles
+		WHERE user_id = ?
+		LIMIT 1
+	`, userID).Scan(&out).Error
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return out.HeightCM, out.WeightKG, out.Allergies, out.MedicalHist, nil
+}
+
+// GetDoctorProfileByUserID mengambil data doctor_profiles untuk user tertentu.
+func (r *Repository) GetDoctorProfileByUserID(userID string) (sipNumber, specialty *string, err error) { // <=== added
+	type row struct {
+		SIPNumber *string
+		Specialty *string
+	}
+	var out row
+	err = r.db.Raw(`
+		SELECT sip_number, specialty
+		FROM doctor_profiles
+		WHERE user_id = ?
+		LIMIT 1
+	`, userID).Scan(&out).Error
+	if err != nil {
+		return nil, nil, err
+	}
+	return out.SIPNumber, out.Specialty, nil
+}
+
+// ExistsPatientProfile returns true if a patient profile already exists for user_id.
+func (r *Repository) ExistsPatientProfile(userID string) (bool, error) { // <=== added
+	var exists bool
+	err := r.db.Raw(`SELECT EXISTS(SELECT 1 FROM patient_profiles WHERE user_id = ?)`, userID).
+		Scan(&exists).Error
+	return exists, err
+}
+
+// ExistsDoctorProfile returns true if a doctor profile already exists for user_id.
+func (r *Repository) ExistsDoctorProfile(userID string) (bool, error) { // <=== added
+	var exists bool
+	err := r.db.Raw(`SELECT EXISTS(SELECT 1 FROM doctor_profiles WHERE user_id = ?)`, userID).
+		Scan(&exists).Error
+	return exists, err
+}
