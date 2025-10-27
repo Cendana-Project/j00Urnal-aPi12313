@@ -74,10 +74,10 @@ func (ctl *Controller) VerifyPIN(c *gin.Context) {
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
 	resp.Data = gin.H{
-		"access_token":          tokens.AccessToken,
-		"refresh_token":         tokens.RefreshToken,
-		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339),
-		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339),
+		"access_token":             tokens.AccessToken,
+		"refresh_token":            tokens.RefreshToken,
+		"access_token_expired_at":  aexp.UTC().Format(time.RFC3339),
+		"refresh_token_expired_at": rexp.UTC().Format(time.RFC3339),
 	}
 	util.HandleResponse(c, resp, nil)
 }
@@ -290,5 +290,37 @@ func (ctl *Controller) SetProfile(c *gin.Context) {
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
 	resp.Data = res
+	util.HandleResponse(c, resp, nil)
+}
+
+// =============================
+// AUTH — LOGOUT (new)
+// =============================
+
+func (ctl *Controller) Logout(c *gin.Context) { // <=== added
+	// body optional: { "refresh_token": "..." }
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	_ = c.ShouldBindJSON(&body)
+
+	h := c.GetHeader("Authorization")
+	if !strings.HasPrefix(strings.ToLower(h), "bearer ") {
+		util.HandleError(c, constant.ErrUnauthorized)
+		return
+	}
+	access := strings.TrimSpace(h[7:])
+
+	if err := ctl.svc.Logout(c.Request.Context(), access, strings.TrimSpace(body.RefreshToken)); err != nil {
+		util.HandleError(c, err)
+		return
+	}
+
+	resp := response.NewResponseOK()
+	resp.StatusCode = http.StatusOK
+	resp.Data = gin.H{
+		"status":          "logout_success",
+		"revoked_refresh": body.RefreshToken != "",
+	}
 	util.HandleResponse(c, resp, nil)
 }

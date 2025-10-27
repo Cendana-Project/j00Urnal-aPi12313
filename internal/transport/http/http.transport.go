@@ -13,6 +13,8 @@ import (
 
 	hospRepo "github.com/api-monolith-template/internal/repository/hospital"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
+
+	"github.com/api-monolith-template/internal/infrastructure" // <=== added (to get Redis client here)
 )
 
 type Transport struct {
@@ -77,9 +79,12 @@ func (t *Transport) InitRoute() {
 		auth.POST("/password/reset", t.authController.PasswordReset)
 	}
 
+	// Prepare Redis client for auth middleware (one instance here). // <=== added
+	rdb := infrastructure.NewRedisClient() // <=== added
+
 	// === PROTECTED — USER-LEVEL ===
 	protected := v1.Group("/")
-	protected.Use(transportmw.AuthRequired())
+	protected.Use(transportmw.AuthRequired(rdb)) // <=== changed: pass rdb
 	{
 		protected.POST("/auth/choose-role", t.authController.ChooseRole)
 
@@ -101,11 +106,14 @@ func (t *Transport) InitRoute() {
 		)
 
 		protected.POST("/auth/set-profile", t.authController.SetProfile) // endpoint gabungan
+
+		// === NEW: Logout endpoints ===
+		protected.POST("/auth/logout", t.authController.Logout)
 	}
 
 	// === PROTECTED — HOSPITAL SCOPED (JWT + Tenant) ===
 	tenant := v1.Group("/")
-	tenant.Use(transportmw.AuthRequired(), transportmw.TenantContext())
+	tenant.Use(transportmw.AuthRequired(rdb), transportmw.TenantContext()) // <=== changed: pass rdb
 	{
 		tenant.POST("/hospitals/:hospital_id/admins",
 			transportmw.RequireHospitalPermissions(t.hospRepo, t.roleRepo, constant.PermissionRoleAssign),

@@ -87,3 +87,7 @@ type DoctorProfileRequest struct {
 	SIPNumber *string `json:"sip_number,omitempty"`
 	Specialty *string `json:"specialty,omitempty"`
 }
+
+type LogoutRequest struct { // <=== added
+	RefreshToken string `json:"refresh_token"` // optional
+} // <=== added

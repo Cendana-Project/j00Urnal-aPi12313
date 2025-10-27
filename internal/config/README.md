@@ -46,8 +46,8 @@ type Config struct {
     } `yaml:"redis"`
     
     JWT struct {
-        AccessTokenExpiration  int    `yaml:"accessTokenExpiration" validate:"required"`
-        RefreshTokenExpiration int    `yaml:"refreshTokenExpiration" validate:"required"`
+        AccessTokenExpiration  int    `yaml:"access_token_expired_at" validate:"required"`
+        RefreshTokenExpiration int    `yaml:"refresh_token_expired_at" validate:"required"`
         Secret                 string `yaml:"secret" validate:"required"`
     } `yaml:"jwt"`
 }
