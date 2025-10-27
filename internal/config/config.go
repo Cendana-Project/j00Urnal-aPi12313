@@ -30,9 +30,37 @@ type EnvConfig struct {
 }
 
 type JWTConfig struct {
-	Secret           string `mapstructure:"secret"`
-	AccessTTLMinutes int    `mapstructure:"access_ttl_minutes"`
-	RefreshTTLDays   int    `mapstructure:"refresh_ttl_days"`
+	Secret string `mapstructure:"secret"`
+
+	// BARU (lebih fleksibel): gunakan duration string, contoh: "15m", "720h"
+	AccessTTL  string `mapstructure:"access_ttl"`
+	RefreshTTL string `mapstructure:"refresh_ttl"`
+
+	// Fallback lama (tetap didukung agar tidak breaking)
+	AccessTTLMinutes int `mapstructure:"access_ttl_minutes"`
+	RefreshTTLDays   int `mapstructure:"refresh_ttl_days"`
+}
+
+// ParseDurations mengembalikan durasi access & refresh dengan prioritas:
+// AccessTTL/RefreshTTL (string) > AccessTTLMinutes/RefreshTTLDays (int) > default (15m, 30d)
+func (j JWTConfig) ParseDurations() (access time.Duration, refresh time.Duration) {
+	// Access
+	if d, err := time.ParseDuration(j.AccessTTL); err == nil && d > 0 {
+		access = d
+	} else if j.AccessTTLMinutes > 0 {
+		access = time.Duration(j.AccessTTLMinutes) * time.Minute
+	} else {
+		access = 15 * time.Minute
+	}
+	// Refresh
+	if d, err := time.ParseDuration(j.RefreshTTL); err == nil && d > 0 {
+		refresh = d
+	} else if j.RefreshTTLDays > 0 {
+		refresh = time.Duration(j.RefreshTTLDays) * 24 * time.Hour
+	} else {
+		refresh = 30 * 24 * time.Hour
+	}
+	return
 }
 
 type Redis struct {
@@ -90,26 +118,22 @@ func LoadConfig() error {
 	viper.SetEnvKeyReplacer(replacer)
 	viper.AutomaticEnv()
 
-	// Explicitly bind environment variables for nested config structures
-	// This ensures environment variables properly override config file values
+	// Bind env explicitly untuk nested struct
 	bindEnvVariables()
 
-	// Make config file optional in environments like Render; allow ENV-only config
+	// File config opsional; ENV saja juga boleh
 	if err := viper.ReadInConfig(); err != nil {
 		logrus.Warn("config.yml not found or unreadable; relying on environment variables")
 	}
 
-	// Unmarshal combined config (file + overridden by ENV)
 	if err := viper.Unmarshal(&Env); err != nil {
 		logrus.Fatal("failed to unmarshal config file: ", err)
 		return err
 	}
-
 	return nil
 }
 
-// bindEnvVariables explicitly binds all environment variables
-// This is necessary because viper.AutomaticEnv() doesn't work well with nested structs
+// bindEnvVariables: pastikan field terikat ENV vars
 func bindEnvVariables() {
 	// Top level
 	viper.BindEnv("env", "ENV")
@@ -148,4 +172,11 @@ func bindEnvVariables() {
 	viper.BindEnv("token.refresh_token_duration", "TOKEN_REFRESH_TOKEN_DURATION")
 	viper.BindEnv("token.forgot_password_rate_limit", "TOKEN_FORGOT_PASSWORD_RATE_LIMIT")
 	viper.BindEnv("token.forgot_password_rate_window", "TOKEN_FORGOT_PASSWORD_RATE_WINDOW")
+
+	// JWT
+	viper.BindEnv("jwt.secret", "JWT_SECRET")
+	viper.BindEnv("jwt.access_ttl", "JWT_ACCESS_TTL")   // e.g. "15m"
+	viper.BindEnv("jwt.refresh_ttl", "JWT_REFRESH_TTL") // e.g. "720h"
+	viper.BindEnv("jwt.access_ttl_minutes", "JWT_ACCESS_TTL_MINUTES")
+	viper.BindEnv("jwt.refresh_ttl_days", "JWT_REFRESH_TTL_DAYS")
 }

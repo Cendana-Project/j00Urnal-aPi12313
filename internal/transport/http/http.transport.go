@@ -57,9 +57,7 @@ func (t *Transport) InitRoute() {
 	if t.router == nil {
 		panic("gin engine is nil")
 	}
-	// TIDAK memasang Auth di level router di sini.
-
-	// ========== WARMUP — PUBLIC (untuk cron jobs dan monitoring) ==========
+	// ========== WARMUP — PUBLIC ==========
 	t.router.GET("/ping", func(c *gin.Context) { t.warmupController.Ping(c) })
 
 	v1 := t.router.Group("/v1")
@@ -67,43 +65,42 @@ func (t *Transport) InitRoute() {
 	// ========== AUTH — PUBLIC ==========
 	auth := v1.Group("/auth")
 	{
-		auth.POST("/register", func(c *gin.Context) { t.authController.Register(c) })
-		auth.POST("/resend-pin", func(c *gin.Context) { t.authController.ResendPIN(c) })
-		auth.POST("/verify-pin", func(c *gin.Context) { t.authController.VerifyPIN(c) })
+		auth.POST("/register", t.authController.Register)
+		auth.POST("/resend-pin", t.authController.ResendPIN)
+		auth.POST("/verify-pin", t.authController.VerifyPIN)
 
-		// Split login
-		auth.POST("/login", func(c *gin.Context) { t.authController.LoginPublic(c) })
-		auth.POST("/login/hospital", func(c *gin.Context) { t.authController.LoginHospital(c) })
+		auth.POST("/login", t.authController.LoginPublic)
+		auth.POST("/login/hospital", t.authController.LoginHospital)
 
-		auth.POST("/refresh", func(c *gin.Context) { t.authController.Refresh(c) })
-		auth.POST("/password/forgot", func(c *gin.Context) { t.authController.PasswordForgot(c) })
-		auth.POST("/password/reset", func(c *gin.Context) { t.authController.PasswordReset(c) })
+		auth.POST("/refresh", t.authController.Refresh)
+		auth.POST("/password/forgot", t.authController.PasswordForgot)
+		auth.POST("/password/reset", t.authController.PasswordReset)
 	}
 
-	// === PROTECTED — USER-LEVEL (tanpa tenant) ===
+	// === PROTECTED — USER-LEVEL ===
 	protected := v1.Group("/")
 	protected.Use(transportmw.AuthRequired())
 	{
-		protected.POST("/auth/choose-role", func(c *gin.Context) { t.authController.ChooseRole(c) })
+		protected.POST("/auth/choose-role", t.authController.ChooseRole)
 
 		protected.PUT("/profile/patient",
 			transportmw.RequirePermissions(t.roleRepo, constant.PermissionPatientEdit),
-			func(c *gin.Context) { t.userController.UpdatePatientProfile(c) },
+			t.userController.UpdatePatientProfile,
 		)
 
-		protected.PUT("/auth/password", func(c *gin.Context) { t.authController.PasswordChange(c) })
+		protected.PUT("/auth/password", t.authController.PasswordChange)
 
 		protected.PUT("/profile/doctor",
 			transportmw.RequirePermissions(t.roleRepo, constant.PermissionDoctorEdit),
-			func(c *gin.Context) { t.userController.UpdateDoctorProfile(c) },
+			t.userController.UpdateDoctorProfile,
 		)
 
 		protected.POST("/hospitals",
 			transportmw.RequirePermissions(t.roleRepo, constant.PermissionUserCreate, constant.PermissionRoleAssign),
-			func(c *gin.Context) { t.hospitalController.CreateHospital(c) },
+			t.hospitalController.CreateHospital,
 		)
 
-		protected.POST("/auth/set-profile", func(c *gin.Context) { t.authController.SetProfile(c) }) // <=== added
+		protected.POST("/auth/set-profile", t.authController.SetProfile) // endpoint gabungan
 	}
 
 	// === PROTECTED — HOSPITAL SCOPED (JWT + Tenant) ===
@@ -112,12 +109,12 @@ func (t *Transport) InitRoute() {
 	{
 		tenant.POST("/hospitals/:hospital_id/admins",
 			transportmw.RequireHospitalPermissions(t.hospRepo, t.roleRepo, constant.PermissionRoleAssign),
-			func(c *gin.Context) { t.hospitalController.CreateHospitalAdmin(c) },
+			t.hospitalController.CreateHospitalAdmin,
 		)
 
 		tenant.POST("/hospitals/:hospital_id/staff",
 			transportmw.RequireHospitalPermissions(t.hospRepo, t.roleRepo, constant.PermissionUserCreate, constant.PermissionRoleAssign),
-			func(c *gin.Context) { t.hospitalController.CreateHospitalStaff(c) },
+			t.hospitalController.CreateHospitalStaff,
 		)
 	}
 

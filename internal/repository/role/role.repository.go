@@ -127,31 +127,14 @@ WHERE hur.hospital_id = ? AND hur.user_id = ? AND p.is_active = TRUE
 	return perms, nil
 }
 
-func (r *Repository) ListRolesByUser(ctx context.Context, userID string) ([]struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
-	Active      bool   `json:"active"`
-	CreatedAt   any    `json:"created_at"`
-	UpdatedAt   any    `json:"updated_at"`
-	DeletedAt   any    `json:"deleted_at"`
-}, error) {
-	var roles []struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Slug        string `json:"slug"`
-		Description string `json:"description"`
-		Active      bool   `json:"active"`
-		CreatedAt   any    `json:"created_at"`
-		UpdatedAt   any    `json:"updated_at"`
-		DeletedAt   any    `json:"deleted_at"`
-	}
-	q := `
-SELECT r.id, r.name, r.slug, r.description, r.active AS active, r.created_at, r.updated_at, r.deleted_at   -- <=== changed (is_active -> active)
+// ListRolesByUser: daftar role global (aktif) milik user
+func (r *Repository) ListRolesByUser(ctx context.Context, userID string) ([]entity.Role, error) {
+	var roles []entity.Role
+	const q = `
+SELECT r.id, r.name, r.slug, r.description, r.active, r.created_at, r.updated_at, r.deleted_at
 FROM user_roles ur
 JOIN roles r ON r.id = ur.role_id
-WHERE ur.user_id = ? AND r.active = TRUE                                                                     -- <=== changed (is_active -> active)
+WHERE ur.user_id = ? AND r.active = TRUE
 ORDER BY r.name`
 	if err := r.db.WithContext(ctx).Raw(q, userID).Scan(&roles).Error; err != nil {
 		return nil, err
@@ -159,32 +142,14 @@ ORDER BY r.name`
 	return roles, nil
 }
 
-// ListHospitalRolesByUser mengembalikan daftar role (aktif) di scope hospital tertentu.
-func (r *Repository) ListHospitalRolesByUser(ctx context.Context, hospitalID, userID string) ([]struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
-	Active      bool   `json:"active"`
-	CreatedAt   any    `json:"created_at"`
-	UpdatedAt   any    `json:"updated_at"`
-	DeletedAt   any    `json:"deleted_at"`
-}, error) {
-	var roles []struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Slug        string `json:"slug"`
-		Description string `json:"description"`
-		Active      bool   `json:"active"`
-		CreatedAt   any    `json:"created_at"`
-		UpdatedAt   any    `json:"updated_at"`
-		DeletedAt   any    `json:"deleted_at"`
-	}
-	q := `
-SELECT r.id, r.name, r.slug, r.description, r.active AS active, r.created_at, r.updated_at, r.deleted_at   -- <=== changed
+// ListHospitalRolesByUser: role aktif user pada hospital tertentu
+func (r *Repository) ListHospitalRolesByUser(ctx context.Context, hospitalID, userID string) ([]entity.Role, error) {
+	var roles []entity.Role
+	const q = `
+SELECT r.id, r.name, r.slug, r.description, r.active, r.created_at, r.updated_at, r.deleted_at
 FROM hospital_user_roles hur
 JOIN roles r ON r.id = hur.role_id
-WHERE hur.hospital_id = ? AND hur.user_id = ? AND r.active = TRUE                                            -- <=== changed
+WHERE hur.hospital_id = ? AND hur.user_id = ? AND r.active = TRUE
 ORDER BY r.name`
 	if err := r.db.WithContext(ctx).Raw(q, hospitalID, userID).Scan(&roles).Error; err != nil {
 		return nil, err

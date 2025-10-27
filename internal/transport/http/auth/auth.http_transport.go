@@ -25,7 +25,7 @@ func NewController(svc *auth.Service) *Controller { return &Controller{svc: svc}
 
 func (ctl *Controller) Register(c *gin.Context) {
 	var req request.RegisterLiteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
@@ -42,7 +42,7 @@ func (ctl *Controller) Register(c *gin.Context) {
 
 func (ctl *Controller) ResendPIN(c *gin.Context) {
 	var req request.ResendPINRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
@@ -59,13 +59,13 @@ func (ctl *Controller) ResendPIN(c *gin.Context) {
 
 func (ctl *Controller) VerifyPIN(c *gin.Context) {
 	var req request.VerifyPINRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	email := strings.TrimSpace(req.Email)
 	pin := strings.TrimSpace(req.PIN)
-	tokens, aexp, rexp, err := ctl.svc.VerifyPIN(c.Request.Context(), email, pin) // <=== changed
+	tokens, aexp, rexp, err := ctl.svc.VerifyPIN(c.Request.Context(), email, pin)
 	if err != nil {
 		util.HandleError(c, err)
 		return
@@ -76,41 +76,39 @@ func (ctl *Controller) VerifyPIN(c *gin.Context) {
 	resp.Data = gin.H{
 		"access_token":          tokens.AccessToken,
 		"refresh_token":         tokens.RefreshToken,
-		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339), // <=== added
-		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339), // <=== added
+		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339),
+		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339),
 	}
 	util.HandleResponse(c, resp, nil)
 }
 
 // =============================
-// AUTH — LOGIN (OPSI A: split)
+// AUTH — LOGIN
 // =============================
 
-// Login publik (tanpa hospital hint)
 func (ctl *Controller) LoginPublic(c *gin.Context) {
 	var req request.LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
 	identity := strings.TrimSpace(req.Identity)
 	password := strings.TrimSpace(req.Password)
 
-	tokens, roles, aexp, rexp, err := ctl.svc.Login(c.Request.Context(), identity, password) // <=== changed
+	tokens, roles, aexp, rexp, err := ctl.svc.Login(c.Request.Context(), identity, password)
 	if err != nil {
 		util.HandleError(c, err)
 		return
 	}
 
-	// Pilih slug pertama jika ada banyak role
 	roleSlug := ""
 	if len(roles) > 0 {
-		roleSlug = roles[0].Slug // <=== changed: kirim hanya slug
+		roleSlug = roles[0].Slug
 	}
 
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = response.LoginResponse{ // <=== changed
+	resp.Data = response.LoginResponse{
 		AccessToken:           tokens.AccessToken,
 		RefreshToken:          tokens.RefreshToken,
 		Role:                  roleSlug,
@@ -122,10 +120,11 @@ func (ctl *Controller) LoginPublic(c *gin.Context) {
 
 func (ctl *Controller) LoginHospital(c *gin.Context) {
 	var req request.LoginHospitalRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
+
 	hint := ""
 	if req.HospitalID != nil && *req.HospitalID != "" {
 		hint = *req.HospitalID
@@ -139,15 +138,14 @@ func (ctl *Controller) LoginHospital(c *gin.Context) {
 		return
 	}
 
-	// Pilih slug pertama
 	roleSlug := ""
 	if len(res.Roles) > 0 {
-		roleSlug = res.Roles[0].Slug // <=== changed
+		roleSlug = res.Roles[0].Slug
 	}
 
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = response.LoginHospitalResponse{ // <=== changed
+	resp.Data = response.LoginHospitalResponse{
 		AccessToken:           res.AccessToken,
 		RefreshToken:          res.RefreshToken,
 		ExpiresIn:             res.ExpiresIn,
@@ -162,11 +160,11 @@ func (ctl *Controller) LoginHospital(c *gin.Context) {
 
 func (ctl *Controller) Refresh(c *gin.Context) {
 	var req request.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	tokens, aexp, rexp, err := ctl.svc.Refresh(c.Request.Context(), strings.TrimSpace(req.RefreshToken)) // <=== changed
+	tokens, aexp, rexp, err := ctl.svc.Refresh(c.Request.Context(), strings.TrimSpace(req.RefreshToken))
 	if err != nil {
 		util.HandleError(c, err)
 		return
@@ -176,21 +174,21 @@ func (ctl *Controller) Refresh(c *gin.Context) {
 	resp.Data = gin.H{
 		"access_token":          tokens.AccessToken,
 		"refresh_token":         tokens.RefreshToken,
-		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339), // <=== added
-		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339), // <=== added
+		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339),
+		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339),
 	}
 	util.HandleResponse(c, resp, nil)
 }
 
 func (ctl *Controller) ChooseRole(c *gin.Context) {
-	userID := c.GetString("user_id")
+	userID := util.GetUserID(c)
 	if userID == "" {
 		res := constant.ErrUnauthorized.ToResponse()
 		util.HandleResponse(c, &res, nil)
 		return
 	}
 	var req request.ChooseRoleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
@@ -207,7 +205,7 @@ func (ctl *Controller) ChooseRole(c *gin.Context) {
 
 func (ctl *Controller) PasswordForgot(c *gin.Context) {
 	var req request.PasswordForgotRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
@@ -220,10 +218,9 @@ func (ctl *Controller) PasswordForgot(c *gin.Context) {
 	util.HandleResponse(c, resp, nil)
 }
 
-// POST /v1/auth/password/reset
 func (ctl *Controller) PasswordReset(c *gin.Context) {
 	var req request.PasswordResetRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
@@ -236,14 +233,13 @@ func (ctl *Controller) PasswordReset(c *gin.Context) {
 	util.HandleResponse(c, resp, nil)
 }
 
-// PUT /v1/auth/password  (AuthRequired)
 func (ctl *Controller) PasswordChange(c *gin.Context) {
 	var req request.PasswordChangeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	userID := util.GetUserID(c) // ambil dari JWT (kita sudah pakai di tempat lain)
+	userID := util.GetUserID(c)
 	if userID == "" {
 		util.HandleError(c, constant.ErrUnauthorized)
 		return
@@ -257,33 +253,31 @@ func (ctl *Controller) PasswordChange(c *gin.Context) {
 	util.HandleResponse(c, resp, nil)
 }
 
+// === SET PROFILE (gabungan choose-role + set profile) ===
+
 func (ctl *Controller) SetProfile(c *gin.Context) {
 	var req request.SetProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-
-	// Ambil user ID dari JWT
-	userID := util.GetUserID(c) // <— konsisten dengan handler lain
+	userID := util.GetUserID(c)
 	if userID == "" {
-		util.HandleError(c, constant.ErrUnauthorized) // <=== changed
+		util.HandleError(c, constant.ErrUnauthorized)
 		return
 	}
 
-	// Normalisasi role ke UPPERCASE
+	// Safety normalize role ke UPPERCASE di service juga.
 	req.Role = strings.ToUpper(strings.TrimSpace(req.Role))
 
-	// Pastikan profile terisi
+	// Pastikan profile non-null dan JSON well-formed
 	if req.Profile == nil || len(*req.Profile) == 0 || string(*req.Profile) == "null" {
-		util.HandleError(c, constant.ErrValidationError) // <=== changed
+		util.HandleError(c, constant.ErrValidationError)
 		return
 	}
-
-	// Validasi JSON profile (cek well-formed)
 	var tmp json.RawMessage
 	if err := json.Unmarshal(*req.Profile, &tmp); err != nil {
-		util.HandleError(c, constant.ErrValidationError) // <=== changed
+		util.HandleError(c, constant.ErrValidationError)
 		return
 	}
 

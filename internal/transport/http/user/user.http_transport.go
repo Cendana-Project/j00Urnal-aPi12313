@@ -18,11 +18,11 @@ func NewController(svc *auth.Service) *Controller { return &Controller{svc: svc}
 // PUT /v1/profile/patient (protected)
 func (ctl *Controller) UpdatePatientProfile(c *gin.Context) {
 	var req request.PatientProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	userID := c.GetString("user_id")
+	userID := util.GetUserID(c)
 	if err := ctl.svc.CompletePatientProfile(c.Request.Context(), userID, &req); err != nil {
 		util.HandleError(c, err)
 		return
@@ -36,11 +36,11 @@ func (ctl *Controller) UpdatePatientProfile(c *gin.Context) {
 // PUT /v1/profile/doctor (protected)
 func (ctl *Controller) UpdateDoctorProfile(c *gin.Context) {
 	var req request.DoctorProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	userID := c.GetString("user_id")
+	userID := util.GetUserID(c)
 	if err := ctl.svc.CompleteDoctorProfile(c.Request.Context(), userID, &req); err != nil {
 		util.HandleError(c, err)
 		return
