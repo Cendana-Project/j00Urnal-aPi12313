@@ -117,3 +117,8 @@ func GetUserID(ctx *gin.Context) string {
 	}
 	return id.String()
 }
+
+// RFC3339UTC memformat waktu ke RFC3339 UTC (helper dipakai controller)
+func RFC3339UTC(t time.Time) string {
+	return t.UTC().Format(time.RFC3339)
+}
