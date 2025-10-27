@@ -13,3 +13,13 @@ func NewAccessTokenBlacklistCacheKey(userID, tokenID string) string {
 func NewAutoLoginTokenCacheKey(token string) string {
 	return fmt.Sprintf("auto-login-token:%s", token)
 }
+
+// Access token blacklist key: access:blacklist:<jti>
+func AccessBlacklistKey(jti string) string { // <=== added
+	return fmt.Sprintf("access:blacklist:%s", jti)
+} // <=== added
+
+// User refresh set: user:refreshes:<userID>
+func UserRefreshSetKey(userID string) string { // <=== added
+	return fmt.Sprintf("user:refreshes:%s", userID)
+} //

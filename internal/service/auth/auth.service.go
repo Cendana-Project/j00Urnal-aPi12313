@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strconv" // <=== added
 	"strings"
 	"time"
 
@@ -133,36 +134,93 @@ func strconv6(n int) string {
 	return string(d[:])
 }
 
+// ====== Key helpers (Redis) ======
+func keyRefresh(jti string) string         { return "refresh:" + jti }          // existing pattern
+func keyUserRefreshSet(uid string) string  { return "user:refreshes:" + uid }   // <=== added
+func keyAccessBlacklist(jti string) string { return "access:blacklist:" + jti } // <=== added
+
+// ====== JWT helpers ======
+func parseJWTHS256(tokenStr string, secret []byte) (jwt.MapClaims, error) { // <=== added
+	tok, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return secret, nil
+	})
+	if err != nil || !tok.Valid {
+		return nil, constant.ErrInvalidToken
+	}
+	claims, ok := tok.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, constant.ErrInvalidToken
+	}
+	return claims, nil
+}
+
+// Konversi aman ke int64 dari berbagai tipe (float64, string, json.Number, int, dll). // <=== added
+func toInt64(v any) int64 { // <=== added
+	switch t := v.(type) {
+	case int64:
+		return t
+	case int:
+		return int64(t)
+	case float64:
+		return int64(t)
+	case json.Number:
+		if n, err := t.Int64(); err == nil {
+			return n
+		}
+	case string:
+		if t == "" {
+			return 0
+		}
+		if n, err := strconv.ParseInt(t, 10, 64); err == nil {
+			return n
+		}
+	}
+	return 0
+}
+
+/* ==================== JWT Issue & Rotate ==================== */
+
 func (s *Service) issueJWT(userID string) (TokenPair, string, time.Time, time.Time, error) {
 	now := time.Now().In(s.loc)
 	accessExp := now.Add(s.accessTTL)
 	refreshExp := now.Add(s.refreshTTL)
 
+	// --- Access token: tambahkan jti ---
+	accessJTI := base64.RawURLEncoding.EncodeToString(randBytes(16)) // <=== added
 	acc := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID, "typ": "access", "iat": now.Unix(), "exp": accessExp.Unix(),
+		"sub": userID, "typ": "access", "jti": accessJTI, "iat": now.Unix(), "exp": accessExp.Unix(), // <=== changed
 	})
 	at, err := acc.SignedString(s.jwtSecret)
 	if err != nil {
 		return TokenPair{}, "", time.Time{}, time.Time{}, err
 	}
 
-	jti := base64.RawURLEncoding.EncodeToString(randBytes(16))
+	// --- Refresh token: sudah pakai jti sebelumnya ---
+	refreshJTI := base64.RawURLEncoding.EncodeToString(randBytes(16))
 	ref := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID, "typ": "refresh", "jti": jti, "iat": now.Unix(), "exp": refreshExp.Unix(),
+		"sub": userID, "typ": "refresh", "jti": refreshJTI, "iat": now.Unix(), "exp": refreshExp.Unix(),
 	})
 	rt, err := ref.SignedString(s.jwtSecret)
 	if err != nil {
 		return TokenPair{}, "", time.Time{}, time.Time{}, err
 	}
 
-	if err := s.redis.Set(context.Background(), "refresh:"+jti, userID, s.refreshTTL).Err(); err != nil {
+	// Simpan refresh:<jti> -> userID (EX=RefreshTTL)
+	if err := s.redis.Set(context.Background(), keyRefresh(refreshJTI), userID, s.refreshTTL).Err(); err != nil {
 		return TokenPair{}, "", time.Time{}, time.Time{}, err
 	}
-	return TokenPair{AccessToken: at, RefreshToken: rt}, jti, accessExp.UTC(), refreshExp.UTC(), nil
+	// Index semua refresh jti milik user (untuk logout-all)
+	_ = s.redis.SAdd(context.Background(), keyUserRefreshSet(userID), refreshJTI).Err() // <=== added
+
+	return TokenPair{AccessToken: at, RefreshToken: rt}, refreshJTI, accessExp.UTC(), refreshExp.UTC(), nil
 }
 
 func (s *Service) rotateRefresh(oldJTI string) {
-	_ = s.redis.Del(context.Background(), "refresh:"+oldJTI).Err()
+	_ = s.redis.Del(context.Background(), keyRefresh(oldJTI)).Err()
+	// Tidak tahu userID di sini; SREM dilakukan saat Refresh ketika kita tahu sub. // <=== added (note)
 }
 
 /* ==================== Core Flows ==================== */
@@ -426,12 +484,15 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (TokenPair, 
 		return TokenPair{}, time.Time{}, time.Time{}, constant.ErrInvalidToken
 	}
 
-	val, err := s.redis.Get(ctx, "refresh:"+jti).Result()
+	val, err := s.redis.Get(ctx, keyRefresh(jti)).Result()
 	if err != nil || val != sub {
 		return TokenPair{}, time.Time{}, time.Time{}, constant.ErrTokenExpired
 	}
 
+	// Hapus refresh lama & indeks user
 	s.rotateRefresh(jti)
+	_ = s.redis.SRem(ctx, keyUserRefreshSet(sub), jti).Err() // <=== added
+
 	pair, _, aexp, rexp, err := s.issueJWT(sub)
 	if err != nil {
 		return TokenPair{}, time.Time{}, time.Time{}, constant.ErrInternalServerError
@@ -460,7 +521,6 @@ func (s *Service) CompletePatientProfile(ctx context.Context, userID string, req
 		"last_name":  req.LastName,
 		"address":    req.Address,
 		"gender":     req.Gender,
-		"nik":        req.NIK,
 	}
 	if req.NIK != nil && !isNIK16(*req.NIK) {
 		return constant.ErrValidationFailed
@@ -763,5 +823,97 @@ func (s *Service) PasswordChange(ctx context.Context, userID string, req *reques
 	}
 
 	ulog.Infof(ctx, "password change success user_id=%s", userID)
+	return nil
+}
+
+/* ==================== Logout APIs ==================== */
+
+func (s *Service) Logout(ctx context.Context, accessToken string, refreshToken string) error { // <=== unchanged signature
+	if strings.TrimSpace(accessToken) == "" {
+		return constant.ErrUnauthorized
+	}
+	claims, err := parseJWTHS256(accessToken, s.jwtSecret)
+	if err != nil {
+		return err
+	}
+	if typ, _ := claims["typ"].(string); typ != "access" {
+		return constant.ErrInvalidToken
+	}
+	acJTI, _ := claims["jti"].(string)
+	sub, _ := claims["sub"].(string)
+	// expUnix, _ := ulog.GetInt64(claims["exp"])                              // <=== removed
+	expUnix := toInt64(claims["exp"]) // <=== changed
+	if acJTI == "" || sub == "" || expUnix == 0 {
+		return constant.ErrInvalidToken
+	}
+	ttl := time.Until(time.Unix(expUnix, 0))
+	if ttl <= 0 {
+		ttl = time.Second
+	}
+	// Blacklist access token
+	if err := s.redis.Set(ctx, keyAccessBlacklist(acJTI), "1", ttl).Err(); err != nil {
+		return constant.ErrInternalServerError
+	}
+
+	// Revoke refresh token jika dikirim
+	if strings.TrimSpace(refreshToken) != "" {
+		rfClaims, err := parseJWTHS256(refreshToken, s.jwtSecret)
+		if err == nil && rfClaims != nil {
+			if rfTyp, _ := rfClaims["typ"].(string); rfTyp == "refresh" {
+				rfJTI, _ := rfClaims["jti"].(string)
+				rfSub, _ := rfClaims["sub"].(string)
+				if rfJTI != "" {
+					_ = s.redis.Del(ctx, keyRefresh(rfJTI)).Err()
+					if rfSub != "" {
+						_ = s.redis.SRem(ctx, keyUserRefreshSet(rfSub), rfJTI).Err()
+					} else {
+						_ = s.redis.SRem(ctx, keyUserRefreshSet(sub), rfJTI).Err()
+					}
+				}
+			}
+		}
+	}
+
+	ulog.Infof(ctx, "logout success user_id=%s", sub)
+	return nil
+}
+
+func (s *Service) LogoutAll(ctx context.Context, accessToken string) error { // <=== unchanged signature
+	if strings.TrimSpace(accessToken) == "" {
+		return constant.ErrUnauthorized
+	}
+	claims, err := parseJWTHS256(accessToken, s.jwtSecret)
+	if err != nil {
+		return err
+	}
+	if typ, _ := claims["typ"].(string); typ != "access" {
+		return constant.ErrInvalidToken
+	}
+	acJTI, _ := claims["jti"].(string)
+	sub, _ := claims["sub"].(string)
+	// expUnix, _ := ulog.GetInt64(claims["exp"])                              // <=== removed
+	expUnix := toInt64(claims["exp"]) // <=== changed
+	if acJTI == "" || sub == "" || expUnix == 0 {
+		return constant.ErrInvalidToken
+	}
+	ttl := time.Until(time.Unix(expUnix, 0))
+	if ttl <= 0 {
+		ttl = time.Second
+	}
+	// Blacklist access token sekarang
+	if err := s.redis.Set(ctx, keyAccessBlacklist(acJTI), "1", ttl).Err(); err != nil {
+		return constant.ErrInternalServerError
+	}
+	// Revoke semua refresh milik user
+	setKey := keyUserRefreshSet(sub)
+	members, err := s.redis.SMembers(ctx, setKey).Result()
+	if err == nil {
+		for _, jti := range members {
+			_ = s.redis.Del(ctx, keyRefresh(jti)).Err()
+		}
+		_ = s.redis.Del(ctx, setKey).Err()
+	}
+
+	ulog.Infof(ctx, "logout-all success user_id=%s", sub)
 	return nil
 }

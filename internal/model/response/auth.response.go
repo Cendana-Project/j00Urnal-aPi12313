@@ -22,9 +22,9 @@ type RoleBrief struct { // <=== added
 type LoginResponse struct { // <=== changed
 	AccessToken           string `json:"access_token"`
 	RefreshToken          string `json:"refresh_token"`
-	Role                  string `json:"role"`                  // hanya slug
-	AccessTokenExpiredAt  string `json:"accessTokenExpiredAt"`  // RFC3339 UTC
-	RefreshTokenExpiredAt string `json:"refreshTokenExpiredAt"` // RFC3339 UTC
+	Role                  string `json:"role"`                     // hanya slug
+	AccessTokenExpiredAt  string `json:"access_token_expired_at"`  // RFC3339 UTC
+	RefreshTokenExpiredAt string `json:"refresh_token_expired_at"` // RFC3339 UTC
 }
 
 // LoginHospitalResponse sekarang menyertakan waktu kadaluarsa token
@@ -34,9 +34,9 @@ type LoginHospitalResponse struct { // <=== changed
 	ExpiresIn             int64  `json:"expires_in"`
 	TokenType             string `json:"token_type"`
 	HospitalID            string `json:"hospital_id"`
-	Role                  string `json:"role"`                  // hanya slug
-	AccessTokenExpiredAt  string `json:"accessTokenExpiredAt"`  // RFC3339 UTC
-	RefreshTokenExpiredAt string `json:"refreshTokenExpiredAt"` // RFC3339 UTC
+	Role                  string `json:"role"`                     // hanya slug
+	AccessTokenExpiredAt  string `json:"access_token_expired_at"`  // RFC3339 UTC
+	RefreshTokenExpiredAt string `json:"refresh_token_expired_at"` // RFC3339 UTC
 }
 
 type UserProfile struct { // <=== added
