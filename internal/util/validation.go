@@ -70,6 +70,8 @@ func AddValidation(db *gorm.DB) {
 		return name
 	})
 
+	// register additional custom validators (global)
+	RegisterCustomValidators(v) // <=== added
 }
 
 // uniqueValidator validate that new value is not exist on db / unique
@@ -207,6 +209,21 @@ func (cv *CustomValidator) SetSupportedCurrencies(currencies []string) {
 
 func (cv *CustomValidator) registerCustomValidators() {
 	cv.validate.RegisterValidation("currency", cv.validateCurrency)
+	// Optional: also expose oneof_ci on the custom validator instance
+	_ = cv.validate.RegisterValidation("oneof_ci", func(fl validator.FieldLevel) bool { // <=== added
+		raw := fl.Field().String()
+		if strings.TrimSpace(raw) == "" {
+			return false
+		}
+		opts := strings.Fields(fl.Param())
+		val := strings.ToUpper(strings.TrimSpace(raw))
+		for _, o := range opts {
+			if strings.ToUpper(o) == val {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 func (cv *CustomValidator) validateCurrency(fl validator.FieldLevel) bool {
@@ -296,5 +313,21 @@ func RegisterCustomValidators(v *validator.Validate) {
 		s := fl.Field().String()
 		re := regexp.MustCompile(`^[A-Z0-9\-]+$`)
 		return re.MatchString(s)
+	})
+
+	// oneof_ci: case-insensitive version of oneof (space-separated options)
+	_ = v.RegisterValidation("oneof_ci", func(fl validator.FieldLevel) bool { // <=== added
+		raw := fl.Field().String()
+		if strings.TrimSpace(raw) == "" {
+			return false
+		}
+		opts := strings.Fields(fl.Param()) // e.g. "DOCTOR NURSE RECEPTIONIST BOD ADMIN"
+		val := strings.ToUpper(strings.TrimSpace(raw))
+		for _, o := range opts {
+			if strings.ToUpper(o) == val {
+				return true
+			}
+		}
+		return false
 	})
 }

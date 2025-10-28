@@ -111,6 +111,12 @@ var (
 		StatusCode: http.StatusConflict,
 		Message:    "Username or email already exists",
 	}
+	ErrDuplicateNIK = response.CustomError{ // <=== added
+		Code:       "DUPLICATE_NIK",
+		StatusCode: http.StatusConflict,
+		Message:    "NIK already exists",
+		Detail:     GetMessageDetail(MsgConflict),
+	}
 	ErrConflict = response.CustomError{
 		Code:       "CONFLICT",
 		StatusCode: http.StatusConflict,
@@ -184,21 +190,18 @@ var (
 	}
 
 	// ====== MedikaOne – Auth (registrasi PIN) ======
-	// Email sudah terdaftar & status sudah aktif
 	ErrEmailAlreadyActive = response.CustomError{
 		Code:       "EMAIL_ALREADY_ACTIVE",
 		StatusCode: http.StatusConflict,
 		Message:    "email already registered and active",
 		Detail:     GetMessageDetail(MsgConflict),
 	}
-	// Gagal kirim email (SMTP/provider problem)
 	ErrEmailSendFailed = response.CustomError{
 		Code:       "EMAIL_SEND_FAILED",
-		StatusCode: http.StatusBadGateway, // upstream failure
+		StatusCode: http.StatusBadGateway,
 		Message:    "failed to send verification email, please try again later",
 		Detail:     GetMessageDetail(MsgInternalServerError),
 	}
-	// Account role tidak ditemukan
 	ErrAccountRoleNotFound = response.CustomError{
 		Code:       "ACCOUNT_ROLE_NOT_FOUND",
 		StatusCode: http.StatusNotFound,
@@ -237,8 +240,14 @@ var (
 	}
 	ErrProfileAlreadySet = response.CustomError{
 		Code:       "PROFILE_ALREADY_SET",
-		StatusCode: http.StatusConflict, // 409
+		StatusCode: http.StatusConflict,
 		Message:    "profile has already been set",
-		Detail:     GetMessageDetail(MsgConflict), // gunakan katalog pesan "CONFLICT"
+		Detail:     GetMessageDetail(MsgConflict),
+	}
+	ErrRegistrationError = response.CustomError{
+		Code:       "REGISTRATION_ERROR",
+		StatusCode: http.StatusInternalServerError,
+		Message:    "internal server error",
+		Detail:     GetMessageDetail(MsgInternalServerError),
 	}
 )

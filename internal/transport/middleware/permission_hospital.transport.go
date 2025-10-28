@@ -81,3 +81,67 @@ func RequireHospitalPermissions(hRepo *hospRepo.Repository, rRepo *roleRepo.Repo
 		c.Next()
 	}
 }
+
+// Hanya izinkan SUPER_ADMIN global atau HOSPITAL_ADMIN pada hospital terkait.
+func RequireHospitalAdminOrSuper(hRepo *hospRepo.Repository, rRepo *roleRepo.Repository) gin.HandlerFunc { // <=== added
+	return func(c *gin.Context) {
+		userID := c.GetString("user_id")
+		if userID == "" {
+			resp := constant.ErrUnauthorized.ToResponse()
+			util.HandleResponse(c, &resp, nil)
+			c.Abort()
+			return
+		}
+		if hRepo == nil || rRepo == nil {
+			resp := constant.ErrInternalServerError.ToResponse()
+			util.HandleResponse(c, &resp, nil)
+			c.Abort()
+			return
+		}
+
+		hintVal, ok := c.Get("hospital_hint")
+		if !ok {
+			resp := constant.ErrValidationFailed.ToResponse()
+			resp.Message = "hospital context required (X-Hospital-ID or X-Hospital-Code or :hospital_id)"
+			util.HandleResponse(c, &resp, nil)
+			c.Abort()
+			return
+		}
+		hint := hintVal.(string)
+
+		hospitalID, err := hRepo.ResolveHospitalID(c.Request.Context(), hint)
+		if err != nil || hospitalID == "" {
+			resp := constant.ErrRecordNotFound.ToResponse()
+			resp.StatusCode = http.StatusNotFound
+			resp.Message = "hospital not found or inactive"
+			util.HandleResponse(c, &resp, nil)
+			c.Abort()
+			return
+		}
+		c.Set("hospital_id", hospitalID)
+
+		// SUPER_ADMIN global langsung lolos
+		if isSuper, _ := rRepo.IsUserSuperAdmin(c.Request.Context(), userID); isSuper {
+			c.Next()
+			return
+		}
+
+		// Jika bukan super, wajib HOSPITAL_ADMIN di hospital ini
+		isHospAdmin, err := rRepo.IsUserHospitalAdmin(c.Request.Context(), hospitalID, userID)
+		if err != nil {
+			resp := constant.ErrInternalServerError.ToResponse()
+			util.HandleResponse(c, &resp, nil)
+			c.Abort()
+			return
+		}
+		if !isHospAdmin {
+			resp := constant.ErrForbidden.ToResponse()
+			resp.Message = "only hospital admin or super admin can access this resource" // <=== clearer
+			util.HandleResponse(c, &resp, nil)
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

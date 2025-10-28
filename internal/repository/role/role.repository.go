@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/api-monolith-template/internal/constant" // <=== added
 	"github.com/api-monolith-template/internal/model/entity"
 )
 
@@ -64,9 +65,8 @@ WHERE ur.user_id = ? AND p.is_active = TRUE
 // Ambil role.id dari role.slug
 func (r *Repository) GetRoleIDBySlug(ctx context.Context, slug string) (string, error) {
 	var id string
-	if err := r.db.WithContext(ctx).
-		Raw(`SELECT id FROM roles WHERE slug = ? LIMIT 1`, slug).
-		Scan(&id).Error; err != nil {
+	const q = `SELECT id FROM roles WHERE UPPER(slug) = UPPER(?) LIMIT 1` // <=== changed
+	if err := r.db.WithContext(ctx).Raw(q, slug).Scan(&id).Error; err != nil {
 		return "", err
 	}
 	if id == "" {
@@ -75,7 +75,7 @@ func (r *Repository) GetRoleIDBySlug(ctx context.Context, slug string) (string, 
 	return id, nil
 }
 
-// Cek apakah user punya role global 'super_admin'
+// Cek apakah user punya role global 'SUPER_ADMIN'
 func (r *Repository) IsUserSuperAdmin(ctx context.Context, userID string) (bool, error) {
 	type row struct{ C int64 }
 	var out row
@@ -83,9 +83,8 @@ func (r *Repository) IsUserSuperAdmin(ctx context.Context, userID string) (bool,
 SELECT COUNT(1) AS c
 FROM user_roles ur
 JOIN roles r ON r.id = ur.role_id
-WHERE ur.user_id = ? AND r.slug = 'SUPER_ADMIN'
-`
-	if err := r.db.WithContext(ctx).Raw(q, userID).Scan(&out).Error; err != nil {
+WHERE ur.user_id = ? AND r.slug = ?` // <=== changed (pakai placeholder)
+	if err := r.db.WithContext(ctx).Raw(q, userID, constant.RoleSuperAdmin).Scan(&out).Error; err != nil { // <=== changed
 		return false, err
 	}
 	return out.C > 0, nil
@@ -155,4 +154,27 @@ ORDER BY r.name`
 		return nil, err
 	}
 	return roles, nil
+}
+
+// =====================
+// >>> Validasi Hospital Admin (pakai constants) <<<
+// =====================
+
+func (r *Repository) UserHasHospitalRole(ctx context.Context, hospitalID, userID, roleSlug string) (bool, error) {
+	type row struct{ C int64 }
+	var out row
+	const q = `
+SELECT COUNT(1) AS c
+FROM hospital_user_roles hur
+JOIN roles r ON r.id = hur.role_id
+WHERE hur.hospital_id = ? AND hur.user_id = ? AND r.slug = ?`
+	if err := r.db.WithContext(ctx).Raw(q, hospitalID, userID, roleSlug).Scan(&out).Error; err != nil {
+		return false, err
+	}
+	return out.C > 0, nil
+}
+
+// IsUserHospitalAdmin true jika user adalah ADMIN (scoped ke hospital) sesuai constants.
+func (r *Repository) IsUserHospitalAdmin(ctx context.Context, hospitalID, userID string) (bool, error) { // <=== changed (pakai constant)
+	return r.UserHasHospitalRole(ctx, hospitalID, userID, constant.RoleAdmin)
 }

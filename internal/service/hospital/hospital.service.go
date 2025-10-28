@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"gorm.io/gorm"
 	"strings"
 	"time"
 
@@ -189,10 +191,13 @@ func (s *Service) CreateHospitalAdmin(ctx context.Context, req request.CreateHos
 
 // CreateHospitalStaff: admin tenant, user baru Wajib Unik (email & username)
 func (s *Service) CreateHospitalStaff(ctx context.Context, req request.CreateHospitalStaffRequest) (string, error) {
+	// 1) Resolve hospital
 	hospitalID, err := s.hospitalRepo.ResolveHospitalID(ctx, req.HospitalID)
-	if err != nil {
-		return "", constant.ErrRecordNotFound
+	if err != nil || strings.TrimSpace(hospitalID) == "" {
+		return "", constant.ErrHospitalNotFound // <=== pakai custom error khusus hospital
 	}
+
+	// 2) Validasi field wajib
 	if strings.TrimSpace(req.Email) == "" ||
 		strings.TrimSpace(req.Password) == "" ||
 		strings.TrimSpace(req.Role) == "" ||
@@ -200,11 +205,13 @@ func (s *Service) CreateHospitalStaff(ctx context.Context, req request.CreateHos
 		return "", constant.ErrValidationFailed
 	}
 
+	// 3) Validasi/parse DOB
 	dob, err := parseDOB(req.DOB)
 	if err != nil {
-		return "", constant.ErrValidationFailed
+		return "", constant.ErrInvalidDateFormat
 	}
 
+	// 4) Buat/aktifkan user (idempotent sesuai implementasi ensureUserActiveFull kamu)
 	uid, err := s.ensureUserActiveFull(ctx, urepo.InsertUserFull{
 		Email:         strings.ToLower(strings.TrimSpace(req.Email)),
 		Username:      sp(req.Username),
@@ -218,19 +225,61 @@ func (s *Service) CreateHospitalStaff(ctx context.Context, req request.CreateHos
 		PasswordPlain: req.Password,
 	})
 	if err != nil {
-		return "", err
+		// Mapping umum untuk duplikat & password
+		// Sesuaikan bagian ini dengan error yang dikembalikan ensureUserActiveFull (mis. string contains/ sentinel)
+		if errors.Is(err, gorm.ErrDuplicatedKey) ||
+			strings.Contains(strings.ToLower(err.Error()), "duplicate key") ||
+			strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
+			return "", constant.ErrDuplicateUsernameOrEmail
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "password") &&
+			(strings.Contains(strings.ToLower(err.Error()), "invalid") ||
+				strings.Contains(strings.ToLower(err.Error()), "require")) {
+			return "", constant.ErrInvalidPassword
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "similar to username") ||
+			strings.Contains(strings.ToLower(err.Error()), "similar to email") {
+			return "", constant.ErrPasswordSimilarToUserInfo
+		}
+		return "", constant.ErrInternalServerError
 	}
 
+	// 5) Pastikan membership user->hospital
 	if err := s.hospitalRepo.EnsureMembership(ctx, uid, hospitalID, false); err != nil {
 		return "", constant.ErrInternalServerError
 	}
-	roleID, err := s.roleRepo.GetRoleIDBySlug(ctx, req.Role)
+
+	// 6) Validasi role (gunakan constants & izinkan DOCTOR juga)
+	roleSlug := strings.ToUpper(strings.TrimSpace(req.Role))
+	switch roleSlug {
+	case constant.RoleNurse, constant.RoleReceptionist, constant.RoleBOD, constant.RoleAdmin:
+	// OK
+	case constant.RoleDoctor:
+		return "", constant.ErrRegistrationError
+	default:
+		return "", constant.ErrRoleNotFound
+	}
+
+	// 7) Ambil role id (repo sudah case-insensitive)
+	roleID, err := s.roleRepo.GetRoleIDBySlug(ctx, roleSlug)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", constant.ErrRoleNotFound
+		}
 		return "", constant.ErrInternalServerError
 	}
+
+	// 8) Assign role ke user pada hospital
 	if err := s.hospitalRepo.AssignHospitalRole(ctx, uid, hospitalID, roleID); err != nil {
+		// Tangkap conflict unique (sudah pernah di-assign)
+		if errors.Is(err, gorm.ErrDuplicatedKey) ||
+			strings.Contains(strings.ToLower(err.Error()), "duplicate key") ||
+			strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
+			return "", constant.ErrRoleAlreadyAssigned
+		}
 		return "", constant.ErrInternalServerError
 	}
+
 	return uid, nil
 }
 
