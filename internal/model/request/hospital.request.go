@@ -14,29 +14,6 @@ type CreateHospitalRequest struct {
 	Facilities  any      `json:"facilities" binding:"omitempty"` // JSON (obj/array)
 }
 
-type AssignAdminRequest struct {
-	Email     string  `json:"email" validate:"required,email"`
-	FirstName string  `json:"first_name" validate:"required"`
-	LastName  string  `json:"last_name" validate:"required"`
-	Phone     *string `json:"phone,omitempty"`
-	Password  string  `json:"password" validate:"required,min=8"`
-}
-
-type TenantLoginRequest struct {
-	Email        string `json:"email" validate:"required,email"`
-	Password     string `json:"password" validate:"required"`
-	HospitalCode string `json:"hospital_code" validate:"required"`
-}
-
-type RegisterStaffRequest struct {
-	Email     string  `json:"email" validate:"required,email"`
-	FirstName string  `json:"first_name" validate:"required"`
-	LastName  string  `json:"last_name" validate:"required"`
-	Role      string  `json:"role" validate:"required,oneof=doctor"` // untuk saat ini hanya doctor
-	Phone     *string `json:"phone,omitempty"`
-	Password  string  `json:"password" validate:"required,min=8"`
-}
-
 type CreateHospitalAdminRequest struct {
 	HospitalID string  `json:"hospital_id" binding:"required"`
 	Email      string  `json:"email"       binding:"required,email,unique_db=users:email"`
@@ -52,8 +29,8 @@ type CreateHospitalAdminRequest struct {
 }
 
 type CreateHospitalStaffRequest struct {
-	HospitalID string  `json:"hospital_id" binding:"required"`
-	Role       string  `json:"role"       binding:"required,oneof=doctor nurse receptionist bod admin"`
+	HospitalID string  `json:"hospital_id" uri:"hospital_id" binding:"-"`                            // <=== changed (was binding:"required")
+	Role       string  `json:"role" binding:"required,oneof_ci=DOCTOR NURSE RECEPTIONIST BOD ADMIN"` // <=== case-insensitive
 	Email      string  `json:"email"      binding:"required,email,unique_db=users:email"`
 	Username   string  `json:"username"   binding:"required,min=3,max=64,unique_db=users:username"`
 	Phone      *string `json:"phone"      binding:"omitempty"`

@@ -17,11 +17,16 @@ func HandleError(ctx *gin.Context, err error) {
 		resp.TraceID = GetTraceID(ctx)
 		resp.Timestamp = time.Now().UTC()
 		ctx.JSON(resp.StatusCode, resp)
+
 	case validator.ValidationErrors:
-		validationErr := constant.ErrValidationError.ToResponse()
-		validationErr.TraceID = GetTraceID(ctx)
-		validationErr.Timestamp = time.Now().UTC()
-		ctx.JSON(validationErr.StatusCode, validationErr)
+		// === Smart mapping untuk error validasi field === // <=== added
+		custom := mapValidationErrors(cErr) // <=== added
+		resp := custom.ToResponse()
+		resp.TraceID = GetTraceID(ctx)
+		resp.Timestamp = time.Now().UTC()
+		ctx.JSON(resp.StatusCode, resp)
+		// ================================================
+
 	default:
 		errStr := err.Error()
 		if strings.Contains(errStr, "json") || strings.Contains(errStr, "unmarshal") {
@@ -71,4 +76,69 @@ func coalesce(a, b string) string {
 		return b
 	}
 	return a
+}
+
+// mapValidationErrors berusaha memetakan ValidationErrors ke CustomError yang paling spesifik. // <=== added
+func mapValidationErrors(ve validator.ValidationErrors) response.CustomError { // <=== added
+	// Urutkan prioritas: duplikat -> role invalid -> tanggal -> UUID -> password -> len/format -> default
+	for _, fe := range ve {
+		field := strings.ToLower(fe.Field())
+		tag := strings.ToLower(fe.Tag())
+		param := strings.ToLower(fe.Param())
+
+		// 1) Duplikat (custom tag unique_db) — param biasanya "users:email" / "users:username" / "users:nik"
+		if tag == "unique_db" {
+			if strings.Contains(param, "users:email") || field == "email" {
+				return constant.ErrDuplicateUsernameOrEmail
+			}
+			if strings.Contains(param, "users:username") || field == "username" {
+				return constant.ErrDuplicateUsernameOrEmail
+			}
+			if strings.Contains(param, "users:nik") || field == "nik" {
+				// Pakai error khusus NIK bila ada (lihat constant). Jika belum ada, fallback ke 409 umum.
+				if (constant.ErrDuplicateNIK != response.CustomError{}) {
+					return constant.ErrDuplicateNIK
+				}
+				return constant.ErrConflict
+			}
+		}
+
+		// 2) Role invalid (oneof_ci pada field role) → ROLE_NOT_FOUND
+		if tag == "oneof_ci" && field == "role" {
+			return constant.ErrRoleNotFound
+		}
+
+		// 3) Gender invalid (oneof_ci pada field gender) → VALIDATION_ERROR (tetap generik)
+		if tag == "oneof_ci" && field == "gender" {
+			return constant.ErrValidationError
+		}
+
+		// 4) DOB format salah (datetime=2006-01-02) → INVALID_DATE_FORMAT (pesan umum)
+		if (tag == "datetime" || strings.Contains(fe.ActualTag(), "datetime")) && field == "dob" {
+			return constant.ErrInvalidDateFormat
+		}
+
+		// 5) UUID salah (misal hospital_id dari URI) → INVALID_UUID_FORMAT
+		if tag == "uuid" || tag == "uuid4" {
+			return constant.ErrInvalidUUIDFormat
+		}
+
+		// 6) Password tidak memenuhi aturan (custom tag validate_password) → INVALID_PASSWORD
+		if tag == "validate_password" || field == "password" && (tag == "min" || tag == "required") {
+			return constant.ErrInvalidPassword
+		}
+
+		// 7) Required penting yang kosong → VALIDATION_FAILED (lebih jelas daripada error generik)
+		if tag == "required" {
+			return constant.ErrValidationFailed
+		}
+
+		// 8) Panjang/format NIK (len=16 + numeric) tetap VALIDATION_ERROR (biar konsisten)
+		if field == "nik" && (tag == "len" || tag == "numeric") {
+			return constant.ErrValidationError
+		}
+	}
+
+	// Fallback: jika tidak ada yang cocok, kembalikan VALIDATION_ERROR
+	return constant.ErrValidationError
 }

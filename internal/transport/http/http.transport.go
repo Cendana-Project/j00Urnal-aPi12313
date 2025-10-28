@@ -121,7 +121,7 @@ func (t *Transport) InitRoute() {
 		)
 
 		tenant.POST("/hospitals/:hospital_id/staff",
-			transportmw.RequireHospitalPermissions(t.hospRepo, t.roleRepo, constant.PermissionUserCreate, constant.PermissionRoleAssign),
+			transportmw.RequireHospitalAdminOrSuper(t.hospRepo, t.roleRepo), // <=== changed: enforce hospital admin or super admin
 			t.hospitalController.CreateHospitalStaff,
 		)
 	}
