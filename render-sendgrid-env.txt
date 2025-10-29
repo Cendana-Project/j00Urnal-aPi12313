@@ -1,9 +1,0 @@
-# Environment Variables untuk Render dengan SendGrid
-# Copy lines di bawah ini dan paste ke Render Dashboard → Web Service → Environment
-
-# SendGrid SMTP Configuration
-SMTP_HOST=smtp.sendgrid.net
-SMTP_PORT=587
-SMTP_USERNAME=apikey
-SMTP_PASSWORD=SG.TUKIS_DENGAN_SENDGRID_API_KEY_ANDA
-SMTP_FROM=no-reply@medikaone.id
