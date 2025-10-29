@@ -245,13 +245,14 @@ func (s *Service) RegisterLite(ctx context.Context, req *request.RegisterLiteReq
 			if err := s.redis.Set(ctx, key, pin, s.pinTTL).Err(); err != nil {
 				return nil, constant.ErrInternalServerError
 			}
-			if s.email != nil {
-				html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
-				if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
-					_ = s.redis.Del(ctx, key).Err()
-					return nil, constant.ErrEmailSendFailed
-				}
-			}
+            if s.email != nil {
+                html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
+                if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
+                    ulog.Errorf(ctx, "smtp send failed (register_resend_pin): %v", err)
+                    _ = s.redis.Del(ctx, key).Err()
+                    return nil, constant.ErrEmailSendFailed
+                }
+            }
 			ulog.Infof(ctx, "register resend pin email=%s", emailAddr)
 			return u, nil
 		}
@@ -284,13 +285,14 @@ func (s *Service) RegisterLite(ctx context.Context, req *request.RegisterLiteReq
 	if err := s.redis.Set(ctx, keyRedis, pin, s.pinTTL).Err(); err != nil {
 		return nil, constant.ErrInternalServerError
 	}
-	if s.email != nil {
-		html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
-		if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
-			_ = s.redis.Del(ctx, keyRedis).Err()
-			return nil, constant.ErrEmailSendFailed
-		}
-	}
+    if s.email != nil {
+        html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
+        if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
+            ulog.Errorf(ctx, "smtp send failed (register_send_pin): %v", err)
+            _ = s.redis.Del(ctx, keyRedis).Err()
+            return nil, constant.ErrEmailSendFailed
+        }
+    }
 	ulog.Infof(ctx, "register success email=%s", emailAddr)
 	return u, nil
 }
@@ -742,13 +744,14 @@ func (s *Service) PasswordForgot(ctx context.Context, req *request.PasswordForgo
 	if err := s.redis.Set(ctx, key, pin, s.pinTTL).Err(); err != nil {
 		return constant.ErrInternalServerError
 	}
-	if s.email != nil {
-		html := email.RenderResetPIN(u.FirstName, pin, int(s.pinTTL.Minutes()))
-		if err := s.email.Send(emailAddr, "PIN Reset Password MedikaOne", html); err != nil {
-			_ = s.redis.Del(ctx, key).Err()
-			return constant.ErrEmailSendFailed
-		}
-	}
+    if s.email != nil {
+        html := email.RenderResetPIN(u.FirstName, pin, int(s.pinTTL.Minutes()))
+        if err := s.email.Send(emailAddr, "PIN Reset Password MedikaOne", html); err != nil {
+            ulog.Errorf(ctx, "smtp send failed (forgot_send_pin): %v", err)
+            _ = s.redis.Del(ctx, key).Err()
+            return constant.ErrEmailSendFailed
+        }
+    }
 	ulog.Infof(ctx, "password forgot pin sent email=%s", emailAddr)
 	return nil
 }
