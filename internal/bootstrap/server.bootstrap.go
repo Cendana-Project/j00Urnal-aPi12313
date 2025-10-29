@@ -38,13 +38,12 @@ func StartServer() {
 	if port == 0 {
 		port = 587
 	}
-    username := config.Env.SMTP.Username
-    password := config.Env.SMTP.Password
-    // Prefer explicit SMTP From address from config/env; do NOT fallback to username
-    fromEmail := config.Env.SMTP.From
-    if fromEmail == "" {
-        fromEmail = "no-reply@medikaone.id"
-    }
+	username := config.Env.SMTP.Username
+	password := config.Env.SMTP.Password
+	fromEmail := config.Env.SMTP.From
+	if fromEmail == "" {
+		fromEmail = "no-reply@medikaone.id"
+	}
 
 	sender := email.NewSMTPSender(&email.Config{
 		Enabled:     true,
