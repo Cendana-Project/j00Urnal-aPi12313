@@ -179,4 +179,11 @@ func bindEnvVariables() {
 	viper.BindEnv("jwt.refresh_ttl", "JWT_REFRESH_TTL") // e.g. "720h"
 	viper.BindEnv("jwt.access_ttl_minutes", "JWT_ACCESS_TTL_MINUTES")
 	viper.BindEnv("jwt.refresh_ttl_days", "JWT_REFRESH_TTL_DAYS")
+
+	// SMTP
+	viper.BindEnv("smtp.host", "SMTP_HOST")
+	viper.BindEnv("smtp.port", "SMTP_PORT")
+	viper.BindEnv("smtp.username", "SMTP_USERNAME")
+	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
+	viper.BindEnv("smtp.from", "SMTP_FROM")
 }
