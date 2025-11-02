@@ -96,7 +96,7 @@ func (r *Repository) GetByID(id string) (*entity.User, error) {
 	return &u, nil
 }
 
-func (r *Repository) GetByEmail(email string) (*entity.User, error) { // <=== added
+func (r *Repository) GetByEmail(email string) (*entity.User, error) {
 	var u entity.User
 	err := r.db.First(&u, "email = ? AND deleted_at IS NULL", email).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -105,9 +105,7 @@ func (r *Repository) GetByEmail(email string) (*entity.User, error) { // <=== ad
 	return &u, err
 }
 
-func (r *Repository) Update(u *entity.User) error { // <=== added
-	return r.db.Save(u).Error
-}
+func (r *Repository) Update(u *entity.User) error { return r.db.Save(u).Error }
 
 type InsertUser struct {
 	ID           string
@@ -168,7 +166,7 @@ func (r *Repository) InsertActiveFull(ctx context.Context, in InsertUserFull) er
 		in.PasswordHash, in.VerifiedAt).Error
 }
 
-func (r *Repository) GetPatientProfileByUserID(userID string) (heightCM, weightKG *int, allergies, medicalHist *string, err error) { // <=== added
+func (r *Repository) GetPatientProfileByUserID(userID string) (heightCM, weightKG *int, allergies, medicalHist *string, err error) {
 	type row struct {
 		HeightCM    *int
 		WeightKG    *int
@@ -189,10 +187,11 @@ func (r *Repository) GetPatientProfileByUserID(userID string) (heightCM, weightK
 }
 
 // GetDoctorProfileByUserID mengambil data doctor_profiles untuk user tertentu.
-func (r *Repository) GetDoctorProfileByUserID(userID string) (sipNumber, specialty *string, err error) { // <=== added
+// GetDoctorProfileByUserID mengambil data doctor_profiles untuk user tertentu.
+func (r *Repository) GetDoctorProfileByUserID(userID string) (sipNumber, specialty *string, err error) {
 	type row struct {
-		SIPNumber *string
-		Specialty *string
+		SipNumber *string `gorm:"column:sip_number"` // <=== changed: hindari akronim full-caps
+		Specialty *string `gorm:"column:specialty"`
 	}
 	var out row
 	err = r.db.Raw(`
@@ -204,21 +203,111 @@ func (r *Repository) GetDoctorProfileByUserID(userID string) (sipNumber, special
 	if err != nil {
 		return nil, nil, err
 	}
-	return out.SIPNumber, out.Specialty, nil
+	return out.SipNumber, out.Specialty, nil // <=== changed
 }
 
-// ExistsPatientProfile returns true if a patient profile already exists for user_id.
-func (r *Repository) ExistsPatientProfile(userID string) (bool, error) { // <=== added
+func (r *Repository) ExistsPatientProfile(userID string) (bool, error) {
 	var exists bool
 	err := r.db.Raw(`SELECT EXISTS(SELECT 1 FROM patient_profiles WHERE user_id = ?)`, userID).
 		Scan(&exists).Error
 	return exists, err
 }
 
-// ExistsDoctorProfile returns true if a doctor profile already exists for user_id.
-func (r *Repository) ExistsDoctorProfile(userID string) (bool, error) { // <=== added
+func (r *Repository) ExistsDoctorProfile(userID string) (bool, error) {
 	var exists bool
 	err := r.db.Raw(`SELECT EXISTS(SELECT 1 FROM doctor_profiles WHERE user_id = ?)`, userID).
 		Scan(&exists).Error
 	return exists, err
+}
+
+// ====== Untuk /v1/me (global) ======
+
+func (r *Repository) GetUserRoleSlug(userID string) (string, error) { // role global (opsional)
+	var slug string
+	err := r.db.Raw(`
+		SELECT r.slug
+		FROM user_roles ur
+		JOIN roles r ON r.id = ur.role_id
+		WHERE ur.user_id = ?
+		LIMIT 1
+	`, userID).Scan(&slug).Error
+	if err != nil {
+		return "", err
+	}
+	return strings.ToUpper(slug), nil // <=== changed: pastikan UPPERCASE
+}
+
+type HospitalBrief struct {
+	ID   string
+	Code string
+	Name string
+}
+
+func (r *Repository) ListHospitalsByUserID(userID string) ([]HospitalBrief, error) {
+	var rows []HospitalBrief
+	err := r.db.Raw(`
+		SELECT h.id, h.code, h.name
+		FROM user_hospitals uh
+		JOIN hospitals h ON h.id = uh.hospital_id
+		WHERE uh.user_id = ?
+	`, userID).Scan(&rows).Error
+	return rows, err
+}
+
+// ====== Untuk /v1/tenant/me (scoped) ======
+
+// ResolveHospitalHint: hint bisa berupa UUID (id) atau code (string).
+func (r *Repository) ResolveHospitalHint(hint string) (*HospitalBrief, error) {
+	type row struct{ ID, Code, Name string }
+	var out row
+	// coba cocokkan ID (UUID)
+	err := r.db.Raw(`
+		SELECT id, code, name FROM hospitals
+		WHERE id = ? AND deleted_at IS NULL
+		LIMIT 1
+	`, hint).Scan(&out).Error
+	if err == nil && out.ID != "" {
+		return &HospitalBrief{ID: out.ID, Code: out.Code, Name: out.Name}, nil
+	}
+	// fallback ke CODE
+	out = row{}
+	err = r.db.Raw(`
+		SELECT id, code, name FROM hospitals
+		WHERE code = ? AND deleted_at IS NULL
+		LIMIT 1
+	`, hint).Scan(&out).Error
+	if err != nil {
+		return nil, err
+	}
+	if out.ID == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &HospitalBrief{ID: out.ID, Code: out.Code, Name: out.Name}, nil
+}
+
+func (r *Repository) IsMemberOfHospital(userID, hospitalID string) (bool, error) {
+	var exists bool
+	err := r.db.Raw(`
+		SELECT EXISTS(
+			SELECT 1 FROM user_hospitals
+			WHERE user_id = ? AND hospital_id = ?
+		)
+	`, userID, hospitalID).Scan(&exists).Error
+	return exists, err
+}
+
+// Role user di hospital tertentu (dari hospital_user_roles).
+func (r *Repository) GetHospitalRoleSlug(userID, hospitalID string) (string, error) { // <=== changed: normalisasi
+	var slug string
+	err := r.db.Raw(`
+		SELECT r.slug
+		FROM hospital_user_roles hur
+		JOIN roles r ON r.id = hur.role_id
+		WHERE hur.user_id = ? AND hur.hospital_id = ?
+		LIMIT 1
+	`, userID, hospitalID).Scan(&slug).Error
+	if err != nil {
+		return "", err
+	}
+	return strings.ToUpper(slug), nil // <=== changed: pastikan UPPERCASE
 }
