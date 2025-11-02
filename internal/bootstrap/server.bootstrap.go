@@ -1,9 +1,10 @@
 package bootstrap
 
 import (
-    "os"
-    "strconv"
-    "time"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/email"
 	"github.com/api-monolith-template/internal/infrastructure"
@@ -46,15 +47,15 @@ func StartServer() {
 		fromEmail = "no-reply@medikaone.id"
 	}
 
-    // Configure email timeout (default 30s, override via EMAIL_TIMEOUT_SECONDS)
-    timeoutSeconds := 30
-    if v := os.Getenv("EMAIL_TIMEOUT_SECONDS"); v != "" {
-        if n, err := strconv.Atoi(v); err == nil && n > 0 {
-            timeoutSeconds = n
-        }
-    }
+	// Configure email timeout (default 30s, override via EMAIL_TIMEOUT_SECONDS)
+	timeoutSeconds := 30
+	if v := os.Getenv("EMAIL_TIMEOUT_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeoutSeconds = n
+		}
+	}
 
-    sender := email.NewSMTPSender(&email.Config{
+	sender := email.NewSMTPSender(&email.Config{
 		Enabled:     true,
 		Provider:    "smtp",
 		Host:        host,
@@ -64,7 +65,7 @@ func StartServer() {
 		FromEmail:   fromEmail,
 		FromName:    "MedikaOne",
 		UseSTARTTLS: true,
-        Timeout:     time.Duration(timeoutSeconds) * time.Second,
+		Timeout:     time.Duration(timeoutSeconds) * time.Second,
 	})
 
 	// Services
@@ -73,7 +74,7 @@ func StartServer() {
 
 	// Controllers
 	authController := authHttp.NewController(authService)
-	userController := userHttp.NewController(authService)
+	userController := userHttp.NewController(authService, uRepo)
 	hospitalController := hospHttp.NewController(hospitalService)
 	warmupController := warmupHttp.NewController()
 

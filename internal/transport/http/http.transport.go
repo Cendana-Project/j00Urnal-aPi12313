@@ -86,6 +86,8 @@ func (t *Transport) InitRoute() {
 	protected := v1.Group("/")
 	protected.Use(transportmw.AuthRequired(rdb)) // <=== changed: pass rdb
 	{
+		protected.GET("/me", t.userController.Me) // <=== added
+
 		protected.POST("/auth/choose-role", t.authController.ChooseRole)
 
 		protected.PUT("/profile/patient",
@@ -124,6 +126,8 @@ func (t *Transport) InitRoute() {
 			transportmw.RequireHospitalAdminOrSuper(t.hospRepo, t.roleRepo), // <=== changed: enforce hospital admin or super admin
 			t.hospitalController.CreateHospitalStaff,
 		)
+
+		tenant.GET("/tenant/me", t.userController.TenantMe) // <=== added
 	}
 
 	// 404

@@ -71,13 +71,17 @@ func (ctl *Controller) VerifyPIN(c *gin.Context) {
 		return
 	}
 
+	// Samakan struktur dengan LoginPublic: gunakan response.LoginResponse  // <=== changed
+	roleSlug := "" // Jika ingin ada role, tambahkan pengambilan role di service VerifyPIN  // <=== changed
+
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{
-		"access_token":             tokens.AccessToken,
-		"refresh_token":            tokens.RefreshToken,
-		"access_token_expired_at":  aexp.UTC().Format(time.RFC3339),
-		"refresh_token_expired_at": rexp.UTC().Format(time.RFC3339),
+	resp.Data = response.LoginResponse{ // <=== changed
+		AccessToken:           tokens.AccessToken,
+		RefreshToken:          tokens.RefreshToken,
+		Role:                  roleSlug,
+		AccessTokenExpiredAt:  aexp.UTC().Format(time.RFC3339),
+		RefreshTokenExpiredAt: rexp.UTC().Format(time.RFC3339),
 	}
 	util.HandleResponse(c, resp, nil)
 }
