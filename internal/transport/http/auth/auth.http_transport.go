@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"errors"
+	userrepo "github.com/api-monolith-template/internal/repository/user"
 	"net/http"
 	"strings"
 	"time"
@@ -15,9 +18,14 @@ import (
 	"github.com/api-monolith-template/internal/util"
 )
 
-type Controller struct{ svc *auth.Service }
+type Controller struct {
+	svc      *auth.Service
+	userRepo *userrepo.Repository
+}
 
-func NewController(svc *auth.Service) *Controller { return &Controller{svc: svc} }
+func NewController(svc *auth.Service, ur *userrepo.Repository) *Controller {
+	return &Controller{svc: svc, userRepo: ur}
+}
 
 // =======================================
 // AUTH — PUBLIC REGISTRATION & OTP FLOW
@@ -173,13 +181,24 @@ func (ctl *Controller) Refresh(c *gin.Context) {
 		util.HandleError(c, err)
 		return
 	}
+
+	// --- Ambil user_id (sub) dari access token baru, lalu dapatkan role slug --- // <=== added
+	userID, _ := extractSubFromJWT(tokens.AccessToken)
+	roleSlug := ""
+	if userID != "" && ctl.userRepo != nil {
+		if slug, err := ctl.userRepo.GetUserRoleSlug(userID); err == nil {
+			roleSlug = slug
+		}
+	}
+
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{
-		"access_token":          tokens.AccessToken,
-		"refresh_token":         tokens.RefreshToken,
-		"accessTokenExpiredAt":  aexp.UTC().Format(time.RFC3339),
-		"refreshTokenExpiredAt": rexp.UTC().Format(time.RFC3339),
+	resp.Data = response.LoginResponse{
+		AccessToken:           tokens.AccessToken,
+		RefreshToken:          tokens.RefreshToken,
+		Role:                  roleSlug, // <=== now included
+		AccessTokenExpiredAt:  aexp.UTC().Format(time.RFC3339),
+		RefreshTokenExpiredAt: rexp.UTC().Format(time.RFC3339),
 	}
 	util.HandleResponse(c, resp, nil)
 }
@@ -327,4 +346,24 @@ func (ctl *Controller) Logout(c *gin.Context) { // <=== added
 		"revoked_refresh": body.RefreshToken != "",
 	}
 	util.HandleResponse(c, resp, nil)
+}
+
+// extractSubFromJWT mengekstrak claim "sub" dari JWT tanpa verifikasi signature.
+// Aman untuk use-case ini karena token baru saja kita terbitkan di sisi server.  // <=== added
+func extractSubFromJWT(tok string) (string, error) {
+	parts := strings.Split(tok, ".")
+	if len(parts) < 2 {
+		return "", errors.New("invalid jwt")
+	}
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", err
+	}
+	var claims struct {
+		Sub string `json:"sub"`
+	}
+	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(claims.Sub), nil
 }

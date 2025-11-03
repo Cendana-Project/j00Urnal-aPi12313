@@ -73,7 +73,7 @@ func StartServer() {
 	hospitalService := hospSvc.NewService(uRepo, rRepo, hRepo, rdb)
 
 	// Controllers
-	authController := authHttp.NewController(authService)
+	authController := authHttp.NewController(authService, uRepo)
 	userController := userHttp.NewController(authService, uRepo)
 	hospitalController := hospHttp.NewController(hospitalService)
 	warmupController := warmupHttp.NewController()
