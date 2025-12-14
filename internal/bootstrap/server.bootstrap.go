@@ -1,6 +1,9 @@
 package bootstrap
 
 import (
+	"context"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/api-monolith-template/internal/config"
@@ -11,12 +14,27 @@ import (
 	authSvc "github.com/api-monolith-template/internal/service/auth"
 	httpTransport "github.com/api-monolith-template/internal/transport/http"
 	authCtrl "github.com/api-monolith-template/internal/transport/http/auth"
+	"github.com/api-monolith-template/internal/util"
+	"github.com/sirupsen/logrus"
 )
 
 func StartServer() {
+	ctx := context.Background()
+
 	// Infra
 	gormDB := infrastructure.InitializeDBConn()
 	rdb := infrastructure.NewRedisClient()
+	if !config.Env.Redis.IsCacheDisable && rdb != nil {
+		_, err := rdb.Ping(ctx).Result()
+		util.ContinueOrFatal(err)
+	}
+
+	// Get database connection for shutdown
+	db, err := gormDB.DB()
+	util.ContinueOrFatal(err)
+	err = db.Ping()
+	util.ContinueOrFatal(err)
+
 	r := infrastructure.NewGinEngine()
 
 	// Repo
@@ -63,5 +81,33 @@ func StartServer() {
 		WithAuthController(authController).
 		InitRoute()
 
-	_ = r.Run(":" + config.Env.Server.Port)
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", config.Env.Server.Port),
+		Handler: r.Handler(),
+	}
+	// start http server
+	go func() {
+		logrus.Info(fmt.Sprintf("running at http://0.0.0.0:%s", config.Env.Server.Port))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			util.ContinueOrFatal(err)
+		}
+	}()
+
+	wait := gracefulShutdown(ctx, config.Env.GracefulShutdownTimeout, map[string]operation{
+		"database connection": func(ctx context.Context) error {
+			infrastructure.StopTickerCh <- true
+			return db.Close()
+		},
+		"redis connection": func(ctx context.Context) error {
+			if rdb != nil {
+				return rdb.Close()
+			}
+			return nil
+		},
+		"gin server": func(ctx context.Context) error {
+			return srv.Shutdown(ctx)
+		},
+	})
+
+	<-wait
 }

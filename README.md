@@ -1,62 +1,207 @@
-# Monolith Service
+# Journal API
 
-## Response
-```json
-{
-	"message": "validation error", // string
-	"data": {
-		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-		"username": "username17",
-		"email": "email17@gmail.com",
-		"level": "USER",
-		"createdAt": "2024-06-16T10:46:25Z",
-		"updatedAt": "2024-06-16T10:46:25Z"
-	}, // object | array of object | null
-	"validationErrors": [
-		{
-			"field": "username",
-			"tag": "required",
-			"message": "Key: 'RegisterReq.Username' Error:Field validation for 'username' failed on the 'required' tag"
-		}
-	] // array of object | null
-}
-```
+A Go-based monolithic REST API service with authentication, user management, and JWT token handling. Built with Clean Architecture principles for maintainability and scalability.
 
-## API Contract
+## 🚀 Tech Stack
 
-### Register
-#### Request
+- **Language:** Go 1.24.2
+- **Framework:** Gin (HTTP)
+- **ORM:** GORM
+- **Database:** PostgreSQL
+- **Cache:** Redis
+- **Authentication:** JWT (Access + Refresh Token)
+- **Migration:** Goose
+- **Config:** Viper (Environment Variables)
 
-**Method:** `POST`
+## 📋 Prerequisites
 
-**URL:** `${{HOST}}/v1/auth/register`
+- Go 1.24.2 or higher
+- PostgreSQL 12+
+- Redis 6+
+- Make (optional, for using Makefile commands)
 
-**Headers:**
-- `Content-Type: application/json`
+## ⚙️ Configuration
 
-**Body:**
-```json
-{
-	"username":"username",
-	"email": "email@gmail.com",
-	"password": "strongpassword"
-}
-```
+This application uses **environment variables** for all configuration. No YAML/config files needed!
 
-**Example cURL Command:**
+### Development Setup
+
+1. **Copy the environment template:**
+   ```bash
+   cp env.example .env
+   ```
+
+2. **Edit `.env` with your local settings:**
+   ```bash
+   # Required settings for local development
+   ENV=development
+   LOG_LEVEL=debug
+   
+   # Database (update with your PostgreSQL credentials)
+   DATABASE_DSN=postgres://postgres:postgres@localhost:5432/journal_api?sslmode=disable
+   
+   # Redis (update with your Redis settings)
+   REDIS_CACHE_DSN=redis://localhost:6379/0
+   REDIS_IS_CACHE_DISABLE=false
+   
+   # JWT Secrets (generate secure random strings for production!)
+   TOKEN_PASSWORD_SALT=your-16plus-chars-salt
+   TOKEN_ACCESS_TOKEN_SECRET=your-16plus-chars-secret
+   TOKEN_REFRESH_TOKEN_SECRET=your-16plus-chars-secret
+   ```
+
+3. **Generate secure secrets for production:**
+   ```bash
+   # On Linux/Mac:
+   openssl rand -base64 32
+   
+   # Or:
+   head -c 32 /dev/urandom | base64
+   ```
+
+### Production Deployment
+
+Set environment variables in your deployment platform (Railway, Render, Kubernetes, etc.):
 
 ```bash
-curl --request POST \
-  --url ${{HOST}}/v1/auth/register \
-  --header 'Content-Type: application/json' \
-  --data '{
-	"username":"username",
-	"email": "email@gmail.com",
-	"password": "strongpassword"
-}'
+ENV=production
+LOG_LEVEL=info
+DATABASE_DSN=postgres://user:password@prod-host:5432/prod_db?sslmode=require
+REDIS_CACHE_DSN=redis://:password@redis-host:6379/0
+TOKEN_PASSWORD_SALT=$(openssl rand -base64 32)
+TOKEN_ACCESS_TOKEN_SECRET=$(openssl rand -base64 32)
+TOKEN_REFRESH_TOKEN_SECRET=$(openssl rand -base64 32)
 ```
 
-**Example Response:**
+### Environment Variables Reference
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ENV` | No | `development` | Environment: development, staging, production |
+| `LOG_LEVEL` | No | `info` | Log level: debug, info, warn, error |
+| `SERVER_PORT` | No | `8080` | HTTP server port |
+| `DATABASE_DSN` | **Yes** | - | PostgreSQL connection string |
+| `REDIS_CACHE_DSN` | **Yes*** | - | Redis connection string (*required if cache enabled) |
+| `REDIS_IS_CACHE_DISABLE` | No | `false` | Set to `true` to disable caching |
+| `TOKEN_PASSWORD_SALT` | **Yes** | - | Password hashing salt (min 16 chars) |
+| `TOKEN_ACCESS_TOKEN_SECRET` | **Yes** | - | JWT access token secret (min 16 chars) |
+| `TOKEN_REFRESH_TOKEN_SECRET` | **Yes** | - | JWT refresh token secret (min 16 chars) |
+| `TOKEN_ACCESS_TOKEN_DURATION` | No | `1h` | Access token expiration (e.g., 15m, 1h) |
+| `TOKEN_REFRESH_TOKEN_DURATION` | No | `720h` | Refresh token expiration (e.g., 24h, 720h) |
+
+See `env.example` for complete list with advanced settings.
+
+## 🛠️ Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd journal-api
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   go mod download
+   ```
+
+3. **Setup environment variables:**
+   ```bash
+   cp env.example .env
+   # Edit .env with your configuration
+   ```
+
+4. **Start PostgreSQL and Redis:**
+   ```bash
+   # Using Docker Compose (if available)
+   docker-compose up -d postgres redis
+   
+   # Or start them manually
+   ```
+
+5. **Run database migrations:**
+   ```bash
+   go run main.go migrate up
+   # Or using make:
+   make migrate-up
+   ```
+
+6. **Start the server:**
+   ```bash
+   go run main.go server
+   # Or using make:
+   make run
+   ```
+
+The API will be available at `http://localhost:8080`
+
+## 📦 Available Commands
+
+```bash
+# Run the server
+go run main.go server
+
+# Run migrations
+go run main.go migrate up
+go run main.go migrate down
+
+# Using Makefile (if available)
+make run              # Run the server
+make migrate-up       # Run all migrations
+make migrate-down     # Rollback last migration
+make migrate-status   # Check migration status
+make build           # Build binary
+make test            # Run tests
+```
+
+## 📖 API Documentation
+
+### Response Format
+
+All API responses follow this structure:
+
+```json
+{
+	"message": "success message or error message",
+	"data": {
+		// Response data (object, array, or null)
+	},
+	"validationErrors": [
+		{
+			"field": "fieldname",
+			"tag": "validation_rule",
+			"message": "error message"
+		}
+	]
+}
+```
+
+### Authentication Endpoints
+
+#### 1. Register
+
+Create a new user account.
+
+**Endpoint:** `POST /v1/auth/register`
+
+**Request Body:**
+```json
+{
+	"username": "username",
+	"email": "email@gmail.com",
+	"password": "strongpassword"
+}
+```
+
+**Success Response:**
+```json
+{
+	"message": "ok",
+	"data": null,
+	"validationErrors": null
+}
+```
+
+**Error Response:**
 ```json
 {
 	"message": "validation error",
@@ -66,739 +211,254 @@ curl --request POST \
 			"field": "username",
 			"tag": "unique_db",
 			"message": "username already taken"
-		},
-		{
-			"field": "email",
-			"tag": "unique_db",
-			"message": "email already taken"
 		}
 	]
 }
 ```
 
+#### 2. Login
+
+Authenticate user and receive JWT tokens.
+
+**Endpoint:** `POST /v1/auth/login`
+
+**Request Body:**
 ```json
 {
-	"message": "ok",
-	"data": null,
-	"validationErrors": null
-}
-```
-
-### Login
-#### Request
-
-**Method:** `POST`
-
-**URL:** `${{HOST}}/v1/auth/login`
-
-**Headers:**
-- `Content-Type: application/json`
-
-**Body:**
-```json
-{
-	"identifier":"username",
+	"identifier": "username or email",
 	"password": "strongpassword"
 }
 ```
 
-**Example cURL Command:**
-
-```bash
-curl --request POST \
-  --url ${{HOST}}/v1/auth/login \
-  --header 'Content-Type: application/json' \
-  --data '{
-	"identifier":"username",
-	"password": "strongpassword"
-}'
-```
-
-**Example Response:**
-```json
-{
-	"message": "user not found",
-	"data": null,
-	"validationErrors": null
-}
-```
-
+**Success Response:**
 ```json
 {
 	"message": "ok",
 	"data": {
-		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NzU5ZTU2YS1mYTdjLTQ5ZWUtOTg1NC1mMzJhYjM4MDgzYWUiLCJleHAiOjE3MTg2MTk3ODQsImlhdCI6MTcxODYxNjE4NCwianRpIjoiYzViZjAyZTctNmNkMy00MjZiLThiMjctYzk2MTUyZjc2NmU4In0.aaUAM7Hl6Z-H8kzdnrLedVmmVJEuglxes7xQYHt1HKI",
+		"accessToken": "eyJhbGci...",
 		"accessTokenExpiredAt": "2024-06-17T09:23:04Z",
-		"refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NzU5ZTU2YS1mYTdjLTQ5ZWUtOTg1NC1mMzJhYjM4MDgzYWUiLCJleHAiOjE3MTg3MjQxODQsImlhdCI6MTcxODYxNjE4NCwianRpIjoiNzllNTVkZDgtMzczMS00OWU2LThjZDItNzMxNDI0MzYzZjZjIn0.KQOZGZxz8-8JiJv68Xpdj-7z1Dp6dLe0a4IC0nZ5WcA",
+		"refreshToken": "eyJhbGci...",
 		"refreshTokenExpiredAt": "2024-06-17T09:23:04Z"
 	},
 	"validationErrors": null
 }
 ```
 
-### Refresh Token
-#### Request
+#### 3. Refresh Token
 
-**Method:** `POST`
+Get new access token using refresh token.
 
-**URL:** `${{HOST}}/v1/auth/refresh`
+**Endpoint:** `POST /v1/auth/refresh`
 
 **Headers:**
-- `Content-Type: application/json`
-- `Authorization: Bearer <REFRESH_TOKEN>`
-
-**Example cURL Command:**
-
-```bash
-curl --request POST \
-  --url ${{HOST}}/v1/auth/refresh \
-  --header 'Content-Type: application/json' \
-  --header 'Authorization: Bearer <REFRESH_TOKEN>'
+```
+Authorization: Bearer <REFRESH_TOKEN>
 ```
 
-**Example Response:**
-```json
-{
-	"message": "invalid token",
-	"data": null,
-	"validationErrors": null
-}
-```
-
+**Success Response:**
 ```json
 {
 	"message": "ok",
 	"data": {
-		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NzU5ZTU2YS1mYTdjLTQ5ZWUtOTg1NC1mMzJhYjM4MDgzYWUiLCJleHAiOjE3MTg2MTk3ODQsImlhdCI6MTcxODYxNjE4NCwianRpIjoiYzViZjAyZTctNmNkMy00MjZiLThiMjctYzk2MTUyZjc2NmU4In0.aaUAM7Hl6Z-H8kzdnrLedVmmVJEuglxes7xQYHt1HKI",
+		"accessToken": "eyJhbGci...",
 		"accessTokenExpiredAt": "2024-06-17T09:23:04Z",
-		"refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NzU5ZTU2YS1mYTdjLTQ5ZWUtOTg1NC1mMzJhYjM4MDgzYWUiLCJleHAiOjE3MTg3MjQxODQsImlhdCI6MTcxODYxNjE4NCwianRpIjoiNzllNTVkZDgtMzczMS00OWU2LThjZDItNzMxNDI0MzYzZjZjIn0.KQOZGZxz8-8JiJv68Xpdj-7z1Dp6dLe0a4IC0nZ5WcA",
+		"refreshToken": "eyJhbGci...",
 		"refreshTokenExpiredAt": "2024-06-17T09:23:04Z"
 	},
 	"validationErrors": null
 }
 ```
 
-### Logout
-#### Request
+#### 4. User Info
 
-**Method:** `POST`
+Get current authenticated user information.
 
-**URL:** `${{HOST}}/v1/auth/logout`
+**Endpoint:** `GET /v1/auth/info`
 
 **Headers:**
-- `Content-Type: application/json`
-- `Authorization: Bearer <ACCESS_TOKEN>`
-
-**Example cURL Command:**
-
-```bash
-curl --request POST \
-  --url ${{HOST}}/v1/auth/logout \
-  --header 'Content-Type: application/json' \
-  --header 'Authorization: Bearer <ACCESS_TOKEN>'
+```
+Authorization: Bearer <ACCESS_TOKEN>
 ```
 
-**Example Response:**
+**Success Response:**
 ```json
 {
-	"message": "invalid token",
+	"message": "ok",
+	"data": {
+		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
+		"username": "username",
+		"firstName": "First",
+		"lastName": "Last",
+		"email": "email@gmail.com",
+		"phone": "1234567890",
+		"location": "Jakarta",
+		"createdAt": "2024-06-16T10:46:25Z",
+		"updatedAt": "2024-06-16T10:46:25Z"
+	},
+	"validationErrors": null
+}
+```
+
+#### 5. Logout
+
+Invalidate current access token.
+
+**Endpoint:** `POST /v1/auth/logout`
+
+**Headers:**
+```
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+**Success Response:**
+```json
+{
+	"message": "ok",
 	"data": null,
 	"validationErrors": null
 }
 ```
 
-```json
-{
-	"message": "ok",
-	"data": null,
-	"validationErrors": null
-}
+## 🏗️ Project Structure
+
+```
+journal-api/
+├── cmd/                          # CLI commands
+│   ├── root.go                  # Root command
+│   ├── server.go                # Server command
+│   └── migrate.go               # Migration command
+├── internal/                     # Private application code
+│   ├── bootstrap/               # Dependency injection
+│   ├── config/                  # Configuration management
+│   ├── constant/                # Constants and error definitions
+│   ├── infrastructure/          # External dependencies (DB, Redis, Gin)
+│   ├── model/
+│   │   ├── entity/             # Domain entities
+│   │   ├── request/            # API request DTOs
+│   │   ├── response/           # API response DTOs
+│   │   ├── contract/           # Interface definitions
+│   │   └── cachekey/           # Cache key patterns
+│   ├── repository/              # Data access layer
+│   │   ├── cache/              # Cache repository
+│   │   └── user/               # User repository
+│   ├── service/                 # Business logic layer
+│   │   └── auth/               # Authentication service
+│   └── transport/               # Presentation layer
+│       └── http/               # HTTP handlers & routes
+├── migration/db/                # SQL migration files
+├── .env                         # Environment variables (git-ignored)
+├── env.example                  # Environment variables template
+├── Dockerfile                   # Docker build configuration
+├── docker-compose.yml          # Docker Compose setup
+└── main.go                     # Application entry point
 ```
 
-### User Info
-#### Request
+## 🔧 Development
 
-**Method:** `GET`
+### Adding New Features
 
-**URL:** `${{HOST}}/v1/auth/info`
+Follow Clean Architecture principles:
 
-**Headers:**
-- `Content-Type: application/json`
-- `Authorization: Bearer <ACCESS_TOKEN>`
+1. **Define contracts** in `internal/model/contract/`
+2. **Create entity models** in `internal/model/entity/`
+3. **Implement repository** in `internal/repository/<domain>/`
+4. **Create service layer** in `internal/service/<domain>/`
+5. **Add HTTP handlers** in `internal/transport/http/<domain>/`
+6. **Register routes** in `internal/transport/http/route.transport.go`
+7. **Wire dependencies** in `internal/bootstrap/`
 
-**Example cURL Command:**
+See the existing `auth` implementation as a reference.
+
+### Running Tests
 
 ```bash
-curl --request GET \
-  --url ${{HOST}}/v1/auth/info \
-  --header 'Authorization: Bearer <ACCESS_TOKEN>'
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run tests with verbose output
+go test -v ./...
 ```
 
-**Example Response:**
-```json
-{
-	"message": "ok",
-	"data": {
-		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-		"username": "username",
-		"email": "email@gmail.com",
-		"level": "USER",
-		"createdAt": "2024-06-16T10:46:25Z",
-		"updatedAt": "2024-06-16T10:46:25Z"
-	},
-	"validationErrors": null
-}
-```
+### Database Migrations
 
-### User Management Endpoints
-
-### Get All Users
-#### Request
-
-**Method:** `GET`
-
-**URL:** `${{HOST}}/v1/users`
-
-**Headers:**
-- `Content-Type: application/json`
-
-**Example cURL Command:**
+Create a new migration:
 
 ```bash
-curl --request GET \
-  --url ${{HOST}}/v1/users \
-  --header 'Content-Type: application/json'
+# Using goose directly
+goose -dir migration/db create migration_name sql
+
+# Or using the app
+go run main.go migrate create migration_name
 ```
 
-**Example Response:**
-```json
-{
-	"message": "ok",
-	"data": {
-		"users": [
-			{
-				"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-				"username": "username",
-				"firstName": "First",
-				"lastName": "Last",
-				"email": "email@gmail.com",
-				"phone": "1234567890",
-				"location": "Jakarta",
-				"createdAt": "2024-06-16T10:46:25Z",
-				"updatedAt": "2024-06-16T10:46:25Z"
-			}
-		],
-		"total": 1
-	},
-	"validationErrors": null
-}
-```
+## 🐳 Docker
 
-### Get User by ID
-#### Request
-
-**Method:** `GET`
-
-**URL:** `${{HOST}}/v1/users/:id`
-
-**Headers:**
-- `Content-Type: application/json`
-
-**Example cURL Command:**
+### Build and Run with Docker
 
 ```bash
-curl --request GET \
-  --url ${{HOST}}/v1/users/6759e56a-fa7c-49ee-9854-f32ab38083ae \
-  --header 'Content-Type: application/json'
+# Build image
+docker build -t journal-api .
+
+# Run container
+docker run -p 8080:8080 \
+  -e DATABASE_DSN="postgres://..." \
+  -e REDIS_CACHE_DSN="redis://..." \
+  -e TOKEN_PASSWORD_SALT="..." \
+  -e TOKEN_ACCESS_TOKEN_SECRET="..." \
+  -e TOKEN_REFRESH_TOKEN_SECRET="..." \
+  journal-api
 ```
 
-**Example Response:**
-```json
-{
-	"message": "ok",
-	"data": {
-		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-		"username": "username",
-		"firstName": "First",
-		"lastName": "Last",
-		"email": "email@gmail.com",
-		"phone": "1234567890",
-		"location": "Jakarta",
-		"createdAt": "2024-06-16T10:46:25Z",
-		"updatedAt": "2024-06-16T10:46:25Z"
-	},
-	"validationErrors": null
-}
-```
-
-### Find User by Email
-#### Request
-
-**Method:** `GET`
-
-**URL:** `${{HOST}}/v1/users/email/:email`
-
-**Headers:**
-- `Content-Type: application/json`
-
-**Example cURL Command:**
+### Using Docker Compose
 
 ```bash
-curl --request GET \
-  --url ${{HOST}}/v1/users/email/email@gmail.com \
-  --header 'Content-Type: application/json'
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Stop all services
+docker-compose down
 ```
 
-**Example Response:**
-```json
-{
-	"message": "ok",
-	"data": {
-		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-		"username": "username",
-		"firstName": "First",
-		"lastName": "Last",
-		"email": "email@gmail.com",
-		"phone": "1234567890",
-		"location": "Jakarta",
-		"createdAt": "2024-06-16T10:46:25Z",
-		"updatedAt": "2024-06-16T10:46:25Z"
-	},
-	"validationErrors": null
-}
-```
+## 🚀 Deployment
 
-### Find User by Username
-#### Request
+### Railway
 
-**Method:** `GET`
+1. Create new project on Railway
+2. Add PostgreSQL and Redis services
+3. Set environment variables from `env.example`
+4. Deploy from GitHub repository
 
-**URL:** `${{HOST}}/v1/users/username/:username`
+### Render
 
-**Headers:**
-- `Content-Type: application/json`
+1. Create new Web Service
+2. Add PostgreSQL and Redis add-ons
+3. Set environment variables
+4. Deploy
 
-**Example cURL Command:**
+### Kubernetes
 
-```bash
-curl --request GET \
-  --url ${{HOST}}/v1/users/username/username \
-  --header 'Content-Type: application/json'
-```
+See `deployments/` directory for Kubernetes manifests (if available).
 
-**Example Response:**
-```json
-{
-	"message": "ok",
-	"data": {
-		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-		"username": "username",
-		"firstName": "First",
-		"lastName": "Last",
-		"email": "email@gmail.com",
-		"phone": "1234567890",
-		"location": "Jakarta",
-		"createdAt": "2024-06-16T10:46:25Z",
-		"updatedAt": "2024-06-16T10:46:25Z"
-	},
-	"validationErrors": null
-}
-```
+## 📝 License
 
-### Find User by Identifier
-#### Request
+[Your License Here]
 
-**Method:** `GET`
+## 🤝 Contributing
 
-**URL:** `${{HOST}}/v1/users/identifier/:identifier`
+Contributions are welcome! Please follow the existing code structure and conventions.
 
-**Headers:**
-- `Content-Type: application/json`
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-**Example cURL Command:**
+## 📞 Support
 
-```bash
-curl --request GET \
-  --url ${{HOST}}/v1/users/identifier/username \
-  --header 'Content-Type: application/json'
-```
-
-**Example Response:**
-```json
-{
-	"message": "ok",
-	"data": {
-		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-		"username": "username",
-		"firstName": "First",
-		"lastName": "Last",
-		"email": "email@gmail.com",
-		"phone": "1234567890",
-		"location": "Jakarta",
-		"createdAt": "2024-06-16T10:46:25Z",
-		"updatedAt": "2024-06-16T10:46:25Z"
-	},
-	"validationErrors": null
-}
-```
-
-### Update User
-#### Request
-
-**Method:** `POST`
-
-**URL:** `${{HOST}}/v1/users`
-
-**Headers:**
-- `Content-Type: application/json`
-- `Authorization: Bearer <ACCESS_TOKEN>`
-
-**Body:**
-```json
-{
-	"username": "newusername",
-	"firstName": "New",
-	"lastName": "Name",
-	"email": "newemail@gmail.com",
-	"phone": "1234567890",
-	"location": "Jakarta"
-}
-```
-
-**Example cURL Command:**
-
-```bash
-curl --request POST \
-  --url ${{HOST}}/v1/users \
-  --header 'Content-Type: application/json' \
-  --header 'Authorization: Bearer <ACCESS_TOKEN>' \
-  --data '{
-	"username": "newusername",
-	"firstName": "New",
-	"lastName": "Name",
-	"email": "newemail@gmail.com",
-	"phone": "1234567890",
-	"location": "Jakarta"
-}'
-```
-
-**Example Response:**
-```json
-{
-	"message": "Username or email already exists",
-	"data": null,
-	"validationErrors": null
-}
-```
-
-```json
-{
-	"message": "ok",
-	"data": {
-		"id": "6759e56a-fa7c-49ee-9854-f32ab38083ae",
-		"username": "newusername",
-		"email": "newemail@gmail.com",
-		"updatedAt": "2024-06-16T10:46:25Z"
-	},
-	"validationErrors": null
-}
-```
-
-## Create new domain
-
-### Define contract
-
-Define your contract domain (repository and service) on /internal/model/contract/<DOMAIN>.contract.go, example:
-
-```go
-package contract
-
-import (
-	"context"
-
-	"github.com/api-monolith-template/internal/model/entity"
-    "github.com/api-monolith-template/internal/model/request"
-	"github.com/api-monolith-template/internal/model/response"
-	"github.com/google/uuid"
-)
-
-type UserRepository interface {
-	FindByEmail(ctx context.Context, email string) (*entity.User, error)
-	FindByUsername(ctx context.Context, username string) (*entity.User, error)
-	FindByIdentifier(ctx context.Context, identifier string) (*entity.User, error)
-	FindByID(ctx context.Context, id uuid.UUID) (*entity.User, error)
-	Upsert(ctx context.Context, user *entity.User) error
-}
-
-type AuthService interface {
-	Register(ctx context.Context, req *request.RegisterReq) (*response.BaseResponse, error)
-	Login(ctx context.Context, req *request.LoginReq) (*response.BaseResponse, error)
-	RefreshToken(ctx context.Context, req *request.AuthRefreshReq) (*response.BaseResponse, error)
-	Info(ctx context.Context, req *request.AuthInfoReq) (*response.BaseResponse, error)
-	Logout(ctx context.Context, req *request.AuthLogoutReq) (*response.BaseResponse, error)
-}
-
-```
-
-### Create your repository
-
-Create your base repository on /internal/repository/<DOMAIN>/<DOMAIN>.repository.go, example:
-
-```go
-package user
-
-import (
-	"github.com/api-monolith-template/internal/model/contract"
-	"gorm.io/gorm"
-)
-
-type Repository struct {
-	db        *gorm.DB
-	cacheRepo contract.CacheRepository
-}
-
-func NewRepository() *Repository {
-	return new(Repository)
-}
-
-func (r *Repository) WithGormDB(db *gorm.DB) *Repository {
-	r.db = db
-	return r
-}
-
-func (r *Repository) WithCacheRepository(repo contract.CacheRepository) *Repository {
-	r.cacheRepo = repo
-	return r
-}
-```
-
-### Create your service
-
-Create your base service on /internal/service/<DOMAIN>/<DOMAIN>.service.go, example:
-
-```go
-package auth
-
-import "github.com/api-monolith-template/internal/model/contract"
-
-type Service struct {
-	userRepository  contract.UserRepository
-	cacheRepository contract.CacheRepository
-}
-
-func NewService() *Service {
-	return new(Service)
-}
-
-func (s *Service) WithUserRepository(repo contract.UserRepository) *Service {
-	s.userRepository = repo
-	return s
-}
-
-func (s *Service) WithCacheRepository(repo contract.CacheRepository) *Service {
-	s.cacheRepository = repo
-	return s
-}
-```
-
-### Create your transport layer
-
-Create base http transport layer on /internal/transport/http/<DOMAIN>/<DOMAIN>.http_transport.go, example:
-
-```go
-package auth
-
-import "github.com/api-monolith-template/internal/model/contract"
-
-type Controller struct {
-	authService contract.AuthService
-}
-
-func NewController() *Controller {
-	return new(Controller)
-}
-
-func (c *Controller) WithAuthService(svc contract.AuthService) *Controller {
-	c.authService = svc
-	return c
-}
-```
-
-inject all your transport domain on /internal/transport/http/http.transport.go
-
-```go
-package http
-
-import (
-	"github.com/api-monolith-template/internal/transport/http/auth"
-	"github.com/api-monolith-template/internal/transport/http/middleware"
-	"github.com/gin-gonic/gin"
-)
-
-type Transport struct {
-	router *gin.Engine
-
-	authController       *auth.Controller
-	middlewareController *middleware.Controller
-}
-
-func NewTransport() *Transport {
-	return new(Transport)
-}
-
-func (t *Transport) WithGinEngine(r *gin.Engine) *Transport {
-	t.router = r
-	return t
-}
-
-func (t *Transport) WithAuthController(c *auth.Controller) *Transport {
-	t.authController = c
-	return t
-}
-
-func (t *Transport) WithMiddlewareController(c *middleware.Controller) *Transport {
-	t.middlewareController = c
-	return t
-}
-
-```
-
-after create http transport layer, create http route on /internal/transport/http/route.transport.go
-
-```go
-authGroup := v1Group.Group("/auth")
-authGroup.POST("/register", t.authController.Register)
-authGroup.POST("/login", t.authController.Login)
-authRefreshToken := authGroup.Group("/refresh", t.middlewareController.AuthMiddleware(constant.RefreshTokenType))
-authRefreshToken.POST("/", t.authController.RefreshToken)
-
-authProtected := authGroup.Use(t.middlewareController.AuthMiddleware(constant.AccessTokenType))
-authProtected.GET("/info", t.authController.Info)
-```
-
-### Inject all new depedency
-
-after create a domain for each layer, now init new domain and inject to all layer
-
-```go
-// init repository
-cacheRepository := cacheRepo.
-    NewRepository().
-    WithRedisDB(rdb)
-userRepository := userRepo.
-    NewRepository().
-    WithGormDB(infrastructure.DB).
-    WithCacheRepository(cacheRepository)
-
-// init service
-authService := authSvc.
-    NewService().
-    WithUserRepository(userRepository).
-    WithCacheRepository(cacheRepository)
-
-// init controller
-middlewareController := middlewareCtrl.
-    NewController().
-    WithAuthService(authService).
-    WithCacheRepository(cacheRepository)
-authController := authCtrl.
-    NewController().
-    WithAuthService(authService)
-
-// init http transport
-httpTransport.
-    NewTransport().
-    WithGinEngine(r).
-    WithMiddlewareController(middlewareController).
-    WithAuthController(authController).
-    InitRoute()
-```
-
-# Role-Based Access Control API
-
-This repository implements a role-based access control (RBAC) system for a Go application, allowing for fine-grained permission management based on user roles within specific buildings.
-
-## Features
-
-- User authentication (register, login, logout)
-- Role management (create, update, delete roles)
-- Building-specific role assignments (assign/remove roles to users in specific buildings)
-- Permission-based access control with granular permissions (e.g., "owner:show", "owner:create")
-- Role hierarchy (Admin, Manager, User)
-
-## Testing the API
-
-### Prerequisites
-
-- Ensure PostgreSQL is installed and running
-- Create a database named "Medikaone"
-- Set up the configuration in `config.yml`
-
-### Setup
-
-1. Initialize and seed the database:
-
-```bash
-make seed
-```
-
-This creates:
-- Default roles (Admin, Manager, User)
-- Default permissions (owner:show, owner:create, user:list)
-- Test users with passwords "password123":
-  - admin@example.com (Admin role)
-  - manager@example.com (Manager role)
-  - user@example.com (User role)
-- Test buildings (Building A, Building B)
-- Role assignments for users in buildings
-
-2. Start the server:
-
-```bash
-make run
-```
-
-### Testing with Postman
-
-Import the provided Postman collection:
-
-1. Open Postman
-2. Click "Import" and select the `role_management_api.postman_collection.json` file
-3. Create a Postman environment with the variables:
-   - `access_token` (leave it empty, it will be filled automatically)
-   - `refresh_token` (leave it empty, it will be filled automatically)
-   - `user_id` (default: bf7ad1c8-a873-4915-9e60-2cd15b451292)
-   - `role_id` (default: e52b1dac-7751-451c-98d5-f81401926cf7)
-   - `building_id` (default: e0ffcd6c-a2f2-453f-801e-cbb351850932)
-4. Start with the "Login" request to get an access token
-5. After successful login, the environment variables will be automatically updated
-6. Test the other endpoints as needed
-
-### Testing Flow
-
-1. Login as admin user
-2. Create a new role
-3. Assign the role to a user in a building
-4. Verify the role assignment by fetching user roles for that building
-5. Remove the role from the user
-6. Verify the role was removed
-
-## Test Users and Default IDs
-
-After seeding, the following entities are available:
-
-### Users
-- Admin User: `bf7ad1c8-a873-4915-9e60-2cd15b451292`
-- Manager User: `9eff1130-2aa4-40f8-a3f1-cb3d461b6682`
-- Regular User: `40a91ed3-5057-4bca-be65-91c7da59feca`
-
-### Roles
-- Admin Role: `e52b1dac-7751-451c-98d5-f81401926cf7`
-- Manager Role: `63de13e6-9847-4b6c-bcc4-20145d0e1bec`
-- User Role: `b7efdfce-bc6a-451a-9b92-28b42e6eb3bc`
-
-### Buildings
-- Building A: `e0ffcd6c-a2f2-453f-801e-cbb351850932`
-- Building B: `1f66bcdc-8e1e-40a0-a037-1b364c70ac79`
-
-Note: The actual UUIDs may vary based on your seeded data.
+For issues and questions, please open an issue on GitHub.

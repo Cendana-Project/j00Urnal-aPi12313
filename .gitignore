@@ -1,2 +1,38 @@
+# Configuration files
 config.yml
+.env
+.env.local
+.env.*.local
+
+# Temporary files
 /tmp
+*.tmp
+
+# Binary files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+main
+journal-api
+
+# Test files
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
