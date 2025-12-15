@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/api-monolith-template/internal/config"
+	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/jpillora/backoff"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -36,6 +37,17 @@ func InitializeDBConn() *gorm.DB {
 		DB.Logger = DB.Logger.LogMode(gormLogger.Warn)
 	default:
 		DB.Logger = DB.Logger.LogMode(gormLogger.Info)
+	}
+
+	// AutoMigrate to sync schema
+	if err := DB.AutoMigrate(
+		&entity.User{},
+		&entity.Role{},
+		&entity.Permission{},
+		&entity.UserRole{},
+		&entity.RolePermission{},
+	); err != nil {
+		logrus.Fatal("failed to auto-migrate: ", err)
 	}
 
 	MapHealthCheck["database"] = func(ctx context.Context) error {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/api-monolith-template/internal/config"
@@ -13,7 +15,6 @@ import (
 	userRepo "github.com/api-monolith-template/internal/repository/user"
 	authSvc "github.com/api-monolith-template/internal/service/auth"
 	httpTransport "github.com/api-monolith-template/internal/transport/http"
-	authCtrl "github.com/api-monolith-template/internal/transport/http/auth"
 	"github.com/api-monolith-template/internal/util"
 	"github.com/sirupsen/logrus"
 )
@@ -37,11 +38,11 @@ func StartServer() {
 
 	r := infrastructure.NewGinEngine()
 
-	// Repo
+	// Repositories
 	uRepo := userRepo.NewRepository(gormDB)
 	rRepo := roleRepo.NewRepository(gormDB)
 
-	// SMTP config + defaults
+	// SMTP sender config (fallback default)
 	host := config.Env.SMTP.Host
 	if host == "" {
 		host = "smtp.gmail.com"
@@ -52,11 +53,20 @@ func StartServer() {
 	}
 	username := config.Env.SMTP.Username
 	password := config.Env.SMTP.Password
-	fromEmail := username
+	fromEmail := config.Env.SMTP.From
 	if fromEmail == "" {
 		fromEmail = "no-reply@medikaone.id"
 	}
-	emCfg := &email.Config{
+
+	// Configure email timeout (default 30s, override via EMAIL_TIMEOUT_SECONDS)
+	timeoutSeconds := 30
+	if v := os.Getenv("EMAIL_TIMEOUT_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeoutSeconds = n
+		}
+	}
+
+	sender := email.NewSMTPSender(&email.Config{
 		Enabled:     true,
 		Provider:    "smtp",
 		Host:        host,
@@ -64,21 +74,26 @@ func StartServer() {
 		Username:    username,
 		Password:    password,
 		FromEmail:   fromEmail,
-		FromName:    "MedikaOne",
-		Timeout:     15 * time.Second,
+		FromName:    "", // Biarkan sender.go mem-parse nama dari FromEmail
 		UseSTARTTLS: true,
-	}
-	sender := email.NewSMTPSender(emCfg)
+		Timeout:     time.Duration(timeoutSeconds) * time.Second,
+	})
 
-	// Service
+	// Services
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
 
-	// Transport
-	authController := authCtrl.NewController(authService)
-	httpTransport.
-		NewTransport().
+	// Controllers
+	authController := authHttp.NewController(authService, uRepo)
+	userController := userHttp.NewController(authService, uRepo)
+	warmupController := warmupHttp.NewController()
+
+	// HTTP Transport + routes
+	httpTransport.NewTransport().
 		WithGinEngine(r).
 		WithAuthController(authController).
+		WithUserController(userController).
+		WithWarmupController(warmupController).
+		WithRoleRepository(rRepo).
 		InitRoute()
 
 	srv := &http.Server{

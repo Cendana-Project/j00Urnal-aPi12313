@@ -3,36 +3,33 @@ package seeder
 import (
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/constant"
-	"github.com/api-monolith-template/internal/model/entity"
 )
 
-// Run adalah entry utama seeding: roles, permissions, mapping, optional super_admin via ENV, dan sample users.
+// Run: seed roles → permissions (+mapping) → optional super_admin → sample users → hospitals → user_hospitals
 func Run(db *gorm.DB) error {
 	start := time.Now()
 
-	// 1) Roles (7 role termasuk super_admin)
-	if err := SeedRoles(db); err != nil {
-		return fmt.Errorf("seed roles: %w", err)
-	}
-
-	// 2) Permissions (semua slug)
-	if err := SeedPermissions(db); err != nil {
-		return fmt.Errorf("seed permissions: %w", err)
-	}
-
-	// 3) Mapping role ↔ permissions (termasuk super_admin → all)
-	if err := SeedRolePermissions(db); err != nil {
-		return fmt.Errorf("seed role_permissions: %w", err)
-	}
-
-	// 4) Optional super_admin via ENV (aktif)
-	if email := os.Getenv("SUPERADMIN_EMAIL"); email != "" {
-		if pass := os.Getenv("SUPERADMIN_PASSWORD"); pass != "" {
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		// 1) roles
+		if err := SeedRoles(tx); err != nil {
+			return fmt.Errorf("seed roles: %w", err)
+		}
+		// 2) permissions + mapping
+		if err := SeedPermissions(tx); err != nil {
+			return fmt.Errorf("seed permissions: %w", err)
+		}
+		// 3) optional super_admin (aktif)
+		if email := os.Getenv("SUPERADMIN_EMAIL"); email != "" {
+			pass := os.Getenv("SUPERADMIN_PASSWORD")
+			if pass == "" {
+				return fmt.Errorf("env SUPERADMIN_PASSWORD required when SUPERADMIN_EMAIL set")
+			}
 			first := os.Getenv("SUPERADMIN_FIRST_NAME")
 			if first == "" {
 				first = "Super"
@@ -41,28 +38,26 @@ func Run(db *gorm.DB) error {
 			if last == "" {
 				last = "Admin"
 			}
-			if _, err := CreateUserActiveWithRole(db, email, first, last, pass, constant.RoleSuperAdmin); err != nil {
+			if _, err := CreateUserActiveWithRole(tx, email, first, last, pass, constant.RoleSuperAdmin); err != nil {
 				return fmt.Errorf("seed super_admin: %w", err)
 			}
 		}
-	}
-
-	// 5) Sample users: 1 super_admin, 1 admin, 1 nurse, 1 receptionist, 1 bod, 3 patient, 3 doctor
-	if err := SeedSampleUsers(db); err != nil {
-		return fmt.Errorf("seed sample users: %w", err)
+		// 4) sample users
+		if err := SeedSampleUsers(tx); err != nil {
+			return fmt.Errorf("seed sample users: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	fmt.Printf("[seeder] done in %s\n", time.Since(start))
 	return nil
 }
 
-// Flush menghapus data hasil seeding (idempotent, aman):
-// - Hapus mapping role_permissions & user_roles untuk role seeded,
-// - Hapus permissions hasil seed,
-// - Hapus roles hasil seed,
-// - Tidak menghapus user; hanya memutus mapping user_roles yang terkait role seeded.
+// Flush: bersihkan data hasil seeding (idempotent, tidak hapus user).
 func Flush(db *gorm.DB) error {
-	// Role slugs yang kita seed
+	// role slugs yg kita seed
 	roleSlugs := []string{
 		constant.RoleSuperAdmin,
 		constant.RoleAdmin,
@@ -72,12 +67,14 @@ func Flush(db *gorm.DB) error {
 		constant.RoleReceptionist,
 		constant.RoleBOD,
 	}
-	// Permission slugs hasil seed
-	permSlugs := constant.AllPermissions()
 
-	// Ambil role IDs
-	var roles []entity.Role
-	if err := db.Where("slug IN ?", roleSlugs).Find(&roles).Error; err != nil {
+	// kumpulkan semua permission slugs dari peta default
+	permSlugs := uniquePermSlugsFromDefaults()
+
+	// ambil role ids
+	type row struct{ ID string }
+	var roles []row
+	if err := db.Raw(`SELECT id FROM roles WHERE slug IN ?`, roleSlugs).Scan(&roles).Error; err != nil {
 		return err
 	}
 	roleIDs := make([]any, 0, len(roles))
@@ -85,9 +82,9 @@ func Flush(db *gorm.DB) error {
 		roleIDs = append(roleIDs, r.ID)
 	}
 
-	// Ambil permission IDs
-	var perms []entity.Permission
-	if err := db.Where("slug IN ?", permSlugs).Find(&perms).Error; err != nil {
+	// ambil permission ids
+	var perms []row
+	if err := db.Raw(`SELECT id FROM permissions WHERE slug IN ?`, permSlugs).Scan(&perms).Error; err != nil {
 		return err
 	}
 	permIDs := make([]any, 0, len(perms))
@@ -95,38 +92,45 @@ func Flush(db *gorm.DB) error {
 		permIDs = append(permIDs, p.ID)
 	}
 
-	// 1) Hapus mapping role_permissions
+	// 1) hapus mapping role_permissions
 	if len(roleIDs) > 0 || len(permIDs) > 0 {
-		if err := db.Table("role_permissions").
-			Where("(role_id IN ?)", roleIDs).
-			Or("(permission_id IN ?)", permIDs).
-			Delete(nil).Error; err != nil {
+		if err := db.Exec(`DELETE FROM role_permissions
+                           WHERE (role_id IN (?)) OR (permission_id IN (?))`, roleIDs, permIDs).Error; err != nil {
 			return err
 		}
 	}
 
-	// 2) Hapus mapping user_roles untuk role seeded (jangan hapus user)
+	// 2) putus mapping user_roles untuk role seeded (jangan hapus user)
 	if len(roleIDs) > 0 {
-		if err := db.Table("user_roles").
-			Where("role_id IN ?", roleIDs).
-			Delete(nil).Error; err != nil {
+		if err := db.Exec(`DELETE FROM user_roles WHERE role_id IN (?)`, roleIDs).Error; err != nil {
 			return err
 		}
 	}
 
-	// 3) Hapus permissions hasil seed
+	// 3) hapus permissions hasil seed
 	if len(permIDs) > 0 {
-		if err := db.Where("id IN ?", permIDs).Delete(&entity.Permission{}).Error; err != nil {
+		if err := db.Exec(`DELETE FROM permissions WHERE id IN (?)`, permIDs).Error; err != nil {
 			return err
 		}
 	}
 
-	// 4) Hapus roles hasil seed
+	// 4) hapus roles hasil seed
 	if len(roleIDs) > 0 {
-		if err := db.Where("id IN ?", roleIDs).Delete(&entity.Role{}).Error; err != nil {
+		if err := db.Exec(`DELETE FROM roles WHERE id IN (?)`, roleIDs).Error; err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// uniquePermSlugsFromDefaults mengumpulkan & meng-unique-kan slug dari default
+func uniquePermSlugsFromDefaults() []string {
+	var all []string
+	for _, slugs := range constant.DefaultRolePermissions {
+		all = append(all, slugs...)
+	}
+	slices.Sort(all)
+	all = slices.Compact(all)
+	return all
 }

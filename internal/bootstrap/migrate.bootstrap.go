@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"database/sql"
 	"errors"
+	"os"
 
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/util"
@@ -40,6 +41,13 @@ func StartMigrate(actionType string, name string, version *int64) {
 			break
 		}
 		err = goose.Up(db, migrationDir, goose.WithAllowMissing())
+	case "db-reset":
+		content, ioErr := os.ReadFile("scripts/reset-db.sql")
+		if ioErr != nil {
+			err = ioErr
+			break
+		}
+		_, err = db.Exec(string(content))
 	default:
 		err = errors.New("invalid command")
 	}

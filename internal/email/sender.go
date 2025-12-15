@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strings"
 )
@@ -32,13 +33,34 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	}
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 
-	// Compose headers
-	from := s.cfg.FromEmail
-	if from == "" {
-		from = s.cfg.Username
+	// Determine 'from' email and name
+	fromRaw := s.cfg.FromEmail
+	if fromRaw == "" {
+		fromRaw = s.cfg.Username
 	}
+
+	// Parse valid email address for envelope and header
+	var envelopeFrom string
+	var headerFrom string
+
+	parsedAddr, err := mail.ParseAddress(fromRaw)
+	if err == nil {
+		envelopeFrom = parsedAddr.Address
+		// Jika config punya FromName eksplisit, pakai itu. Jika tidak, pakai nama dari parse (jika ada).
+		displayName := s.cfg.FromName
+		if displayName == "" {
+			displayName = parsedAddr.Name
+		}
+		headerFrom = formatAddress(envelopeFrom, displayName)
+	} else {
+		// Fallback jika parse gagal (misal cuma email string biasa tanpa <>)
+		envelopeFrom = fromRaw
+		headerFrom = formatAddress(fromRaw, s.cfg.FromName)
+	}
+
+	// Compose headers
 	headers := map[string]string{
-		"From":         formatAddress(from, s.cfg.FromName),
+		"From":         headerFrom,
 		"To":           to,
 		"Subject":      subject,
 		"MIME-Version": "1.0",
@@ -91,7 +113,8 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	}
 
 	// From / To / Data
-	if err := client.Mail(from); err != nil {
+	// NOTE: Use envelopeFrom (pure email) for SMTP commands
+	if err := client.Mail(envelopeFrom); err != nil {
 		return err
 	}
 	if err := client.Rcpt(to); err != nil {

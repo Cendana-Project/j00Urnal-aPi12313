@@ -109,3 +109,16 @@ func HandleResponse(ctx *gin.Context, resp *response.BaseResponse, err error) {
 
 	ctx.JSON(resp.StatusCode, resp)
 }
+
+func GetUserID(ctx *gin.Context) string {
+	id, err := GetUserIDFromContext(ctx)
+	if err != nil || id == nil {
+		return ""
+	}
+	return id.String()
+}
+
+// RFC3339UTC memformat waktu ke RFC3339 UTC (helper dipakai controller)
+func RFC3339UTC(t time.Time) string {
+	return t.UTC().Format(time.RFC3339)
+}

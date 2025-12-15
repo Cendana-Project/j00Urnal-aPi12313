@@ -1,23 +1,49 @@
 package request
 
 type RegisterRequest struct {
-	Email       string  `json:"email" validate:"required,email"`
-	Password    string  `json:"password" validate:"required,min=8"` // validasi kombo di service (huruf+angka)
-	FirstName   string  `json:"first_name" validate:"required"`
-	LastName    string  `json:"last_name" validate:"required"`
-	Phone       *string `json:"phone" validate:"omitempty,numeric"`
-	DOB         *string `json:"dob" validate:"omitempty"` // "YYYY-MM-DD"
-	Address     *string `json:"address" validate:"omitempty"`
-	Gender      *string `json:"gender" validate:"omitempty,oneof=L P"`
-	NIK         *string `json:"nik" validate:"omitempty,len=16,numeric"`
-	AccountRole string  `json:"account_role" validate:"required,oneof=patient doctor"`
+	Email       string `json:"email"`
+	Username    string `json:"username"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	Phone       string `json:"phone"`
+	Password    string `json:"password"`
+	Affiliation string `json:"affiliation"`
 }
 
-type VerifyEmailRequest struct {
-	Token string `json:"token" validate:"required"`
-}
-
+// OTP/PIN
 type VerifyPINRequest struct {
-	Email string `json:"email" binding:"required,email"`
-	PIN   string `json:"pin"   binding:"required,len=6"`
+	Email string `json:"email"`
+	PIN   string `json:"pin"`
+}
+type ResendPINRequest struct {
+	Email string `json:"email"`
+}
+
+// Login & Refresh (public)
+type LoginRequest struct {
+	Identity string `json:"identity"` // email atau username
+	Password string `json:"password"`
+}
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// Password
+type PasswordForgotRequest struct {
+	Email string `json:"email"`
+}
+
+type PasswordResetRequest struct {
+	Email       string `json:"email"`
+	PIN         string `json:"pin"`
+	NewPassword string `json:"new_password"`
+}
+
+type PasswordChangeRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token"` // optional
 }
