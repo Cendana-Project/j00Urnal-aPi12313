@@ -1,6 +1,9 @@
 package bootstrap
 
 import (
+	"context"
+	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -12,15 +15,27 @@ import (
 	userRepo "github.com/api-monolith-template/internal/repository/user"
 	authSvc "github.com/api-monolith-template/internal/service/auth"
 	httpTransport "github.com/api-monolith-template/internal/transport/http"
-	authHttp "github.com/api-monolith-template/internal/transport/http/auth"
-	userHttp "github.com/api-monolith-template/internal/transport/http/user"
-	warmupHttp "github.com/api-monolith-template/internal/transport/http/warmup"
+	"github.com/api-monolith-template/internal/util"
+	"github.com/sirupsen/logrus"
 )
 
 func StartServer() {
+	ctx := context.Background()
+
 	// Infra
 	gormDB := infrastructure.InitializeDBConn()
 	rdb := infrastructure.NewRedisClient()
+	if !config.Env.Redis.IsCacheDisable && rdb != nil {
+		_, err := rdb.Ping(ctx).Result()
+		util.ContinueOrFatal(err)
+	}
+
+	// Get database connection for shutdown
+	db, err := gormDB.DB()
+	util.ContinueOrFatal(err)
+	err = db.Ping()
+	util.ContinueOrFatal(err)
+
 	r := infrastructure.NewGinEngine()
 
 	// Repositories
@@ -81,6 +96,33 @@ func StartServer() {
 		WithRoleRepository(rRepo).
 		InitRoute()
 
-	// Start server
-	_ = r.Run(":" + config.Env.Server.Port)
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", config.Env.Server.Port),
+		Handler: r.Handler(),
+	}
+	// start http server
+	go func() {
+		logrus.Info(fmt.Sprintf("running at http://0.0.0.0:%s", config.Env.Server.Port))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			util.ContinueOrFatal(err)
+		}
+	}()
+
+	wait := gracefulShutdown(ctx, config.Env.GracefulShutdownTimeout, map[string]operation{
+		"database connection": func(ctx context.Context) error {
+			infrastructure.StopTickerCh <- true
+			return db.Close()
+		},
+		"redis connection": func(ctx context.Context) error {
+			if rdb != nil {
+				return rdb.Close()
+			}
+			return nil
+		},
+		"gin server": func(ctx context.Context) error {
+			return srv.Shutdown(ctx)
+		},
+	})
+
+	<-wait
 }

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -26,41 +28,6 @@ type EnvConfig struct {
 	Database                Database      `mapstructure:"database"`
 	Redis                   Redis         `mapstructure:"redis"`
 	SMTP                    SMTP          `mapstructure:"smtp"`
-	JWT                     JWTConfig     `mapstructure:"jwt"`
-}
-
-type JWTConfig struct {
-	Secret string `mapstructure:"secret"`
-
-	// BARU (lebih fleksibel): gunakan duration string, contoh: "15m", "720h"
-	AccessTTL  string `mapstructure:"access_ttl"`
-	RefreshTTL string `mapstructure:"refresh_ttl"`
-
-	// Fallback lama (tetap didukung agar tidak breaking)
-	AccessTTLMinutes int `mapstructure:"access_ttl_minutes"`
-	RefreshTTLDays   int `mapstructure:"refresh_ttl_days"`
-}
-
-// ParseDurations mengembalikan durasi access & refresh dengan prioritas:
-// AccessTTL/RefreshTTL (string) > AccessTTLMinutes/RefreshTTLDays (int) > default (15m, 30d)
-func (j JWTConfig) ParseDurations() (access time.Duration, refresh time.Duration) {
-	// Access
-	if d, err := time.ParseDuration(j.AccessTTL); err == nil && d > 0 {
-		access = d
-	} else if j.AccessTTLMinutes > 0 {
-		access = time.Duration(j.AccessTTLMinutes) * time.Minute
-	} else {
-		access = 15 * time.Minute
-	}
-	// Refresh
-	if d, err := time.ParseDuration(j.RefreshTTL); err == nil && d > 0 {
-		refresh = d
-	} else if j.RefreshTTLDays > 0 {
-		refresh = time.Duration(j.RefreshTTLDays) * 24 * time.Hour
-	} else {
-		refresh = 30 * 24 * time.Hour
-	}
-	return
 }
 
 type Redis struct {
@@ -107,22 +74,170 @@ type SMTP struct {
 	Port     int    `mapstructure:"port"`
 	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
-	From     string `mapstructure:"from"`
 }
 
+// LoadConfig loads configuration from .env file and environment variables
 func LoadConfig() error {
-	// Load .env file if exists (will not override existing env vars)
-	_ = godotenv.Load()
+	// Load .env file into environment variables (if it exists)
+	// This allows environment variables to override .env file values
+	if err := godotenv.Load(); err != nil {
+		// File .env is optional, so we only log if it's not a "file not found" error
+		if !strings.Contains(err.Error(), "no such file") {
+			logrus.Warnf("failed to load .env file: %v", err)
+		}
+	}
 
+	// Set default values
+	setDefaults()
+
+	// Configure viper to read from environment variables
+	viper.SetEnvPrefix("") // No prefix, read variables as-is
 	viper.AutomaticEnv()
+	replacer := strings.NewReplacer(".", "_")
+	viper.SetEnvKeyReplacer(replacer)
 
-	// Bind env explicitly untuk nested struct
+	// Explicitly bind all environment variables
 	bindEnvVariables()
 
+	// Unmarshal into config struct
 	if err := viper.Unmarshal(&Env); err != nil {
-		logrus.Fatal("failed to unmarshal config to struct: ", err)
+		logrus.Fatal("failed to unmarshal config: ", err)
 		return err
 	}
+
+	// Validate configuration
+	if err := Env.Validate(); err != nil {
+		logrus.Fatal("config validation failed: ", err)
+		return err
+	}
+
+	logrus.Info("configuration loaded successfully from environment variables")
+	return nil
+}
+
+// setDefaults sets default values for optional configuration
+func setDefaults() {
+	// Application defaults
+	viper.SetDefault("env", "development")
+	viper.SetDefault("log_level", "info")
+	viper.SetDefault("graceful_shutdown_timeout", "30s")
+
+	// Server defaults
+	viper.SetDefault("server.port", "8080")
+
+	// Database defaults
+	viper.SetDefault("database.ping_interval", "30s")
+	viper.SetDefault("database.reconnect_factor", 2)
+	viper.SetDefault("database.min_jitter", "200ms")
+	viper.SetDefault("database.max_jitter", "500ms")
+	viper.SetDefault("database.max_retry", 5)
+	viper.SetDefault("database.max_idle_conns", 10)
+	viper.SetDefault("database.max_open_conns", 30)
+	viper.SetDefault("database.max_conn_lifetime", "1h")
+
+	// Redis defaults
+	viper.SetDefault("redis.is_cache_disable", false)
+	viper.SetDefault("redis.default_cache_duration", "15m")
+	viper.SetDefault("redis.max_retry", 5)
+	viper.SetDefault("redis.max_idle_conns", 5)
+	viper.SetDefault("redis.max_active_conns", 20)
+	viper.SetDefault("redis.max_conn_lifetime", "1h")
+
+	// Token defaults
+	viper.SetDefault("token.access_token_duration", "1h")
+	viper.SetDefault("token.refresh_token_duration", "720h") // 30 days
+}
+
+// bindEnvVariables explicitly binds all environment variables
+func bindEnvVariables() {
+	// Top level
+	viper.BindEnv("env", "ENV")
+	viper.BindEnv("log_level", "LOG_LEVEL")
+	viper.BindEnv("graceful_shutdown_timeout", "GRACEFUL_SHUTDOWN_TIMEOUT")
+
+	// Server
+	viper.BindEnv("server.port", "SERVER_PORT")
+
+	// Database
+	viper.BindEnv("database.dsn", "DATABASE_DSN")
+	viper.BindEnv("database.ping_interval", "DATABASE_PING_INTERVAL")
+	viper.BindEnv("database.reconnect_factor", "DATABASE_RECONNECT_FACTOR")
+	viper.BindEnv("database.min_jitter", "DATABASE_MIN_JITTER")
+	viper.BindEnv("database.max_jitter", "DATABASE_MAX_JITTER")
+	viper.BindEnv("database.max_retry", "DATABASE_MAX_RETRY")
+	viper.BindEnv("database.max_idle_conns", "DATABASE_MAX_IDLE_CONNS")
+	viper.BindEnv("database.max_open_conns", "DATABASE_MAX_OPEN_CONNS")
+	viper.BindEnv("database.max_conn_lifetime", "DATABASE_MAX_CONN_LIFETIME")
+
+	// Redis
+	viper.BindEnv("redis.is_cache_disable", "REDIS_IS_CACHE_DISABLE")
+	viper.BindEnv("redis.cache_dsn", "REDIS_CACHE_DSN")
+	viper.BindEnv("redis.default_cache_duration", "REDIS_DEFAULT_CACHE_DURATION")
+	viper.BindEnv("redis.max_retry", "REDIS_MAX_RETRY")
+	viper.BindEnv("redis.max_idle_conns", "REDIS_MAX_IDLE_CONNS")
+	viper.BindEnv("redis.max_active_conns", "REDIS_MAX_ACTIVE_CONNS")
+	viper.BindEnv("redis.max_conn_lifetime", "REDIS_MAX_CONN_LIFETIME")
+
+	// Token
+	viper.BindEnv("token.password_salt", "TOKEN_PASSWORD_SALT")
+	viper.BindEnv("token.access_token_secret", "TOKEN_ACCESS_TOKEN_SECRET")
+	viper.BindEnv("token.access_token_duration", "TOKEN_ACCESS_TOKEN_DURATION")
+	viper.BindEnv("token.refresh_token_secret", "TOKEN_REFRESH_TOKEN_SECRET")
+	viper.BindEnv("token.refresh_token_duration", "TOKEN_REFRESH_TOKEN_DURATION")
+
+	// SMTP
+	viper.BindEnv("smtp.host", "SMTP_HOST")
+	viper.BindEnv("smtp.port", "SMTP_PORT")
+	viper.BindEnv("smtp.username", "SMTP_USERNAME")
+	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
+}
+
+// Validate checks if all required configuration values are set correctly
+func (c *EnvConfig) Validate() error {
+	var errs []string
+
+	// Validate required fields
+	if c.Database.DSN == "" {
+		errs = append(errs, "DATABASE_DSN is required")
+	}
+
+	if c.Token.PasswordSalt == "" {
+		errs = append(errs, "TOKEN_PASSWORD_SALT is required")
+	} else if len(c.Token.PasswordSalt) < 16 {
+		errs = append(errs, "TOKEN_PASSWORD_SALT must be at least 16 characters")
+	}
+
+	if c.Token.AccessTokenSecret == "" {
+		errs = append(errs, "TOKEN_ACCESS_TOKEN_SECRET is required")
+	} else if len(c.Token.AccessTokenSecret) < 16 {
+		errs = append(errs, "TOKEN_ACCESS_TOKEN_SECRET must be at least 16 characters")
+	}
+
+	if c.Token.RefreshTokenSecret == "" {
+		errs = append(errs, "TOKEN_REFRESH_TOKEN_SECRET is required")
+	} else if len(c.Token.RefreshTokenSecret) < 16 {
+		errs = append(errs, "TOKEN_REFRESH_TOKEN_SECRET must be at least 16 characters")
+	}
+
+	if c.Server.Port == "" {
+		errs = append(errs, "SERVER_PORT is required")
+	}
+
+	// Validate Redis if cache is enabled
+	if !c.Redis.IsCacheDisable && c.Redis.CacheDSN == "" {
+		errs = append(errs, "REDIS_CACHE_DSN is required when cache is enabled")
+	}
+
+	// Validate environment
+	validEnvs := map[string]bool{"development": true, "staging": true, "production": true}
+	if !validEnvs[c.Env] {
+		errs = append(errs, fmt.Sprintf("ENV must be one of: development, staging, production (got: %s)", c.Env))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+
 	return nil
 }
 

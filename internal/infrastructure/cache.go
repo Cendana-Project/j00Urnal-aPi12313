@@ -10,6 +10,14 @@ import (
 )
 
 func NewRedisClient() *redis.Client {
+	// If cache is disabled, return nil client
+	if config.Env.Redis.IsCacheDisable {
+		MapHealthCheck["redis"] = func(ctx context.Context) error {
+			return errors.New("redis cache is disabled")
+		}
+		return nil
+	}
+
 	opts, err := redis.ParseURL(config.Env.Redis.CacheDSN)
 	util.ContinueOrFatal(err)
 
