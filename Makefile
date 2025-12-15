@@ -43,9 +43,8 @@ migrate-status:
 
 # Database reset (PostgreSQL)
 db-reset:
-	@echo "⚠️  Resetting database schema..."
-	@echo "Using DB_URL: $(DB_URL)"
-	@psql "$(DB_URL)" -f scripts/reset-db.sql
+	@echo "⚠️  Resetting database schema (via application)..."
+	$(GO) run main.go migrate --action db-reset
 	@echo "✅ Database schema reset complete"
 
 # Seed flush

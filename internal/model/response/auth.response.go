@@ -27,24 +27,12 @@ type LoginResponse struct { // <=== changed
 	RefreshTokenExpiredAt string `json:"refresh_token_expired_at"` // RFC3339 UTC
 }
 
-// LoginHospitalResponse sekarang menyertakan waktu kadaluarsa token
-type LoginHospitalResponse struct { // <=== changed
-	AccessToken           string `json:"access_token"`
-	RefreshToken          string `json:"refresh_token"`
-	ExpiresIn             int64  `json:"expires_in"`
-	TokenType             string `json:"token_type"`
-	HospitalID            string `json:"hospital_id"`
-	Role                  string `json:"role"`                     // hanya slug
-	AccessTokenExpiredAt  string `json:"access_token_expired_at"`  // RFC3339 UTC
-	RefreshTokenExpiredAt string `json:"refresh_token_expired_at"` // RFC3339 UTC
-}
-
-type UserProfile struct { // <=== added
+type UserProfile struct {
 	ID        string  `json:"id"`
 	Email     string  `json:"email"`
-	Username  *string `json:"username,omitempty"`
-	FirstName string  `json:"first_name"`
-	LastName  string  `json:"last_name"`
+	Username  string  `json:"username"`
+	FirstName *string `json:"first_name"`
+	LastName  *string `json:"last_name"`
 	Phone     *string `json:"phone,omitempty"`
 	DOB       *string `json:"dob,omitempty"` // format: YYYY-MM-DD (jika ada)
 	Address   *string `json:"address,omitempty"`

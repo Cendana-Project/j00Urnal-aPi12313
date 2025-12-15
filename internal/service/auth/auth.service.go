@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/scrypt"
+	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
@@ -21,7 +22,6 @@ import (
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
-	hosprepo "github.com/api-monolith-template/internal/repository/hospital"
 	rolerepo "github.com/api-monolith-template/internal/repository/role"
 	userrepo "github.com/api-monolith-template/internal/repository/user"
 	ulog "github.com/api-monolith-template/internal/util"
@@ -39,22 +39,10 @@ type TokenPair struct {
 	RefreshToken string
 }
 
-type LoginHospitalResult struct {
-	AccessToken  string               `json:"access_token"`
-	RefreshToken string               `json:"refresh_token"`
-	ExpiresIn    int64                `json:"expires_in"`
-	TokenType    string               `json:"token_type"`
-	HospitalID   string               `json:"hospital_id"`
-	Roles        []response.RoleBrief `json:"roles"`
-	AccessExp    time.Time            `json:"-"`
-	RefreshExp   time.Time            `json:"-"`
-}
-
 type Service struct {
 	users *userrepo.Repository
 	roles *rolerepo.Repository
 	redis *redis.Client
-	hosp  *hosprepo.Repository
 	email EmailSender
 
 	loc        *time.Location
@@ -64,7 +52,7 @@ type Service struct {
 	jwtSecret  []byte
 }
 
-func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *redis.Client, sender EmailSender, hosp *hosprepo.Repository) *Service {
+func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *redis.Client, sender EmailSender) *Service {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	acc, ref := config.Env.JWT.ParseDurations()
 
@@ -73,7 +61,6 @@ func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *red
 		roles:      roles,
 		redis:      rdb,
 		email:      sender,
-		hosp:       hosp,
 		loc:        loc,
 		pinTTL:     10 * time.Minute,
 		accessTTL:  acc,
@@ -225,7 +212,7 @@ func (s *Service) rotateRefresh(oldJTI string) {
 
 /* ==================== Core Flows ==================== */
 
-func (s *Service) RegisterLite(ctx context.Context, req *request.RegisterLiteRequest) (*entity.User, error) {
+func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*entity.User, error) {
 	ulog.Infof(ctx, "register attempt email=%s", req.Email)
 
 	if !hasLetter(req.Password) || !hasDigit(req.Password) || len(req.Password) < 8 {
@@ -245,14 +232,14 @@ func (s *Service) RegisterLite(ctx context.Context, req *request.RegisterLiteReq
 			if err := s.redis.Set(ctx, key, pin, s.pinTTL).Err(); err != nil {
 				return nil, constant.ErrInternalServerError
 			}
-            if s.email != nil {
-                html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
-                if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
-                    ulog.Errorf(ctx, "smtp send failed (register_resend_pin): %v", err)
-                    _ = s.redis.Del(ctx, key).Err()
-                    return nil, constant.ErrEmailSendFailed
-                }
-            }
+			if s.email != nil {
+				html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
+				if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
+					ulog.Errorf(ctx, "smtp send failed (register_resend_pin): %v", err)
+					_ = s.redis.Del(ctx, key).Err()
+					return nil, constant.ErrEmailSendFailed
+				}
+			}
 			ulog.Infof(ctx, "register resend pin email=%s", emailAddr)
 			return u, nil
 		}
@@ -271,12 +258,21 @@ func (s *Service) RegisterLite(ctx context.Context, req *request.RegisterLiteReq
 
 	u := &entity.User{
 		Email:        emailAddr,
-		Username:     &uname,
+		Username:     uname, // Fixed: now string
 		Phone:        &phone,
 		PasswordHash: hash,
 		Status:       "pending",
+		Affiliation:  &req.Affiliation,
 	}
 	if err := s.users.Create(u); err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) ||
+			strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
+			// Try to distinguish if it's email or username if possible, or just generic duplicate
+			if strings.Contains(strings.ToLower(err.Error()), "username") {
+				return nil, constant.ErrDuplicateUsernameOrEmail
+			}
+			return nil, constant.ErrEmailAlreadyActive
+		}
 		return nil, constant.ErrInternalServerError
 	}
 
@@ -285,14 +281,14 @@ func (s *Service) RegisterLite(ctx context.Context, req *request.RegisterLiteReq
 	if err := s.redis.Set(ctx, keyRedis, pin, s.pinTTL).Err(); err != nil {
 		return nil, constant.ErrInternalServerError
 	}
-    if s.email != nil {
-        html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
-        if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
-            ulog.Errorf(ctx, "smtp send failed (register_send_pin): %v", err)
-            _ = s.redis.Del(ctx, keyRedis).Err()
-            return nil, constant.ErrEmailSendFailed
-        }
-    }
+	if s.email != nil {
+		html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
+		if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
+			ulog.Errorf(ctx, "smtp send failed (register_send_pin): %v", err)
+			_ = s.redis.Del(ctx, keyRedis).Err()
+			return nil, constant.ErrEmailSendFailed
+		}
+	}
 	ulog.Infof(ctx, "register success email=%s", emailAddr)
 	return u, nil
 }
@@ -316,7 +312,11 @@ func (s *Service) ResendPIN(ctx context.Context, emailAddr string) error {
 		return constant.ErrInternalServerError
 	}
 	if s.email != nil {
-		html := email.RenderVerifyPIN(u.FirstName, pin, int(s.pinTTL.Minutes()))
+		name := ""
+		if u.FirstName != nil {
+			name = *u.FirstName
+		}
+		html := email.RenderVerifyPIN(name, pin, int(s.pinTTL.Minutes()))
 		if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
 			_ = s.redis.Del(ctx, key).Err()
 			return constant.ErrEmailSendFailed
@@ -350,6 +350,10 @@ func (s *Service) VerifyPIN(ctx context.Context, emailAddr, pin string) (TokenPa
 	if err != nil {
 		return TokenPair{}, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
+
+	// Update LastLogin on verification success? Or maybe on Login only.
+	// For now, let's leave it as is.
+
 	ulog.Infof(ctx, "verify pin success email=%s", emailAddr)
 	return pair, aexp, rexp, nil
 }
@@ -405,65 +409,6 @@ func (s *Service) Login(ctx context.Context, identity, password string) (pair st
 	return pair, out, accessExp, refreshExp, nil
 }
 
-func (s *Service) LoginHospital(ctx context.Context, identifier, password, hospitalHint string) (*LoginHospitalResult, error) {
-	hID, err := s.hosp.ResolveHospitalID(ctx, hospitalHint)
-	if err != nil || hID == "" {
-		return nil, constant.ErrHospitalNotFound
-	}
-
-	id := strings.ToLower(strings.TrimSpace(identifier))
-	var u *entity.User
-	if strings.Contains(id, "@") {
-		u, err = s.users.FindByEmail(id)
-	} else {
-		u, err = s.users.FindByUsername(id)
-	}
-	if err != nil {
-		return nil, constant.ErrInternalServerError
-	}
-	if u == nil {
-		return nil, constant.ErrUserNotFound
-	}
-	if strings.ToLower(u.Status) != "active" {
-		return nil, constant.ErrForbidden
-	}
-
-	// password verify & migrate jika perlu
-	if err := s.verifyAndMigratePassword(ctx, u, password); err != nil {
-		return nil, err
-	}
-
-	ok, lerr := s.hosp.IsUserLinkedToHospital(ctx, u.ID, hID)
-	if lerr != nil {
-		return nil, constant.ErrInternalServerError
-	}
-	if !ok {
-		return nil, constant.ErrUserNotLinkedToHospital
-	}
-
-	j, _, aexp, rexp, jerr := s.issueJWT(u.ID)
-	if jerr != nil {
-		return nil, constant.ErrInternalServerError
-	}
-
-	rs, rerr := s.roles.ListHospitalRolesByUser(ctx, hID, u.ID)
-	if rerr != nil {
-		return nil, constant.ErrInternalServerError
-	}
-	rbrief := make([]response.RoleBrief, 0, len(rs))
-	for _, r := range rs {
-		rbrief = append(rbrief, response.RoleBrief{ID: r.ID, Slug: r.Slug, Name: r.Name})
-	}
-
-	ulog.Infof(ctx, "login hospital success user_id=%s hospital_id=%s", u.ID, hID)
-	return &LoginHospitalResult{
-		AccessToken: j.AccessToken, RefreshToken: j.RefreshToken,
-		ExpiresIn: int64(s.accessTTL / time.Second), TokenType: "Bearer",
-		HospitalID: hID, Roles: rbrief,
-		AccessExp: aexp, RefreshExp: rexp,
-	}, nil
-}
-
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (TokenPair, time.Time, time.Time, error) {
 	tok, err := jwt.Parse(refreshToken, func(t *jwt.Token) (any, error) {
 		if t.Method != jwt.SigningMethodHS256 {
@@ -503,173 +448,14 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (TokenPair, 
 	return pair, aexp, rexp, nil
 }
 
-/* ==================== Role & Profiles ==================== */
+/* ==================== Role ==================== */
 
 func (s *Service) ChooseRole(ctx context.Context, userID, roleSlug string) error {
-	r, err := s.roles.FindBySlug(roleSlug)
-	if err != nil || r == nil {
-		return constant.ErrAccountRoleNotFound
+	roleID, err := s.roles.GetRoleIDBySlug(ctx, roleSlug)
+	if err != nil {
+		return err
 	}
-	if err := s.roles.Assign(userID, r.ID); err != nil {
-		return constant.ErrInternalServerError
-	}
-	ulog.Infof(ctx, "choose role user_id=%s role=%s", userID, roleSlug)
-	return nil
-}
-
-func (s *Service) CompletePatientProfile(ctx context.Context, userID string, req *request.PatientProfileRequest) error {
-	updates := map[string]any{
-		"first_name": req.FirstName,
-		"last_name":  req.LastName,
-		"address":    req.Address,
-		"gender":     req.Gender,
-	}
-	if req.NIK != nil && !isNIK16(*req.NIK) {
-		return constant.ErrValidationFailed
-	}
-	if req.DOB != nil && *req.DOB != "" {
-		tm, err := time.ParseInLocation("2006-01-02", *req.DOB, s.loc)
-		if err != nil || tm.After(time.Now().In(s.loc)) {
-			return constant.ErrValidationFailed
-		}
-		updates["dob"] = tm
-	}
-	if err := s.users.UpdateByID(userID, updates); err != nil {
-		return constant.ErrInternalServerError
-	}
-
-	prof := map[string]any{
-		"user_id":      userID,
-		"height_cm":    req.HeightCM,
-		"weight_kg":    req.WeightKG,
-		"allergies":    req.Allergies,
-		"medical_hist": req.MedicalHistory,
-	}
-	if err := s.users.UpsertPatientProfile(prof); err != nil {
-		return constant.ErrInternalServerError
-	}
-	ulog.Infof(ctx, "patient profile updated user_id=%s", userID)
-	return nil
-}
-
-func (s *Service) CompleteDoctorProfile(ctx context.Context, userID string, req *request.DoctorProfileRequest) error {
-	updates := map[string]any{
-		"first_name": req.FirstName,
-		"last_name":  req.LastName,
-		"address":    req.Address,
-		"gender":     req.Gender,
-	}
-	if err := s.users.UpdateByID(userID, updates); err != nil {
-		return constant.ErrInternalServerError
-	}
-
-	prof := map[string]any{
-		"user_id":    userID,
-		"sip_number": req.SIPNumber,
-		"specialty":  req.Specialty,
-	}
-	if err := s.users.UpsertDoctorProfile(prof); err != nil {
-		return constant.ErrInternalServerError
-	}
-	ulog.Infof(ctx, "doctor profile updated user_id=%s", userID)
-	return nil
-}
-
-func (s *Service) SetProfile(ctx context.Context, userID, roleSlugUpper string, rawProfile *json.RawMessage) (*response.SetProfileResponse, error) {
-	if rawProfile == nil {
-		return nil, constant.ErrValidationError
-	}
-	role := strings.ToUpper(strings.TrimSpace(roleSlugUpper))
-	switch role {
-	case constant.RolePatient, constant.RoleDoctor:
-	default:
-		return nil, constant.ErrValidationError
-	}
-
-	if role == constant.RolePatient {
-		ok, err := s.users.ExistsPatientProfile(userID)
-		if err != nil {
-			return nil, constant.ErrInternalServerError
-		}
-		if ok {
-			return nil, constant.ErrProfileAlreadySet
-		}
-	} else {
-		ok, err := s.users.ExistsDoctorProfile(userID)
-		if err != nil {
-			return nil, constant.ErrInternalServerError
-		}
-		if ok {
-			return nil, constant.ErrProfileAlreadySet
-		}
-	}
-
-	r, err := s.roles.FindBySlug(role)
-	if err != nil || r == nil || !r.Active {
-		return nil, constant.ErrAccountRoleNotFound
-	}
-	if err := s.roles.Assign(userID, r.ID); err != nil {
-		return nil, constant.ErrInternalServerError
-	}
-
-	if role == constant.RolePatient {
-		var req request.PatientProfileRequest
-		if err := json.Unmarshal(*rawProfile, &req); err != nil {
-			return nil, constant.ErrValidationError
-		}
-		if err := s.CompletePatientProfile(ctx, userID, &req); err != nil {
-			return nil, err
-		}
-	} else {
-		var req request.DoctorProfileRequest
-		if err := json.Unmarshal(*rawProfile, &req); err != nil {
-			return nil, constant.ErrValidationError
-		}
-		if err := s.CompleteDoctorProfile(ctx, userID, &req); err != nil {
-			return nil, err
-		}
-	}
-
-	u, err := s.users.GetByID(userID)
-	if err != nil || u == nil {
-		return nil, constant.ErrInternalServerError
-	}
-	var dobStr *string
-	if u.DOB != nil {
-		tmp := u.DOB.In(s.loc).Format("2006-01-02")
-		dobStr = &tmp
-	}
-	prof := response.UserProfile{
-		ID:        u.ID,
-		Email:     u.Email,
-		Username:  u.Username,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		Phone:     u.Phone,
-		DOB:       dobStr,
-		Address:   u.Address,
-		Gender:    u.Gender,
-		NIK:       u.NIK,
-	}
-	if role == constant.RolePatient {
-		h, w, a, m, err := s.users.GetPatientProfileByUserID(userID)
-		if err != nil {
-			return nil, constant.ErrInternalServerError
-		}
-		prof.HeightCM, prof.WeightKG, prof.Allergies, prof.MedicalHistory = h, w, a, m
-	} else {
-		sip, spc, err := s.users.GetDoctorProfileByUserID(userID)
-		if err != nil {
-			return nil, constant.ErrInternalServerError
-		}
-		prof.SIPNumber, prof.Specialty = sip, spc
-	}
-
-	ulog.Infof(ctx, "set-profile success user_id=%s role=%s", userID, role)
-	return &response.SetProfileResponse{
-		Role:    role,
-		Profile: prof,
-	}, nil
+	return s.roles.Assign(userID, roleID)
 }
 
 /* ==================== Password helpers ==================== */
@@ -744,14 +530,18 @@ func (s *Service) PasswordForgot(ctx context.Context, req *request.PasswordForgo
 	if err := s.redis.Set(ctx, key, pin, s.pinTTL).Err(); err != nil {
 		return constant.ErrInternalServerError
 	}
-    if s.email != nil {
-        html := email.RenderResetPIN(u.FirstName, pin, int(s.pinTTL.Minutes()))
-        if err := s.email.Send(emailAddr, "PIN Reset Password MedikaOne", html); err != nil {
-            ulog.Errorf(ctx, "smtp send failed (forgot_send_pin): %v", err)
-            _ = s.redis.Del(ctx, key).Err()
-            return constant.ErrEmailSendFailed
-        }
-    }
+	if s.email != nil {
+		name := ""
+		if u.FirstName != nil {
+			name = *u.FirstName
+		}
+		html := email.RenderResetPIN(name, pin, int(s.pinTTL.Minutes()))
+		if err := s.email.Send(emailAddr, "PIN Reset Password MedikaOne", html); err != nil {
+			ulog.Errorf(ctx, "smtp send failed (forgot_send_pin): %v", err)
+			_ = s.redis.Del(ctx, key).Err()
+			return constant.ErrEmailSendFailed
+		}
+	}
 	ulog.Infof(ctx, "password forgot pin sent email=%s", emailAddr)
 	return nil
 }

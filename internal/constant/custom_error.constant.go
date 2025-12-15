@@ -200,7 +200,7 @@ var (
 		Code:       "EMAIL_SEND_FAILED",
 		StatusCode: http.StatusBadGateway,
 		Message:    "failed to send verification email, please try again later",
-		Detail:     GetMessageDetail(MsgInternalServerError),
+		Detail:     GetMessageDetail(MsgEmailSendFailed),
 	}
 	ErrAccountRoleNotFound = response.CustomError{
 		Code:       "ACCOUNT_ROLE_NOT_FOUND",

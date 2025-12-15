@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/scrypt"
@@ -77,11 +78,18 @@ func CreateUserActiveWithRole(db *gorm.DB, email, firstName, lastName, rawPasswo
 	}
 	hash := base64.StdEncoding.EncodeToString(key) + ":" + base64.StdEncoding.EncodeToString(salt)
 
+	// Generate username from email (take header)
+	username := email
+	if idx := strings.Index(email, "@"); idx > 0 {
+		username = email[:idx]
+	}
+
 	now := time.Now()
 	u = entity.User{
 		Email:        email,
-		FirstName:    firstName,
-		LastName:     lastName,
+		Username:     username, // <=== Assigned
+		FirstName:    &firstName,
+		LastName:     &lastName,
 		PasswordHash: hash,
 		Status:       "active",
 		VerifiedAt:   &now,
@@ -92,9 +100,9 @@ func CreateUserActiveWithRole(db *gorm.DB, email, firstName, lastName, rawPasswo
 
 	// Assign role
 	if err := db.Table("user_roles").Create(map[string]any{
-		"user_id":    u.ID,
-		"role_id":    role.ID,
-		"created_at": time.Now(),
+		"user_id":     u.ID,
+		"role_id":     role.ID,
+		"assigned_at": time.Now(),
 	}).Error; err != nil {
 		return &u, err
 	}

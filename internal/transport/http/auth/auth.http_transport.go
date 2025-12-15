@@ -4,10 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	userrepo "github.com/api-monolith-template/internal/repository/user"
 	"net/http"
 	"strings"
 	"time"
+
+	userrepo "github.com/api-monolith-template/internal/repository/user"
 
 	"github.com/gin-gonic/gin"
 
@@ -32,12 +33,12 @@ func NewController(svc *auth.Service, ur *userrepo.Repository) *Controller {
 // =======================================
 
 func (ctl *Controller) Register(c *gin.Context) {
-	var req request.RegisterLiteRequest
+	var req request.RegisterRequest
 	if err := util.BindAndValidate(c, &req); err != nil {
 		util.HandleError(c, err)
 		return
 	}
-	u, err := ctl.svc.RegisterLite(c.Request.Context(), &req)
+	u, err := ctl.svc.Register(c.Request.Context(), &req)
 	if err != nil {
 		util.HandleError(c, err)
 		return
@@ -130,46 +131,6 @@ func (ctl *Controller) LoginPublic(c *gin.Context) {
 	util.HandleResponse(c, resp, nil)
 }
 
-func (ctl *Controller) LoginHospital(c *gin.Context) {
-	var req request.LoginHospitalRequest
-	if err := util.BindAndValidate(c, &req); err != nil {
-		util.HandleError(c, err)
-		return
-	}
-
-	hint := ""
-	if req.HospitalID != nil && *req.HospitalID != "" {
-		hint = *req.HospitalID
-	} else if req.HospitalCode != nil && *req.HospitalCode != "" {
-		hint = *req.HospitalCode
-	}
-
-	res, err := ctl.svc.LoginHospital(c.Request.Context(), req.Identifier, req.Password, hint)
-	if err != nil {
-		util.HandleError(c, err)
-		return
-	}
-
-	roleSlug := ""
-	if len(res.Roles) > 0 {
-		roleSlug = res.Roles[0].Slug
-	}
-
-	resp := response.NewResponseOK()
-	resp.StatusCode = http.StatusOK
-	resp.Data = response.LoginHospitalResponse{
-		AccessToken:           res.AccessToken,
-		RefreshToken:          res.RefreshToken,
-		ExpiresIn:             res.ExpiresIn,
-		TokenType:             res.TokenType,
-		HospitalID:            res.HospitalID,
-		Role:                  roleSlug,
-		AccessTokenExpiredAt:  res.AccessExp.UTC().Format(time.RFC3339),
-		RefreshTokenExpiredAt: res.RefreshExp.UTC().Format(time.RFC3339),
-	}
-	util.HandleResponse(c, resp, nil)
-}
-
 func (ctl *Controller) Refresh(c *gin.Context) {
 	var req request.RefreshTokenRequest
 	if err := util.BindAndValidate(c, &req); err != nil {
@@ -200,29 +161,6 @@ func (ctl *Controller) Refresh(c *gin.Context) {
 		AccessTokenExpiredAt:  aexp.UTC().Format(time.RFC3339),
 		RefreshTokenExpiredAt: rexp.UTC().Format(time.RFC3339),
 	}
-	util.HandleResponse(c, resp, nil)
-}
-
-func (ctl *Controller) ChooseRole(c *gin.Context) {
-	userID := util.GetUserID(c)
-	if userID == "" {
-		res := constant.ErrUnauthorized.ToResponse()
-		util.HandleResponse(c, &res, nil)
-		return
-	}
-	var req request.ChooseRoleRequest
-	if err := util.BindAndValidate(c, &req); err != nil {
-		util.HandleError(c, err)
-		return
-	}
-	role := strings.TrimSpace(req.Role)
-	if err := ctl.svc.ChooseRole(c.Request.Context(), userID, role); err != nil {
-		util.HandleError(c, err)
-		return
-	}
-	resp := response.NewResponseOK()
-	resp.StatusCode = http.StatusOK
-	resp.Data = gin.H{"role": role}
 	util.HandleResponse(c, resp, nil)
 }
 
@@ -273,46 +211,6 @@ func (ctl *Controller) PasswordChange(c *gin.Context) {
 	}
 	resp := response.NewResponseOK()
 	resp.Data = gin.H{"status": "password_changed"}
-	util.HandleResponse(c, resp, nil)
-}
-
-// === SET PROFILE (gabungan choose-role + set profile) ===
-
-func (ctl *Controller) SetProfile(c *gin.Context) {
-	var req request.SetProfileRequest
-	if err := util.BindAndValidate(c, &req); err != nil {
-		util.HandleError(c, err)
-		return
-	}
-	userID := util.GetUserID(c)
-	if userID == "" {
-		util.HandleError(c, constant.ErrUnauthorized)
-		return
-	}
-
-	// Safety normalize role ke UPPERCASE di service juga.
-	req.Role = strings.ToUpper(strings.TrimSpace(req.Role))
-
-	// Pastikan profile non-null dan JSON well-formed
-	if req.Profile == nil || len(*req.Profile) == 0 || string(*req.Profile) == "null" {
-		util.HandleError(c, constant.ErrValidationError)
-		return
-	}
-	var tmp json.RawMessage
-	if err := json.Unmarshal(*req.Profile, &tmp); err != nil {
-		util.HandleError(c, constant.ErrValidationError)
-		return
-	}
-
-	res, err := ctl.svc.SetProfile(c.Request.Context(), userID, req.Role, req.Profile)
-	if err != nil {
-		util.HandleError(c, err)
-		return
-	}
-
-	resp := response.NewResponseOK()
-	resp.StatusCode = http.StatusOK
-	resp.Data = res
 	util.HandleResponse(c, resp, nil)
 }
 

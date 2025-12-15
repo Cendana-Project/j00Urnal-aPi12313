@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/api-monolith-template/internal/constant" // <=== added
 	"github.com/api-monolith-template/internal/model/entity"
@@ -32,7 +31,7 @@ func (r *Repository) FindBySlug(slug string) (*entity.Role, error) {
 
 func (r *Repository) Assign(userID, roleID string) error {
 	return r.db.Exec(`
-		INSERT INTO user_roles (user_id, role_id, created_at)
+		INSERT INTO user_roles (user_id, role_id, assigned_at)
 		VALUES (?, ?, NOW())
 		ON CONFLICT (user_id, role_id) DO NOTHING
 	`, userID, roleID).Error
@@ -90,42 +89,6 @@ WHERE ur.user_id = ? AND r.slug = ?` // <=== changed (pakai placeholder)
 	return out.C > 0, nil
 }
 
-// =====================
-// Tenant-scoped (hospital)
-// =====================
-
-// Assign role pada user di scope hospital (idempotent)
-func (r *Repository) AssignHospitalRole(ctx context.Context, hospitalID, userID, roleID string) error {
-	row := map[string]any{
-		"hospital_id": hospitalID,
-		"user_id":     userID,
-		"role_id":     roleID,
-	}
-	return r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "hospital_id"}, {Name: "user_id"}, {Name: "role_id"}},
-			DoNothing: true,
-		}).
-		Table("hospital_user_roles").
-		Create(row).Error
-}
-
-// Daftar permissions user pada hospital tertentu
-func (r *Repository) ListHospitalPermissionsByUser(ctx context.Context, hospitalID, userID string) ([]entity.Permission, error) {
-	var perms []entity.Permission
-	q := `
-SELECT DISTINCT p.id, p.name, p.slug, p.description, p.is_active, p.created_at, p.updated_at, p.deleted_at
-FROM hospital_user_roles hur
-JOIN role_permissions rp ON rp.role_id = hur.role_id
-JOIN permissions p ON p.id = rp.permission_id
-WHERE hur.hospital_id = ? AND hur.user_id = ? AND p.is_active = TRUE
-`
-	if err := r.db.WithContext(ctx).Raw(q, hospitalID, userID).Scan(&perms).Error; err != nil {
-		return nil, err
-	}
-	return perms, nil
-}
-
 // ListRolesByUser: daftar role global (aktif) milik user
 func (r *Repository) ListRolesByUser(ctx context.Context, userID string) ([]entity.Role, error) {
 	var roles []entity.Role
@@ -139,42 +102,4 @@ ORDER BY r.name`
 		return nil, err
 	}
 	return roles, nil
-}
-
-// ListHospitalRolesByUser: role aktif user pada hospital tertentu
-func (r *Repository) ListHospitalRolesByUser(ctx context.Context, hospitalID, userID string) ([]entity.Role, error) {
-	var roles []entity.Role
-	const q = `
-SELECT r.id, r.name, r.slug, r.description, r.active, r.created_at, r.updated_at, r.deleted_at
-FROM hospital_user_roles hur
-JOIN roles r ON r.id = hur.role_id
-WHERE hur.hospital_id = ? AND hur.user_id = ? AND r.active = TRUE
-ORDER BY r.name`
-	if err := r.db.WithContext(ctx).Raw(q, hospitalID, userID).Scan(&roles).Error; err != nil {
-		return nil, err
-	}
-	return roles, nil
-}
-
-// =====================
-// >>> Validasi Hospital Admin (pakai constants) <<<
-// =====================
-
-func (r *Repository) UserHasHospitalRole(ctx context.Context, hospitalID, userID, roleSlug string) (bool, error) {
-	type row struct{ C int64 }
-	var out row
-	const q = `
-SELECT COUNT(1) AS c
-FROM hospital_user_roles hur
-JOIN roles r ON r.id = hur.role_id
-WHERE hur.hospital_id = ? AND hur.user_id = ? AND r.slug = ?`
-	if err := r.db.WithContext(ctx).Raw(q, hospitalID, userID, roleSlug).Scan(&out).Error; err != nil {
-		return false, err
-	}
-	return out.C > 0, nil
-}
-
-// IsUserHospitalAdmin true jika user adalah ADMIN (scoped ke hospital) sesuai constants.
-func (r *Repository) IsUserHospitalAdmin(ctx context.Context, hospitalID, userID string) (bool, error) { // <=== changed (pakai constant)
-	return r.UserHasHospitalRole(ctx, hospitalID, userID, constant.RoleAdmin)
 }

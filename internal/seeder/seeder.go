@@ -46,15 +46,6 @@ func Run(db *gorm.DB) error {
 		if err := SeedSampleUsers(tx); err != nil {
 			return fmt.Errorf("seed sample users: %w", err)
 		}
-		// 5) hospitals
-		if err := SeedHospitals(tx); err != nil {
-			return fmt.Errorf("seed hospitals: %w", err)
-		}
-		// 6) link user ↔ hospital
-		if err := SeedUserHospitals(tx); err != nil {
-			return fmt.Errorf("seed user_hospitals: %w", err)
-		}
-
 		return nil
 	}); err != nil {
 		return err
@@ -128,14 +119,6 @@ func Flush(db *gorm.DB) error {
 		if err := db.Exec(`DELETE FROM roles WHERE id IN (?)`, roleIDs).Error; err != nil {
 			return err
 		}
-	}
-
-	// 5) (opsional) bersihkan hospital & user_hospitals demo
-	if err := db.Exec(`DELETE FROM user_hospitals WHERE hospital_id IN (SELECT id FROM hospitals WHERE code IN ('HSP-MO-001','HSP-MO-002'))`).Error; err != nil {
-		return err
-	}
-	if err := db.Exec(`DELETE FROM hospitals WHERE code IN ('HSP-MO-001','HSP-MO-002')`).Error; err != nil {
-		return err
 	}
 
 	return nil

@@ -5,27 +5,23 @@ import (
 
 	"github.com/api-monolith-template/internal/constant"
 	authCtrl "github.com/api-monolith-template/internal/transport/http/auth"
-	hospCtrl "github.com/api-monolith-template/internal/transport/http/hospital"
 	userCtrl "github.com/api-monolith-template/internal/transport/http/user"
 	warmupCtrl "github.com/api-monolith-template/internal/transport/http/warmup"
 	transportmw "github.com/api-monolith-template/internal/transport/middleware"
 	"github.com/api-monolith-template/internal/util"
 
-	hospRepo "github.com/api-monolith-template/internal/repository/hospital"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
 
 	"github.com/api-monolith-template/internal/infrastructure" // <=== added (to get Redis client here)
 )
 
 type Transport struct {
-	router             *gin.Engine
-	authController     *authCtrl.Controller
-	userController     *userCtrl.Controller
-	hospitalController *hospCtrl.Controller
-	warmupController   *warmupCtrl.Controller
+	router           *gin.Engine
+	authController   *authCtrl.Controller
+	userController   *userCtrl.Controller
+	warmupController *warmupCtrl.Controller
 
 	roleRepo *roleRepo.Repository
-	hospRepo *hospRepo.Repository
 }
 
 func NewTransport() *Transport                              { return new(Transport) }
@@ -38,16 +34,8 @@ func (t *Transport) WithUserController(c *userCtrl.Controller) *Transport {
 	t.userController = c
 	return t
 }
-func (t *Transport) WithHospitalController(c *hospCtrl.Controller) *Transport {
-	t.hospitalController = c
-	return t
-}
 func (t *Transport) WithRoleRepository(repo *roleRepo.Repository) *Transport {
 	t.roleRepo = repo
-	return t
-}
-func (t *Transport) WithHospitalRepository(repo *hospRepo.Repository) *Transport {
-	t.hospRepo = repo
 	return t
 }
 func (t *Transport) WithWarmupController(c *warmupCtrl.Controller) *Transport {
@@ -72,7 +60,6 @@ func (t *Transport) InitRoute() {
 		auth.POST("/verify-pin", t.authController.VerifyPIN)
 
 		auth.POST("/login", t.authController.LoginPublic)
-		auth.POST("/login/hospital", t.authController.LoginHospital)
 
 		auth.POST("/refresh", t.authController.Refresh)
 		auth.POST("/password/forgot", t.authController.PasswordForgot)
@@ -82,52 +69,12 @@ func (t *Transport) InitRoute() {
 	// Prepare Redis client for auth middleware (one instance here). // <=== added
 	rdb := infrastructure.NewRedisClient() // <=== added
 
-	// === PROTECTED — USER-LEVEL ===
 	protected := v1.Group("/")
-	protected.Use(transportmw.AuthRequired(rdb)) // <=== changed: pass rdb
+	protected.Use(transportmw.AuthRequired(rdb))
 	{
-		protected.GET("/me", t.userController.Me) // <=== added
-
-		protected.POST("/auth/choose-role", t.authController.ChooseRole)
-
-		protected.PUT("/profile/patient",
-			transportmw.RequirePermissions(t.roleRepo, constant.PermissionPatientEdit),
-			t.userController.UpdatePatientProfile,
-		)
-
+		protected.GET("/me", t.userController.Me)
 		protected.PUT("/auth/password", t.authController.PasswordChange)
-
-		protected.PUT("/profile/doctor",
-			transportmw.RequirePermissions(t.roleRepo, constant.PermissionDoctorEdit),
-			t.userController.UpdateDoctorProfile,
-		)
-
-		protected.POST("/hospitals",
-			transportmw.RequirePermissions(t.roleRepo, constant.PermissionUserCreate, constant.PermissionRoleAssign),
-			t.hospitalController.CreateHospital,
-		)
-
-		protected.POST("/auth/set-profile", t.authController.SetProfile) // endpoint gabungan
-
-		// === NEW: Logout endpoints ===
 		protected.POST("/auth/logout", t.authController.Logout)
-	}
-
-	// === PROTECTED — HOSPITAL SCOPED (JWT + Tenant) ===
-	tenant := v1.Group("/")
-	tenant.Use(transportmw.AuthRequired(rdb), transportmw.TenantContext()) // <=== changed: pass rdb
-	{
-		tenant.POST("/hospitals/:hospital_id/admins",
-			transportmw.RequireHospitalPermissions(t.hospRepo, t.roleRepo, constant.PermissionRoleAssign),
-			t.hospitalController.CreateHospitalAdmin,
-		)
-
-		tenant.POST("/hospitals/:hospital_id/staff",
-			transportmw.RequireHospitalAdminOrSuper(t.hospRepo, t.roleRepo), // <=== changed: enforce hospital admin or super admin
-			t.hospitalController.CreateHospitalStaff,
-		)
-
-		tenant.GET("/tenant/me", t.userController.TenantMe) // <=== added
 	}
 
 	// 404

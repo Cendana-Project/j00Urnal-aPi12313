@@ -1,9 +1,9 @@
 package config
 
 import (
-	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -111,23 +111,16 @@ type SMTP struct {
 }
 
 func LoadConfig() error {
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	viper.AddConfigPath(".")
-	replacer := strings.NewReplacer(".", "_")
-	viper.SetEnvKeyReplacer(replacer)
+	// Load .env file if exists (will not override existing env vars)
+	_ = godotenv.Load()
+
 	viper.AutomaticEnv()
 
 	// Bind env explicitly untuk nested struct
 	bindEnvVariables()
 
-	// File config opsional; ENV saja juga boleh
-	if err := viper.ReadInConfig(); err != nil {
-		logrus.Warn("config.yml not found or unreadable; relying on environment variables")
-	}
-
 	if err := viper.Unmarshal(&Env); err != nil {
-		logrus.Fatal("failed to unmarshal config file: ", err)
+		logrus.Fatal("failed to unmarshal config to struct: ", err)
 		return err
 	}
 	return nil

@@ -54,6 +54,7 @@ const (
 	MsgForbidden                MessageCode = "FORBIDDEN"
 	MsgConflict                 MessageCode = "CONFLICT"
 	MsgNotFound                 MessageCode = "NOT_FOUND"
+	MsgEmailSendFailed          MessageCode = "EMAIL_SEND_FAILED"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -119,6 +120,12 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "The requested resource could not be found",
 		TitleIdn: "Tidak Ditemukan",
 		DescIdn:  "Resource yang diminta tidak ditemukan",
+	},
+	MsgEmailSendFailed: {
+		TitleEng: "Email Send Failed",
+		DescEng:  "Failed to send email. Please check your email configuration or try again later.",
+		TitleIdn: "Gagal Mengirim Email",
+		DescIdn:  "Gagal mengirim email. Silakan periksa konfigurasi email Anda atau coba lagi nanti.",
 	},
 }
 
