@@ -17,7 +17,7 @@ func accessBlacklistKey(jti string) string { return "access:blacklist:" + jti } 
 
 // AuthRequired validates Bearer access token (JWT HS256) + blacklist check. // <=== changed
 func AuthRequired(rdb *redis.Client) gin.HandlerFunc { // <=== changed (accept redis client)
-	secret := []byte(config.Env.JWT.Secret)
+	secret := []byte(config.Env.Token.AccessTokenSecret)
 
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")

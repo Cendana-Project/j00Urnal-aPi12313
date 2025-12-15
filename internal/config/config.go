@@ -157,6 +157,8 @@ func bindEnvVariables() {
 
 	// Server
 	viper.BindEnv("server.port", "SERVER_PORT")
+	viper.BindEnv("server.base_url", "SERVER_BASE_URL")
+	viper.BindEnv("server.frontend_url", "SERVER_FRONTEND_URL")
 
 	// Database
 	viper.BindEnv("database.dsn", "DATABASE_DSN")
@@ -184,6 +186,9 @@ func bindEnvVariables() {
 	viper.BindEnv("token.access_token_duration", "TOKEN_ACCESS_TOKEN_DURATION")
 	viper.BindEnv("token.refresh_token_secret", "TOKEN_REFRESH_TOKEN_SECRET")
 	viper.BindEnv("token.refresh_token_duration", "TOKEN_REFRESH_TOKEN_DURATION")
+	viper.BindEnv("token.forgot_password_duration", "TOKEN_FORGOT_PASSWORD_DURATION")
+	viper.BindEnv("token.forgot_password_rate_limit", "TOKEN_FORGOT_PASSWORD_RATE_LIMIT")
+	viper.BindEnv("token.forgot_password_rate_window", "TOKEN_FORGOT_PASSWORD_RATE_WINDOW")
 
 	// SMTP
 	viper.BindEnv("smtp.host", "SMTP_HOST")
@@ -239,59 +244,4 @@ func (c *EnvConfig) Validate() error {
 	}
 
 	return nil
-}
-
-// bindEnvVariables: pastikan field terikat ENV vars
-func bindEnvVariables() {
-	// Top level
-	viper.BindEnv("env", "ENV")
-	viper.BindEnv("log_level", "LOG_LEVEL")
-	viper.BindEnv("graceful_shutdown_timeout", "GRACEFUL_SHUTDOWN_TIMEOUT")
-
-	// Server
-	viper.BindEnv("server.port", "SERVER_PORT")
-	viper.BindEnv("server.base_url", "SERVER_BASE_URL")
-
-	// Database
-	viper.BindEnv("database.dsn", "DATABASE_DSN")
-	viper.BindEnv("database.ping_interval", "DATABASE_PING_INTERVAL")
-	viper.BindEnv("database.reconnect_factor", "DATABASE_RECONNECT_FACTOR")
-	viper.BindEnv("database.min_jitter", "DATABASE_MIN_JITTER")
-	viper.BindEnv("database.max_jitter", "DATABASE_MAX_JITTER")
-	viper.BindEnv("database.max_retry", "DATABASE_MAX_RETRY")
-	viper.BindEnv("database.max_idle_conns", "DATABASE_MAX_IDLE_CONNS")
-	viper.BindEnv("database.max_open_conns", "DATABASE_MAX_OPEN_CONNS")
-	viper.BindEnv("database.max_conn_lifetime", "DATABASE_MAX_CONN_LIFETIME")
-
-	// Redis
-	viper.BindEnv("redis.is_cache_disable", "REDIS_IS_CACHE_DISABLE")
-	viper.BindEnv("redis.cache_dsn", "REDIS_CACHE_DSN")
-	viper.BindEnv("redis.default_cache_duration", "REDIS_DEFAULT_CACHE_DURATION")
-	viper.BindEnv("redis.max_retry", "REDIS_MAX_RETRY")
-	viper.BindEnv("redis.max_idle_conns", "REDIS_MAX_IDLE_CONNS")
-	viper.BindEnv("redis.max_active_conns", "REDIS_MAX_ACTIVE_CONNS")
-	viper.BindEnv("redis.max_conn_lifetime", "REDIS_MAX_CONN_LIFETIME")
-
-	// Token
-	viper.BindEnv("token.password_salt", "TOKEN_PASSWORD_SALT")
-	viper.BindEnv("token.access_token_secret", "TOKEN_ACCESS_TOKEN_SECRET")
-	viper.BindEnv("token.access_token_duration", "TOKEN_ACCESS_TOKEN_DURATION")
-	viper.BindEnv("token.refresh_token_secret", "TOKEN_REFRESH_TOKEN_SECRET")
-	viper.BindEnv("token.refresh_token_duration", "TOKEN_REFRESH_TOKEN_DURATION")
-	viper.BindEnv("token.forgot_password_rate_limit", "TOKEN_FORGOT_PASSWORD_RATE_LIMIT")
-	viper.BindEnv("token.forgot_password_rate_window", "TOKEN_FORGOT_PASSWORD_RATE_WINDOW")
-
-	// JWT
-	viper.BindEnv("jwt.secret", "JWT_SECRET")
-	viper.BindEnv("jwt.access_ttl", "JWT_ACCESS_TTL")   // e.g. "15m"
-	viper.BindEnv("jwt.refresh_ttl", "JWT_REFRESH_TTL") // e.g. "720h"
-	viper.BindEnv("jwt.access_ttl_minutes", "JWT_ACCESS_TTL_MINUTES")
-	viper.BindEnv("jwt.refresh_ttl_days", "JWT_REFRESH_TTL_DAYS")
-
-	// SMTP
-	viper.BindEnv("smtp.host", "SMTP_HOST")
-	viper.BindEnv("smtp.port", "SMTP_PORT")
-	viper.BindEnv("smtp.username", "SMTP_USERNAME")
-	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
-	viper.BindEnv("smtp.from", "SMTP_FROM")
 }

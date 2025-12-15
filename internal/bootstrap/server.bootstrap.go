@@ -15,6 +15,9 @@ import (
 	userRepo "github.com/api-monolith-template/internal/repository/user"
 	authSvc "github.com/api-monolith-template/internal/service/auth"
 	httpTransport "github.com/api-monolith-template/internal/transport/http"
+	authHttp "github.com/api-monolith-template/internal/transport/http/auth"
+	userHttp "github.com/api-monolith-template/internal/transport/http/user"
+	warmupHttp "github.com/api-monolith-template/internal/transport/http/warmup"
 	"github.com/api-monolith-template/internal/util"
 	"github.com/sirupsen/logrus"
 )
@@ -53,10 +56,8 @@ func StartServer() {
 	}
 	username := config.Env.SMTP.Username
 	password := config.Env.SMTP.Password
-	fromEmail := config.Env.SMTP.From
-	if fromEmail == "" {
-		fromEmail = "no-reply@medikaone.id"
-	}
+	// Use default from email since SMTP struct doesn't have From field
+	fromEmail := "no-reply@medikaone.id"
 
 	// Configure email timeout (default 30s, override via EMAIL_TIMEOUT_SECONDS)
 	timeoutSeconds := 30

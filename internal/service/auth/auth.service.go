@@ -54,7 +54,8 @@ type Service struct {
 
 func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *redis.Client, sender EmailSender) *Service {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
-	acc, ref := config.Env.JWT.ParseDurations()
+	acc := config.Env.Token.AccessTokenDuration
+	ref := config.Env.Token.RefreshTokenDuration
 
 	return &Service{
 		users:      users,
@@ -65,7 +66,7 @@ func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *red
 		pinTTL:     10 * time.Minute,
 		accessTTL:  acc,
 		refreshTTL: ref,
-		jwtSecret:  []byte(config.Env.JWT.Secret),
+		jwtSecret:  []byte(config.Env.Token.AccessTokenSecret),
 	}
 }
 
