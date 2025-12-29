@@ -216,6 +216,12 @@ func openDBConn(dsn string) (*gorm.DB, error) {
 	// This prevents "prepared statement already exists" errors on Render/Supabase
 	dsnWithParams := buildDSNWithParams(dsn)
 
+	// Log DSN parameters (without credentials) for debugging
+	logrus.WithFields(logrus.Fields{
+		"has_statement_cache_capacity": strings.Contains(dsnWithParams, "statement_cache_capacity=0"),
+		"has_statement_cache_mode":     strings.Contains(dsnWithParams, "statement_cache_mode=describe"),
+	}).Debug("database DSN parameters configured")
+
 	// Configure GORM with best practices for managed Postgres
 	psqlDialector := postgres.Open(dsnWithParams)
 
@@ -243,36 +249,47 @@ func openDBConn(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to get database connection: %w", err)
 	}
 
-	// Configure connection pool with best practices for managed Postgres
-	// Conservative settings to avoid connection exhaustion and prepared statement conflicts
+	// Configure connection pool with best practices for production
+	// Since we've disabled statement cache with statement_cache_capacity=0,
+	// we can use more reasonable connection pool settings
 	maxIdleConns := config.Env.Database.MaxIdleConns
 	maxOpenConns := config.Env.Database.MaxOpenConns
 	connMaxLifetime := config.Env.Database.MaxConnLifetime
 
-	// For managed Postgres (Render/Supabase), use more conservative settings
-	// These settings help prevent prepared statement conflicts by forcing connection rotation
+	// For managed Postgres (Render/Supabase), optimize for production workload
 	if config.Env.Env == constant.ProductionEnvironment {
-		// Limit idle connections to prevent prepared statement conflicts
-		// Fewer idle connections = less chance of reusing connections with cached prepared statements
-		if maxIdleConns > 3 {
-			maxIdleConns = 3
+		// Production-optimized connection pool settings
+		// Max idle connections: 20-30% of max open connections
+		// This balances connection reuse with resource efficiency
+		if maxIdleConns > 10 {
+			maxIdleConns = 10
 		}
-		// Limit open connections to match managed Postgres connection limits
-		if maxOpenConns > 15 {
-			maxOpenConns = 15
+		if maxIdleConns < 5 {
+			maxIdleConns = 5
 		}
-		// Very short connection lifetime to force frequent reconnection
-		// This clears any prepared statements that might be cached
-		// 5 minutes is aggressive but necessary to prevent prepared statement conflicts
-		if connMaxLifetime > 5*time.Minute {
-			connMaxLifetime = 5 * time.Minute
+
+		// Max open connections: match managed Postgres connection limits
+		// Render free tier typically allows 20-30 connections
+		// For higher tiers, can be increased to 50-100
+		if maxOpenConns > 25 {
+			maxOpenConns = 25
 		}
-		// Short idle timeout to close idle connections quickly
-		// This prevents stale connections with prepared statements from being reused
-		conn.SetConnMaxIdleTime(2 * time.Minute)
+
+		// Connection lifetime: 15-30 minutes is optimal
+		// Long enough for performance, short enough for leak detection
+		// and to pick up connection parameter changes
+		if connMaxLifetime > 30*time.Minute {
+			connMaxLifetime = 30 * time.Minute
+		}
+		if connMaxLifetime < 15*time.Minute {
+			connMaxLifetime = 15 * time.Minute
+		}
+
+		// Idle timeout: 5-10 minutes balances reuse and cleanup
+		conn.SetConnMaxIdleTime(10 * time.Minute)
 	} else {
-		// Development: use longer timeouts
-		conn.SetConnMaxIdleTime(5 * time.Minute)
+		// Development: use more relaxed settings
+		conn.SetConnMaxIdleTime(15 * time.Minute)
 	}
 
 	conn.SetMaxIdleConns(maxIdleConns)
@@ -303,8 +320,15 @@ func buildDSNWithParams(dsn string) string {
 	hasParams := strings.Contains(dsn, "?")
 	params := []string{}
 
-	// For pgx driver (used by GORM), we need to disable prepared statement cache completely
-	// statement_cache_mode=describe tells pgx to use describe mode which doesn't cache prepared statements
+	// CRITICAL: Completely disable pgx statement cache
+	// The only way to truly disable statement cache in pgx is to set capacity to 0
+	// statement_cache_mode=describe still uses cache, just in a different mode
+	// Setting capacity to 0 prevents any caching at all
+	if !strings.Contains(dsn, "statement_cache_capacity") {
+		params = append(params, "statement_cache_capacity=0")
+	}
+
+	// Also set statement_cache_mode=describe as additional safeguard
 	if !strings.Contains(dsn, "statement_cache_mode") {
 		params = append(params, "statement_cache_mode=describe")
 	}
