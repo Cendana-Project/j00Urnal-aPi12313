@@ -40,6 +40,9 @@ WORKDIR /root/
 # Copy the binary from builder stage
 COPY --from=builder /app/main .
 
+# Copy migration files (needed for goose migrations at runtime)
+COPY --from=builder /app/migration ./migration
+
 # Change ownership to appuser
 RUN chown -R appuser:appuser /root/
 

@@ -2,12 +2,15 @@ package infrastructure
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/api-monolith-template/internal/config"
+	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/jpillora/backoff"
+	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -40,14 +43,25 @@ func InitializeDBConn() *gorm.DB {
 	}
 
 	// AutoMigrate to sync schema
-	if err := DB.AutoMigrate(
-		&entity.User{},
-		&entity.Role{},
-		&entity.Permission{},
-		&entity.UserRole{},
-		&entity.RolePermission{},
-	); err != nil {
-		logrus.Fatal("failed to auto-migrate: ", err)
+	// NOTE:
+	// - In production we rely on explicit SQL migrations instead of AutoMigrate.
+	// - Some managed Postgres providers (like Render) can return fatal errors such as
+	//   "prepared statement already exists" or "relation already exists" when
+	//   AutoMigrate issues DDL on an already‑managed schema.
+	// - To avoid bringing the whole service down on startup, we only run AutoMigrate
+	//   outside production.
+	if config.Env.Env != constant.ProductionEnvironment {
+		if err := DB.AutoMigrate(
+			&entity.User{},
+			&entity.Role{},
+			&entity.Permission{},
+			&entity.UserRole{},
+			&entity.RolePermission{},
+		); err != nil {
+			logrus.Fatal("failed to auto-migrate: ", err)
+		}
+	} else {
+		logrus.Info("skipping GORM AutoMigrate in production environment")
 	}
 
 	MapHealthCheck["database"] = func(ctx context.Context) error {
@@ -65,6 +79,36 @@ func InitializeDBConn() *gorm.DB {
 
 	logrus.Info("connection to database Server success...")
 	return DB
+}
+
+// RunMigrations runs database migrations using goose.
+// This function is safe to call multiple times - goose will skip migrations
+// that have already been applied. It will not fail if migrations already exist.
+func RunMigrations() error {
+	migrationDir := "migration/db"
+
+	db, err := sql.Open("postgres", config.Env.Database.DSN)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+
+	logrus.Info("running database migrations...")
+	// goose.Up with WithAllowMissing() will:
+	// - Apply any pending migrations
+	// - Skip migrations that have already been applied (no error)
+	// - Continue even if some migration files are missing
+	if err := goose.Up(db, migrationDir, goose.WithAllowMissing()); err != nil {
+		logrus.WithError(err).Error("migration failed")
+		return err
+	}
+
+	logrus.Info("database migrations completed successfully")
+	return nil
 }
 
 func checkConnection(ticker *time.Ticker) {
