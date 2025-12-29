@@ -321,19 +321,27 @@ func buildDSNWithParams(dsn string) string {
 	params := []string{}
 
 	// CRITICAL: Completely disable pgx statement cache
-	// The only way to truly disable statement cache in pgx is to set capacity to 0
-	// statement_cache_mode=describe still uses cache, just in a different mode
-	// Setting capacity to 0 prevents any caching at all
+	// Multiple approaches to ensure no prepared statement caching:
+	
+	// 1. Set statement cache capacity to 0 (pgx-specific)
+	// This is THE KEY to preventing "prepared statement already exists" errors
 	if !strings.Contains(dsn, "statement_cache_capacity") {
 		params = append(params, "statement_cache_capacity=0")
 	}
+	
+	// 2. Set default_query_exec_mode to simple protocol (pgx v5+)
+	// This forces simple query protocol instead of extended protocol (which uses prepared statements)
+	// Use 'simple_protocol' to COMPLETELY avoid prepared statements
+	if !strings.Contains(dsn, "default_query_exec_mode") {
+		params = append(params, "default_query_exec_mode=simple_protocol")
+	}
 
-	// Also set statement_cache_mode=describe as additional safeguard
+	// 3. Also set statement_cache_mode=describe as additional safeguard
 	if !strings.Contains(dsn, "statement_cache_mode") {
 		params = append(params, "statement_cache_mode=describe")
 	}
 
-	// Add prefer_simple_protocol=1 as fallback (works with lib/pq, ignored by pgx but harmless)
+	// 4. Add prefer_simple_protocol=1 as fallback (works with lib/pq, ignored by pgx but harmless)
 	if !strings.Contains(dsn, "prefer_simple_protocol") {
 		params = append(params, "prefer_simple_protocol=1")
 	}
