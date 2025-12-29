@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: journal-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /_internal/healthz
+    # Render will automatically set PORT environment variable
+    # The app will use PORT if SERVER_PORT is not set
+    envVars:
+      - key: ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Note: The following environment variables MUST be set in Render dashboard:
+      # - DATABASE_DSN (auto-set if you add PostgreSQL add-on)
+      # - UPSTASH_REDIS_REST_URL
+      # - UPSTASH_REDIS_REST_TOKEN  
+      # - REDIS_IS_CACHE_DISABLE (set to "false" or "true")
+      # - TOKEN_PASSWORD_SALT (generate with: openssl rand -base64 32)
+      # - TOKEN_ACCESS_TOKEN_SECRET (generate with: openssl rand -base64 32)
+      # - TOKEN_REFRESH_TOKEN_SECRET (generate with: openssl rand -base64 32)
+

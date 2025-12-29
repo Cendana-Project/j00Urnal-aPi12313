@@ -22,11 +22,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates and wget for HTTPS requests and health checks
+RUN apk --no-cache add ca-certificates wget
 
 # Create non-root user
 RUN adduser -D -s /bin/sh appuser
+
+# Health check script (create before switching users)
+RUN echo '#!/bin/sh' > /healthcheck.sh && \
+    echo 'PORT=${PORT:-8080}' >> /healthcheck.sh && \
+    echo 'wget --no-verbose --tries=1 --spider http://localhost:${PORT}/_internal/healthz || exit 1' >> /healthcheck.sh && \
+    chmod +x /healthcheck.sh
 
 # Set working directory
 WORKDIR /root/
@@ -40,12 +46,12 @@ RUN chown -R appuser:appuser /root/
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 8081
+# Expose port (Render will set PORT env var)
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1
+  CMD /healthcheck.sh
 
 # Run the application
 CMD ["./main", "server"]

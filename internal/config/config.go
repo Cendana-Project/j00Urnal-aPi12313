@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -103,6 +104,14 @@ func LoadConfig() error {
 	if err := viper.Unmarshal(&Env); err != nil {
 		logrus.Fatal("failed to unmarshal config: ", err)
 		return err
+	}
+
+	// Use PORT env var (set by Render/Heroku) if SERVER_PORT is not explicitly set
+	// Check if SERVER_PORT was actually set in environment, if not, use PORT
+	if os.Getenv("SERVER_PORT") == "" {
+		if port := os.Getenv("PORT"); port != "" {
+			Env.Server.Port = port
+		}
 	}
 
 	// Validate configuration
