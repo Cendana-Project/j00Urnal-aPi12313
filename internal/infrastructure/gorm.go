@@ -113,7 +113,14 @@ func reconnectDBConn() {
 func openDBConn(dsn string) (*gorm.DB, error) {
 	psqlDialector := postgres.Open(dsn)
 	db, err := gorm.Open(psqlDialector, &gorm.Config{
-		PrepareStmt:    true,
+		// NOTE:
+		// - We deliberately disable GORM's global prepared statement cache here.
+		// - On some managed Postgres providers (including Render), enabling
+		//   PrepareStmt together with AutoMigrate can trigger
+		//   "prepared statement already exists" (SQLSTATE 42P05) errors at startup.
+		// - Disabling it avoids those startup failures with negligible impact
+		//   for this API workload.
+		PrepareStmt:    false,
 		TranslateError: true,
 	})
 	if err != nil {
