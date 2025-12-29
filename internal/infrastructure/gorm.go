@@ -14,6 +14,9 @@ import (
 	"github.com/jpillora/backoff"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
+	// Use lib/pq instead of pgx for PgBouncer compatibility
+	// lib/pq doesn't have aggressive statement caching like pgx
+	_ "github.com/lib/pq" // PostgreSQL driver
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -231,9 +234,17 @@ func openDBConn(dsn string) (*gorm.DB, error) {
 	// Enhance DSN with necessary parameters
 	dsnWithParams := buildDSN(dsn)
 
+	// CRITICAL: Use postgres.New with PreferSimpleProtocol to force lib/pq behavior
+	// This completely avoids pgx's aggressive statement caching
+	dialector := postgres.New(postgres.Config{
+		DriverName:           "postgres", // Use lib/pq driver (imported with _)
+		DSN:                  dsnWithParams,
+		PreferSimpleProtocol: true, // Force simple protocol - NO prepared statements
+	})
+
 	// Configure GORM
-	db, err := gorm.Open(postgres.Open(dsnWithParams), &gorm.Config{
-		PrepareStmt:    false, // CRITICAL: Disable prepared statements for PgBouncer compatibility
+	db, err := gorm.Open(dialector, &gorm.Config{
+		PrepareStmt:    false, // Double safety: disable at GORM level too
 		TranslateError: true,
 		NowFunc:        func() time.Time { return time.Now().UTC() },
 	})
