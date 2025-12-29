@@ -56,8 +56,11 @@ func StartServer() {
 	}
 	username := config.Env.SMTP.Username
 	password := config.Env.SMTP.Password
-	// Use default from email since SMTP struct doesn't have From field
-	fromEmail := "no-reply@medikaone.id"
+	// Use configured from email or fallback to default
+	fromEmail := config.Env.SMTP.FromEmail
+	if fromEmail == "" {
+		fromEmail = "no-reply@medikaone.id"
+	}
 
 	// Configure email timeout (default 30s, override via EMAIL_TIMEOUT_SECONDS)
 	timeoutSeconds := 30

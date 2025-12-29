@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/api-monolith-template/internal/config"
@@ -155,15 +156,27 @@ func reconnectDBConn() {
 }
 
 func openDBConn(dsn string) (*gorm.DB, error) {
-	psqlDialector := postgres.Open(dsn)
+	// Add prefer_simple_protocol=1 to DSN to disable prepared statements at driver level
+	// This prevents "prepared statement already exists" errors on managed Postgres providers
+	// like Render/Supabase where connections are pooled and reused
+	dsnWithParams := dsn
+	if !strings.Contains(dsn, "prefer_simple_protocol") {
+		separator := "?"
+		if strings.Contains(dsn, "?") {
+			separator = "&"
+		}
+		dsnWithParams = dsn + separator + "prefer_simple_protocol=1"
+	}
+
+	psqlDialector := postgres.Open(dsnWithParams)
 	db, err := gorm.Open(psqlDialector, &gorm.Config{
 		// NOTE:
 		// - We deliberately disable GORM's global prepared statement cache here.
-		// - On some managed Postgres providers (including Render), enabling
-		//   PrepareStmt together with AutoMigrate can trigger
-		//   "prepared statement already exists" (SQLSTATE 42P05) errors at startup.
-		// - Disabling it avoids those startup failures with negligible impact
-		//   for this API workload.
+		// - On some managed Postgres providers (including Render/Supabase), enabling
+		//   PrepareStmt together with connection pooling can trigger
+		//   "prepared statement already exists" (SQLSTATE 42P05) errors.
+		// - We also add prefer_simple_protocol=1 to DSN to disable prepared statements
+		//   at the PostgreSQL driver level, ensuring no prepared statements are created.
 		PrepareStmt:    false,
 		TranslateError: true,
 	})

@@ -71,10 +71,11 @@ type Database struct {
 }
 
 type SMTP struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
+	Host      string `mapstructure:"host"`
+	Port      int    `mapstructure:"port"`
+	Username  string `mapstructure:"username"`
+	Password  string `mapstructure:"password"`
+	FromEmail string `mapstructure:"from_email"`
 }
 
 // LoadConfig loads configuration from .env file and environment variables
@@ -204,6 +205,7 @@ func bindEnvVariables() {
 	viper.BindEnv("smtp.port", "SMTP_PORT")
 	viper.BindEnv("smtp.username", "SMTP_USERNAME")
 	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
+	viper.BindEnv("smtp.from_email", "SMTP_FROM_EMAIL")
 }
 
 // Validate checks if all required configuration values are set correctly

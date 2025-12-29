@@ -77,29 +77,52 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	sb.WriteString(htmlBody)
 	msg := []byte(sb.String())
 
-	// Dial TCP
-	dialer := &net.Dialer{Timeout: s.cfg.Timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	// Determine if we need SSL/TLS directly (port 465) or STARTTLS (port 587)
+	useSSL := s.cfg.Port == 465
 
-	client, err := smtp.NewClient(conn, s.cfg.Host)
-	if err != nil {
-		return err
-	}
-	defer client.Quit()
-
-	// STARTTLS (Gmail port 587)
-	if s.cfg.UseSTARTTLS {
+	var client *smtp.Client
+	if useSSL {
+		// Port 465: Use TLS connection directly (SSL)
 		tlsCfg := &tls.Config{
 			ServerName: s.cfg.Host,
 			MinVersion: tls.VersionTLS12,
 		}
-		if ok, _ := client.Extension("STARTTLS"); ok {
-			if err := client.StartTLS(tlsCfg); err != nil {
-				return err
+		tlsConn, err := tls.DialWithDialer(&net.Dialer{Timeout: s.cfg.Timeout}, "tcp", addr, tlsCfg)
+		if err != nil {
+			return err
+		}
+		defer tlsConn.Close()
+
+		client, err = smtp.NewClient(tlsConn, s.cfg.Host)
+		if err != nil {
+			return err
+		}
+		defer client.Quit()
+	} else {
+		// Port 587: Use STARTTLS
+		dialer := &net.Dialer{Timeout: s.cfg.Timeout}
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		client, err = smtp.NewClient(conn, s.cfg.Host)
+		if err != nil {
+			return err
+		}
+		defer client.Quit()
+
+		// STARTTLS (for port 587)
+		if s.cfg.UseSTARTTLS {
+			tlsCfg := &tls.Config{
+				ServerName: s.cfg.Host,
+				MinVersion: tls.VersionTLS12,
+			}
+			if ok, _ := client.Extension("STARTTLS"); ok {
+				if err := client.StartTLS(tlsCfg); err != nil {
+					return err
+				}
 			}
 		}
 	}
