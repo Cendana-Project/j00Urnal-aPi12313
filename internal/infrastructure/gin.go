@@ -48,10 +48,6 @@ func NewGinEngine() *gin.Engine {
 	corsConfig := buildCORSConfig()
 	r.Use(cors.New(corsConfig))
 
-
-	// register custom validation
-	util.AddValidation(DB)
-
 	// Public health check
 	internalGroup := r.Group("/_internal")
 	internalGroup.GET("/healthz", func(c *gin.Context) {

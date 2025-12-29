@@ -58,17 +58,18 @@ type Server struct {
 	FrontendURL string `mapstructure:"frontend_url"`
 }
 
-type Database struct {
-	DSN             string        `mapstructure:"dsn"`
-	PingInterval    time.Duration `mapstructure:"ping_interval"`
-	ReconnectFactor float64       `mapstructure:"reconnect_factor"`
-	MinJitter       time.Duration `mapstructure:"min_jitter"`
-	MaxJitter       time.Duration `mapstructure:"max_jitter"`
-	MaxRetry        int           `mapstructure:"max_retry"`
-	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
-	MaxOpenConns    int           `mapstructure:"max_open_conns"`
-	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
-}
+type 	Database struct {
+		DSN             string        `mapstructure:"dsn"`
+		DirectDSN       string        `mapstructure:"direct_dsn"` // Direct connection for migrations (bypasses PgBouncer)
+		PingInterval    time.Duration `mapstructure:"ping_interval"`
+		ReconnectFactor float64       `mapstructure:"reconnect_factor"`
+		MinJitter       time.Duration `mapstructure:"min_jitter"`
+		MaxJitter       time.Duration `mapstructure:"max_jitter"`
+		MaxRetry        int           `mapstructure:"max_retry"`
+		MaxIdleConns    int           `mapstructure:"max_idle_conns"`
+		MaxOpenConns    int           `mapstructure:"max_open_conns"`
+		MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
+	}
 
 type SMTP struct {
 	Host      string `mapstructure:"host"`
@@ -172,6 +173,7 @@ func bindEnvVariables() {
 
 	// Database
 	viper.BindEnv("database.dsn", "DATABASE_DSN")
+	viper.BindEnv("database.direct_dsn", "DATABASE_DIRECT_DSN") // For migrations
 	viper.BindEnv("database.ping_interval", "DATABASE_PING_INTERVAL")
 	viper.BindEnv("database.reconnect_factor", "DATABASE_RECONNECT_FACTOR")
 	viper.BindEnv("database.min_jitter", "DATABASE_MIN_JITTER")

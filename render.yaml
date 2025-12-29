@@ -14,7 +14,8 @@ services:
       - key: LOG_LEVEL
         value: info
       # Note: The following environment variables MUST be set in Render dashboard:
-      # - DATABASE_DSN (auto-set if you add PostgreSQL add-on)
+      # - DATABASE_DSN (pooled connection - use Supabase pooler URL port 6543)
+      # - DATABASE_DIRECT_DSN (direct connection for migrations - port 5432)
       # - UPSTASH_REDIS_REST_URL
       # - UPSTASH_REDIS_REST_TOKEN  
       # - REDIS_IS_CACHE_DISABLE (set to "false" or "true")

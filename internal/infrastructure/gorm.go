@@ -24,86 +24,94 @@ var (
 	StopTickerCh chan bool
 )
 
+// InitializeDBConn initializes database connection with production-ready settings
 func InitializeDBConn() *gorm.DB {
 	conn, err := openDBConn(config.Env.Database.DSN)
 	if err != nil {
-		logrus.WithField("databaseDSN", config.Env.Database.DSN).Fatal("failed to connect  database: ", err)
+		logrus.WithField("error", err).Fatal("failed to connect to database")
 	}
 
 	DB = conn
 	StopTickerCh = make(chan bool)
 
+	// Start background health check
 	go checkConnection(time.NewTicker(config.Env.Database.PingInterval))
 
-	switch config.Env.LogLevel {
-	case "error":
-		DB.Logger = DB.Logger.LogMode(gormLogger.Error)
-	case "warn":
-		DB.Logger = DB.Logger.LogMode(gormLogger.Warn)
-	default:
-		DB.Logger = DB.Logger.LogMode(gormLogger.Info)
-	}
+	// Set log level
+	setLogLevel(DB)
 
-	// AutoMigrate to sync schema
-	// NOTE:
-	// - In production we rely on explicit SQL migrations instead of AutoMigrate.
-	// - Some managed Postgres providers (like Render) can return fatal errors such as
-	//   "prepared statement already exists" or "relation already exists" when
-	//   AutoMigrate issues DDL on an already‑managed schema.
-	// - To avoid bringing the whole service down on startup, we only run AutoMigrate
-	//   outside production.
+	// AutoMigrate only in development
+	// In production, use explicit migrations via goose
 	if config.Env.Env != constant.ProductionEnvironment {
-		if err := DB.AutoMigrate(
-			&entity.User{},
-			&entity.Role{},
-			&entity.Permission{},
-			&entity.UserRole{},
-			&entity.RolePermission{},
-		); err != nil {
+		if err := autoMigrate(DB); err != nil {
 			logrus.Fatal("failed to auto-migrate: ", err)
 		}
 	} else {
-		logrus.Info("skipping GORM AutoMigrate in production environment")
+		logrus.Info("skipping GORM AutoMigrate in production (use explicit migrations)")
 	}
 
+	// Register health check
 	MapHealthCheck["database"] = func(ctx context.Context) error {
 		if DB == nil {
-			return errors.New("disconnect")
+			return errors.New("database connection is nil")
 		}
-
 		sqlDB, err := DB.WithContext(ctx).DB()
 		if err != nil {
 			return err
 		}
-
 		return sqlDB.Ping()
 	}
 
-	logrus.Info("connection to database Server success...")
+	logrus.Info("database connection established successfully")
 	return DB
 }
 
-// RunMigrations runs database migrations using goose.
-// This function is safe to call multiple times - goose will skip migrations
-// that have already been applied. It will not fail if migrations already exist.
+// autoMigrate runs GORM AutoMigrate for development environments
+func autoMigrate(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&entity.User{},
+		&entity.Role{},
+		&entity.Permission{},
+		&entity.UserRole{},
+		&entity.RolePermission{},
+	)
+}
+
+// setLogLevel configures GORM logger based on application log level
+func setLogLevel(db *gorm.DB) {
+	switch config.Env.LogLevel {
+	case "error":
+		db.Logger = db.Logger.LogMode(gormLogger.Error)
+	case "warn":
+		db.Logger = db.Logger.LogMode(gormLogger.Warn)
+	default:
+		db.Logger = db.Logger.LogMode(gormLogger.Info)
+	}
+}
+
+// RunMigrations runs database migrations using goose
+// Safe to call multiple times - goose will skip already applied migrations
 func RunMigrations() error {
 	migrationDir := "migration/db"
 
-	db, err := sql.Open("postgres", config.Env.Database.DSN)
+	// Use direct connection for migrations (bypasses PgBouncer if configured)
+	dsn := config.Env.Database.DirectDSN
+	if dsn == "" {
+		// Fallback to regular DSN if direct DSN not configured
+		dsn = config.Env.Database.DSN
+	}
+
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open migration connection: %w", err)
 	}
 	defer db.Close()
 
 	if err := goose.SetDialect("postgres"); err != nil {
-		return err
+		return fmt.Errorf("failed to set dialect: %w", err)
 	}
 
 	logrus.Info("running database migrations...")
-	// goose.Up with WithAllowMissing() will:
-	// - Apply any pending migrations
-	// - Skip migrations that have already been applied (no error)
-	// - Continue even if some migration files are missing
 	if err := goose.Up(db, migrationDir, goose.WithAllowMissing()); err != nil {
 		logrus.WithError(err).Error("migration failed")
 		return err
@@ -113,6 +121,7 @@ func RunMigrations() error {
 	return nil
 }
 
+// checkConnection periodically checks database connection health
 func checkConnection(ticker *time.Ticker) {
 	checkCount := 0
 	for {
@@ -135,35 +144,41 @@ func checkConnection(ticker *time.Ticker) {
 				continue
 			}
 
-			// Ping to verify connection is still alive
+			// Ping to verify connection
 			if err := sqlDB.Ping(); err != nil {
 				logrus.WithError(err).Error("database ping failed, attempting reconnect...")
 				reconnectDBConn()
 				continue
 			}
 
-			// Log connection pool stats periodically (every 10th check)
+			// Log connection pool stats periodically
 			if checkCount%10 == 0 {
-				stats := sqlDB.Stats()
-				logrus.WithFields(logrus.Fields{
-					"open_connections":     stats.OpenConnections,
-					"in_use":               stats.InUse,
-					"idle":                 stats.Idle,
-					"wait_count":           stats.WaitCount,
-					"wait_duration":        stats.WaitDuration,
-					"max_idle_closed":      stats.MaxIdleClosed,
-					"max_idle_time_closed": stats.MaxIdleTimeClosed,
-					"max_lifetime_closed":  stats.MaxLifetimeClosed,
-				}).Debug("database connection pool stats")
+				logPoolStats(sqlDB)
 			}
 		}
 	}
 }
 
+// logPoolStats logs database connection pool statistics
+func logPoolStats(db *sql.DB) {
+	stats := db.Stats()
+	logrus.WithFields(logrus.Fields{
+		"open_connections":     stats.OpenConnections,
+		"in_use":               stats.InUse,
+		"idle":                 stats.Idle,
+		"wait_count":           stats.WaitCount,
+		"wait_duration":        stats.WaitDuration,
+		"max_idle_closed":      stats.MaxIdleClosed,
+		"max_idle_time_closed": stats.MaxIdleTimeClosed,
+		"max_lifetime_closed":  stats.MaxLifetimeClosed,
+	}).Debug("database connection pool stats")
+}
+
+// reconnectDBConn attempts to reconnect to database with exponential backoff
 func reconnectDBConn() {
 	logrus.Warn("attempting to reconnect to database...")
 
-	// Close existing connection if any
+	// Close existing connection
 	if DB != nil {
 		if sqlDB, err := DB.DB(); err == nil {
 			sqlDB.Close()
@@ -177,19 +192,19 @@ func reconnectDBConn() {
 		Max:    config.Env.Database.MaxJitter,
 	}
 
-	dbRetryAttempts := config.Env.Database.MaxRetry
-
+	maxRetries := config.Env.Database.MaxRetry
 	var lastErr error
-	for b.Attempt() < float64(dbRetryAttempts) {
+
+	for b.Attempt() < float64(maxRetries) {
 		conn, err := openDBConn(config.Env.Database.DSN)
 		if err != nil {
 			lastErr = err
-			logrus.WithError(err).WithField("attempt", int(b.Attempt())+1).Error("failed to reconnect to database")
+			logrus.WithError(err).WithField("attempt", int(b.Attempt())+1).Error("reconnection failed")
 			time.Sleep(b.Duration())
 			continue
 		}
 
-		// Verify connection is working
+		// Verify connection works
 		if sqlDB, err := conn.DB(); err == nil {
 			if err := sqlDB.Ping(); err != nil {
 				lastErr = err
@@ -208,161 +223,111 @@ func reconnectDBConn() {
 	}
 
 	// All retries exhausted
-	logrus.WithError(lastErr).Fatal("maximum retry attempts reached, failed to reconnect to database")
+	logrus.WithError(lastErr).Fatal("maximum retry attempts reached, failed to reconnect")
 }
 
+// openDBConn opens a new GORM database connection with optimized settings
 func openDBConn(dsn string) (*gorm.DB, error) {
-	// Build DSN with parameters optimized for managed Postgres providers
-	// This prevents "prepared statement already exists" errors on Render/Supabase
-	dsnWithParams := buildDSNWithParams(dsn)
+	// Enhance DSN with necessary parameters
+	dsnWithParams := buildDSN(dsn)
 
-	// Log DSN parameters (without credentials) for debugging
-	logrus.WithFields(logrus.Fields{
-		"has_statement_cache_capacity": strings.Contains(dsnWithParams, "statement_cache_capacity=0"),
-		"has_statement_cache_mode":     strings.Contains(dsnWithParams, "statement_cache_mode=describe"),
-	}).Debug("database DSN parameters configured")
-
-	// Configure GORM with best practices for managed Postgres
-	psqlDialector := postgres.Open(dsnWithParams)
-
-	// GORM config optimized for managed Postgres to prevent prepared statement conflicts
-	gormConfig := &gorm.Config{
-		// CRITICAL: Disable prepared statements completely
-		// This is the most important setting to prevent "prepared statement already exists" errors
-		PrepareStmt:    false,
+	// Configure GORM
+	db, err := gorm.Open(postgres.Open(dsnWithParams), &gorm.Config{
+		PrepareStmt:    false, // CRITICAL: Disable prepared statements for PgBouncer compatibility
 		TranslateError: true,
-		NowFunc: func() time.Time {
-			return time.Now().UTC()
-		},
-		// Disable query fields caching to reduce prepared statement usage
-		DisableForeignKeyConstraintWhenMigrating: false,
-	}
-
-	db, err := gorm.Open(psqlDialector, gormConfig)
+		NowFunc:        func() time.Time { return time.Now().UTC() },
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database connection: %w", err)
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Get underlying *sql.DB for connection pool configuration
-	conn, err := db.DB()
+	// Get underlying *sql.DB
+	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get database connection: %w", err)
+		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
 	}
 
-	// Configure connection pool with best practices for production
-	// Since we've disabled statement cache with statement_cache_capacity=0,
-	// we can use more reasonable connection pool settings
-	maxIdleConns := config.Env.Database.MaxIdleConns
-	maxOpenConns := config.Env.Database.MaxOpenConns
-	connMaxLifetime := config.Env.Database.MaxConnLifetime
+	// Configure connection pool
+	configureConnectionPool(sqlDB)
 
-	// For managed Postgres (Render/Supabase), optimize for production workload
-	if config.Env.Env == constant.ProductionEnvironment {
-		// Production-optimized connection pool settings
-		// Max idle connections: 20-30% of max open connections
-		// This balances connection reuse with resource efficiency
-		if maxIdleConns > 10 {
-			maxIdleConns = 10
-		}
-		if maxIdleConns < 5 {
-			maxIdleConns = 5
-		}
-
-		// Max open connections: match managed Postgres connection limits
-		// Render free tier typically allows 20-30 connections
-		// For higher tiers, can be increased to 50-100
-		if maxOpenConns > 25 {
-			maxOpenConns = 25
-		}
-
-		// Connection lifetime: 15-30 minutes is optimal
-		// Long enough for performance, short enough for leak detection
-		// and to pick up connection parameter changes
-		if connMaxLifetime > 30*time.Minute {
-			connMaxLifetime = 30 * time.Minute
-		}
-		if connMaxLifetime < 15*time.Minute {
-			connMaxLifetime = 15 * time.Minute
-		}
-
-		// Idle timeout: 5-10 minutes balances reuse and cleanup
-		conn.SetConnMaxIdleTime(10 * time.Minute)
-	} else {
-		// Development: use more relaxed settings
-		conn.SetConnMaxIdleTime(15 * time.Minute)
-	}
-
-	conn.SetMaxIdleConns(maxIdleConns)
-	conn.SetMaxOpenConns(maxOpenConns)
-	conn.SetConnMaxLifetime(connMaxLifetime)
-	// Note: ConnMaxIdleTime is set conditionally above based on environment
-
-	// Test the connection
-	if err := conn.Ping(); err != nil {
-		conn.Close()
+	// Test connection
+	if err := sqlDB.Ping(); err != nil {
+		sqlDB.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"max_idle_conns":    maxIdleConns,
-		"max_open_conns":    maxOpenConns,
-		"conn_max_lifetime": connMaxLifetime,
-	}).Debug("database connection pool configured")
-
+	logrus.Debug("database connection pool configured successfully")
 	return db, nil
 }
 
-// buildDSNWithParams adds necessary parameters to DSN for managed Postgres compatibility
-// This function ensures the DSN is optimized for managed Postgres providers like Render/Supabase
-// to prevent "prepared statement already exists" errors
-func buildDSNWithParams(dsn string) string {
-	// Check if DSN already has query parameters
-	hasParams := strings.Contains(dsn, "?")
+// configureConnectionPool sets up connection pool with production-ready settings
+func configureConnectionPool(db *sql.DB) {
+	cfg := config.Env.Database
+	
+	// Default sensible values for production
+	maxIdleConns := 10
+	maxOpenConns := 25
+	connMaxLifetime := 30 * time.Minute
+	connMaxIdleTime := 10 * time.Minute
+
+	// Use config values if provided
+	if cfg.MaxIdleConns > 0 {
+		maxIdleConns = cfg.MaxIdleConns
+	}
+	if cfg.MaxOpenConns > 0 {
+		maxOpenConns = cfg.MaxOpenConns
+	}
+	if cfg.MaxConnLifetime > 0 {
+		connMaxLifetime = cfg.MaxConnLifetime
+	}
+
+	// For PgBouncer/Supabase, adjust settings
+	if config.Env.Env == constant.ProductionEnvironment {
+		// PgBouncer recommends lower connection counts
+		// Free tier typically allows 20-30 connections
+		if maxOpenConns > 20 {
+			maxOpenConns = 20
+		}
+		if maxIdleConns > 5 {
+			maxIdleConns = 5
+		}
+		
+		logrus.WithFields(logrus.Fields{
+			"max_idle_conns":    maxIdleConns,
+			"max_open_conns":    maxOpenConns,
+			"conn_max_lifetime": connMaxLifetime,
+			"conn_max_idle_time": connMaxIdleTime,
+		}).Info("production connection pool configured for PgBouncer")
+	}
+
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetConnMaxLifetime(connMaxLifetime)
+	db.SetConnMaxIdleTime(connMaxIdleTime)
+}
+
+// buildDSN adds necessary parameters to DSN for managed Postgres compatibility
+func buildDSN(dsn string) string {
+	// Don't modify if it's already properly configured
+	if strings.Contains(dsn, "pgbouncer=true") {
+		// Supabase connection pooler - already optimized
+		return dsn
+	}
+
 	params := []string{}
+	hasParams := strings.Contains(dsn, "?")
 
-	// CRITICAL: Completely disable pgx statement cache
-	// Multiple approaches to ensure no prepared statement caching:
-	
-	// 1. Set statement cache capacity to 0 (pgx-specific)
-	// This is THE KEY to preventing "prepared statement already exists" errors
-	if !strings.Contains(dsn, "statement_cache_capacity") {
-		params = append(params, "statement_cache_capacity=0")
-	}
-	
-	// 2. Set default_query_exec_mode to simple protocol (pgx v5+)
-	// This forces simple query protocol instead of extended protocol (which uses prepared statements)
-	// Use 'simple_protocol' to COMPLETELY avoid prepared statements
-	if !strings.Contains(dsn, "default_query_exec_mode") {
-		params = append(params, "default_query_exec_mode=simple_protocol")
-	}
-
-	// 3. Also set statement_cache_mode=describe as additional safeguard
-	if !strings.Contains(dsn, "statement_cache_mode") {
-		params = append(params, "statement_cache_mode=describe")
-	}
-
-	// 4. Add prefer_simple_protocol=1 as fallback (works with lib/pq, ignored by pgx but harmless)
-	if !strings.Contains(dsn, "prefer_simple_protocol") {
-		params = append(params, "prefer_simple_protocol=1")
-	}
-
-	// For managed Postgres in production, ensure we use SSL
+	// For managed Postgres (Render/others), enforce SSL in production
 	if !strings.Contains(dsn, "sslmode") && config.Env.Env == constant.ProductionEnvironment {
 		params = append(params, "sslmode=require")
 	}
 
-	// Disable connection pooling at driver level to force fresh connections
-	// This helps prevent prepared statement conflicts when connections are reused
-	if !strings.Contains(dsn, "pool_max_conns") && config.Env.Env == constant.ProductionEnvironment {
-		// Let application-level connection pool handle this instead
-		// Don't add pool_max_conns here as it conflicts with our connection pool settings
-	}
-
+	// No additional parameters needed - PrepareStmt: false handles everything
+	
 	if len(params) == 0 {
 		return dsn
 	}
 
-	// Append parameters to DSN
 	separator := "?"
 	if hasParams {
 		separator = "&"
