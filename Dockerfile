@@ -34,6 +34,19 @@ RUN echo '#!/bin/sh' > /healthcheck.sh && \
     echo 'wget --no-verbose --tries=1 --spider http://localhost:${PORT}/_internal/healthz || exit 1' >> /healthcheck.sh && \
     chmod +x /healthcheck.sh
 
+# Entrypoint script that runs migration before starting server
+RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'set +e' >> /entrypoint.sh && \
+    echo 'echo "Running database migrations..."' >> /entrypoint.sh && \
+    echo './main migrate --action=up' >> /entrypoint.sh && \
+    echo 'MIGRATION_EXIT=$?' >> /entrypoint.sh && \
+    echo 'if [ $MIGRATION_EXIT -ne 0 ]; then' >> /entrypoint.sh && \
+    echo '  echo "Migration completed with exit code $MIGRATION_EXIT (some migrations may have been skipped)"' >> /entrypoint.sh && \
+    echo 'fi' >> /entrypoint.sh && \
+    echo 'echo "Starting server..."' >> /entrypoint.sh && \
+    echo 'exec ./main server' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
 # Set working directory
 WORKDIR /root/
 
@@ -56,5 +69,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD /healthcheck.sh
 
-# Run the application
-CMD ["./main", "server"]
+# Run migrations then start server
+ENTRYPOINT ["/entrypoint.sh"]

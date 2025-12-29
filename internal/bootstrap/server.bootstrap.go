@@ -25,13 +25,6 @@ import (
 func StartServer() {
 	ctx := context.Background()
 
-	// Run database migrations before initializing connections
-	// This ensures schema is up-to-date on every deploy
-	// goose will safely skip migrations that have already been applied
-	if err := infrastructure.RunMigrations(); err != nil {
-		logrus.WithError(err).Fatal("failed to run database migrations")
-	}
-
 	// Infra
 	gormDB := infrastructure.InitializeDBConn()
 	rdb := infrastructure.NewRedisClient()

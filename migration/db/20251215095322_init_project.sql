@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
   "id" uuid DEFAULT gen_random_uuid(),
   "username" varchar NOT NULL,
   "first_name" varchar,
@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS "idx_users_deleted_at" ON "users" ("deleted_at");
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_email" ON "users" ("email");
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_username" ON "users" ("username");
 
-CREATE TABLE "roles" (
+CREATE TABLE IF NOT EXISTS "roles" (
   "id" uuid DEFAULT gen_random_uuid(),
   "name" varchar(64) NOT NULL,
   "slug" varchar(64) NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE "roles" (
 CREATE INDEX IF NOT EXISTS "idx_roles_deleted_at" ON "roles" ("deleted_at");
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_roles_slug" ON "roles" ("slug");
 
-CREATE TABLE "permissions" (
+CREATE TABLE IF NOT EXISTS "permissions" (
   "id" uuid DEFAULT gen_random_uuid(),
   "name" varchar(255) NOT NULL,
   "slug" varchar(255) NOT NULL,
@@ -54,7 +54,7 @@ CREATE TABLE "permissions" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_permissions_slug" ON "permissions" ("slug");
 
-CREATE TABLE "role_permissions" (
+CREATE TABLE IF NOT EXISTS "role_permissions" (
   "id" uuid DEFAULT gen_random_uuid(),
   "role_id" uuid NOT NULL,
   "permission_id" uuid NOT NULL,
@@ -66,7 +66,7 @@ CREATE INDEX IF NOT EXISTS "idx_role_permissions_permission_id" ON "role_permiss
 CREATE INDEX IF NOT EXISTS "idx_role_permissions_role_id" ON "role_permissions" ("role_id");
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_rp_unique" ON "role_permissions" ("role_id", "permission_id");
 
-CREATE TABLE "user_roles" (
+CREATE TABLE IF NOT EXISTS "user_roles" (
   "user_id" uuid,
   "role_id" uuid,
   "assigned_at" timestamptz NOT NULL DEFAULT now(),
