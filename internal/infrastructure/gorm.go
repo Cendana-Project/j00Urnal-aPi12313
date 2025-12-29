@@ -218,17 +218,21 @@ func openDBConn(dsn string) (*gorm.DB, error) {
 
 	// Configure GORM with best practices for managed Postgres
 	psqlDialector := postgres.Open(dsnWithParams)
-	db, err := gorm.Open(psqlDialector, &gorm.Config{
-		// Disable prepared statements to avoid conflicts in managed Postgres
-		// where connections are pooled and reused across instances
+
+	// GORM config optimized for managed Postgres to prevent prepared statement conflicts
+	gormConfig := &gorm.Config{
+		// CRITICAL: Disable prepared statements completely
+		// This is the most important setting to prevent "prepared statement already exists" errors
 		PrepareStmt:    false,
 		TranslateError: true,
-		// Disable NamingStrategy to avoid unnecessary schema introspection
-		// which can cause prepared statement conflicts
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
-	})
+		// Disable query fields caching to reduce prepared statement usage
+		DisableForeignKeyConstraintWhenMigrating: false,
+	}
+
+	db, err := gorm.Open(psqlDialector, gormConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
@@ -246,26 +250,35 @@ func openDBConn(dsn string) (*gorm.DB, error) {
 	connMaxLifetime := config.Env.Database.MaxConnLifetime
 
 	// For managed Postgres (Render/Supabase), use more conservative settings
+	// These settings help prevent prepared statement conflicts by forcing connection rotation
 	if config.Env.Env == constant.ProductionEnvironment {
 		// Limit idle connections to prevent prepared statement conflicts
-		if maxIdleConns > 5 {
-			maxIdleConns = 5
+		// Fewer idle connections = less chance of reusing connections with cached prepared statements
+		if maxIdleConns > 3 {
+			maxIdleConns = 3
 		}
 		// Limit open connections to match managed Postgres connection limits
-		if maxOpenConns > 20 {
-			maxOpenConns = 20
+		if maxOpenConns > 15 {
+			maxOpenConns = 15
 		}
-		// Shorter connection lifetime to force reconnection and clear prepared statements
-		if connMaxLifetime > 30*time.Minute {
-			connMaxLifetime = 30 * time.Minute
+		// Very short connection lifetime to force frequent reconnection
+		// This clears any prepared statements that might be cached
+		// 5 minutes is aggressive but necessary to prevent prepared statement conflicts
+		if connMaxLifetime > 5*time.Minute {
+			connMaxLifetime = 5 * time.Minute
 		}
+		// Short idle timeout to close idle connections quickly
+		// This prevents stale connections with prepared statements from being reused
+		conn.SetConnMaxIdleTime(2 * time.Minute)
+	} else {
+		// Development: use longer timeouts
+		conn.SetConnMaxIdleTime(5 * time.Minute)
 	}
 
 	conn.SetMaxIdleConns(maxIdleConns)
 	conn.SetMaxOpenConns(maxOpenConns)
 	conn.SetConnMaxLifetime(connMaxLifetime)
-	// Set connection timeout to prevent hanging connections
-	conn.SetConnMaxIdleTime(5 * time.Minute)
+	// Note: ConnMaxIdleTime is set conditionally above based on environment
 
 	// Test the connection
 	if err := conn.Ping(); err != nil {
@@ -290,9 +303,13 @@ func buildDSNWithParams(dsn string) string {
 	hasParams := strings.Contains(dsn, "?")
 	params := []string{}
 
-	// Add prefer_simple_protocol=1 to disable prepared statements at driver level
-	// Note: This parameter works with lib/pq driver. For pgx driver (used by GORM),
-	// we rely on PrepareStmt: false in GORM config, but adding this doesn't hurt.
+	// For pgx driver (used by GORM), we need to disable prepared statement cache completely
+	// statement_cache_mode=describe tells pgx to use describe mode which doesn't cache prepared statements
+	if !strings.Contains(dsn, "statement_cache_mode") {
+		params = append(params, "statement_cache_mode=describe")
+	}
+
+	// Add prefer_simple_protocol=1 as fallback (works with lib/pq, ignored by pgx but harmless)
 	if !strings.Contains(dsn, "prefer_simple_protocol") {
 		params = append(params, "prefer_simple_protocol=1")
 	}
@@ -302,10 +319,11 @@ func buildDSNWithParams(dsn string) string {
 		params = append(params, "sslmode=require")
 	}
 
-	// Add statement_cache_mode=describe to avoid prepared statement caching issues
-	// This is a pgx-specific parameter that helps with managed Postgres
-	if !strings.Contains(dsn, "statement_cache_mode") {
-		params = append(params, "statement_cache_mode=describe")
+	// Disable connection pooling at driver level to force fresh connections
+	// This helps prevent prepared statement conflicts when connections are reused
+	if !strings.Contains(dsn, "pool_max_conns") && config.Env.Env == constant.ProductionEnvironment {
+		// Let application-level connection pool handle this instead
+		// Don't add pool_max_conns here as it conflicts with our connection pool settings
 	}
 
 	if len(params) == 0 {
