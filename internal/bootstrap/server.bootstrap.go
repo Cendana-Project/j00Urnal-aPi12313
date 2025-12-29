@@ -70,6 +70,10 @@ func StartServer() {
 		}
 	}
 
+	// Auto-detect STARTTLS vs SSL based on port
+	// Port 587 = STARTTLS, Port 465 = Direct SSL
+	useSTARTTLS := port == 587
+
 	sender := email.NewSMTPSender(&email.Config{
 		Enabled:     true,
 		Provider:    "smtp",
@@ -79,7 +83,7 @@ func StartServer() {
 		Password:    password,
 		FromEmail:   fromEmail,
 		FromName:    "", // Biarkan sender.go mem-parse nama dari FromEmail
-		UseSTARTTLS: true,
+		UseSTARTTLS: useSTARTTLS,
 		Timeout:     time.Duration(timeoutSeconds) * time.Second,
 	})
 

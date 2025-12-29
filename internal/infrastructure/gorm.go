@@ -14,6 +14,7 @@ import (
 	"github.com/jpillora/backoff"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
+
 	// Use lib/pq instead of pgx for PgBouncer compatibility
 	// lib/pq doesn't have aggressive statement caching like pgx
 	_ "github.com/lib/pq" // PostgreSQL driver
@@ -274,7 +275,7 @@ func openDBConn(dsn string) (*gorm.DB, error) {
 // configureConnectionPool sets up connection pool with production-ready settings
 func configureConnectionPool(db *sql.DB) {
 	cfg := config.Env.Database
-	
+
 	// Default sensible values for production
 	maxIdleConns := 10
 	maxOpenConns := 25
@@ -302,11 +303,11 @@ func configureConnectionPool(db *sql.DB) {
 		if maxIdleConns > 5 {
 			maxIdleConns = 5
 		}
-		
+
 		logrus.WithFields(logrus.Fields{
-			"max_idle_conns":    maxIdleConns,
-			"max_open_conns":    maxOpenConns,
-			"conn_max_lifetime": connMaxLifetime,
+			"max_idle_conns":     maxIdleConns,
+			"max_open_conns":     maxOpenConns,
+			"conn_max_lifetime":  connMaxLifetime,
 			"conn_max_idle_time": connMaxIdleTime,
 		}).Info("production connection pool configured for PgBouncer")
 	}
@@ -334,7 +335,7 @@ func buildDSN(dsn string) string {
 	}
 
 	// No additional parameters needed - PrepareStmt: false handles everything
-	
+
 	if len(params) == 0 {
 		return dsn
 	}
