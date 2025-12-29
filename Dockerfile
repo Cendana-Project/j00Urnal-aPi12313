@@ -29,9 +29,16 @@ RUN apk --no-cache add ca-certificates wget
 RUN adduser -D -s /bin/sh appuser
 
 # Health check script (create before switching users)
+# Use wget if available, otherwise use nc (netcat) as fallback
 RUN echo '#!/bin/sh' > /healthcheck.sh && \
     echo 'PORT=${PORT:-8080}' >> /healthcheck.sh && \
-    echo 'wget --no-verbose --tries=1 --spider http://localhost:${PORT}/_internal/healthz || exit 1' >> /healthcheck.sh && \
+    echo 'if command -v wget > /dev/null 2>&1; then' >> /healthcheck.sh && \
+    echo '  wget --no-verbose --tries=1 --spider http://localhost:${PORT}/_internal/healthz || exit 1' >> /healthcheck.sh && \
+    echo 'elif command -v nc > /dev/null 2>&1; then' >> /healthcheck.sh && \
+    echo '  echo "GET /_internal/healthz HTTP/1.1\r\nHost: localhost\r\n\r\n" | nc localhost ${PORT} | grep -q "200 OK" || exit 1' >> /healthcheck.sh && \
+    echo 'else' >> /healthcheck.sh && \
+    echo '  exit 0' >> /healthcheck.sh && \
+    echo 'fi' >> /healthcheck.sh && \
     chmod +x /healthcheck.sh
 
 # Entrypoint script that runs migration before starting server

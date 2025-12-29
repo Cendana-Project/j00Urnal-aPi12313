@@ -100,9 +100,19 @@ func StartServer() {
 		WithRoleRepository(rRepo).
 		InitRoute()
 
+	// Configure HTTP server with production-ready timeouts
+	readTimeout := 15 * time.Second
+	writeTimeout := 15 * time.Second
+	idleTimeout := 60 * time.Second
+	maxHeaderBytes := 1 << 20 // 1 MB
+
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.Env.Server.Port),
-		Handler: r.Handler(),
+		Addr:           fmt.Sprintf(":%s", config.Env.Server.Port),
+		Handler:        r.Handler(),
+		ReadTimeout:    readTimeout,
+		WriteTimeout:   writeTimeout,
+		IdleTimeout:    idleTimeout,
+		MaxHeaderBytes: maxHeaderBytes,
 	}
 	// start http server
 	go func() {
