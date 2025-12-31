@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/api-monolith-template/internal/config"
@@ -45,36 +46,7 @@ func StartServer() {
 	uRepo := userRepo.NewRepository(gormDB)
 	rRepo := roleRepo.NewRepository(gormDB)
 
-	// SMTP sender config (fallback default)
-	host := config.Env.SMTP.Host
-	if host == "" {
-		host = "smtp.gmail.com"
-	}
-	port := config.Env.SMTP.Port
-	if port == 0 {
-		port = 587
-	}
-	username := config.Env.SMTP.Username
-	password := config.Env.SMTP.Password
-	// Use configured from email or fallback to default
-	fromEmail := config.Env.SMTP.FromEmail
-	if fromEmail == "" {
-		fromEmail = "no-reply@medikaone.id"
-	}
-
-	// Configure email timeout (default 10s, override via EMAIL_TIMEOUT_SECONDS)
-	// Lowered from 30s to prevent long hangs on SMTP issues
-	timeoutSeconds := 10
-	if v := os.Getenv("EMAIL_TIMEOUT_SECONDS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			timeoutSeconds = n
-		}
-	}
-
-	// Auto-detect STARTTLS vs SSL based on port
-	// Port 587 = STARTTLS, Port 465 = Direct SSL
-	useSTARTTLS := port == 587
-
+	// Email sender configuration
 	// Allow disabling email via EMAIL_ENABLED env var
 	emailEnabled := true
 	if v := os.Getenv("EMAIL_ENABLED"); v == "false" || v == "0" {
@@ -82,18 +54,78 @@ func StartServer() {
 		logrus.Warn("Email sending is DISABLED via EMAIL_ENABLED env var")
 	}
 
-	sender := email.NewSMTPSender(&email.Config{
-		Enabled:     emailEnabled,
-		Provider:    "smtp",
-		Host:        host,
-		Port:        port,
-		Username:    username,
-		Password:    password,
-		FromEmail:   fromEmail,
-		FromName:    "", // Biarkan sender.go mem-parse nama dari FromEmail
-		UseSTARTTLS: useSTARTTLS,
-		Timeout:     time.Duration(timeoutSeconds) * time.Second,
-	})
+	// Configure email timeout (default 10s, override via EMAIL_TIMEOUT_SECONDS)
+	timeoutSeconds := 10
+	if v := os.Getenv("EMAIL_TIMEOUT_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeoutSeconds = n
+		}
+	}
+
+	// Email provider selection: "brevo-api", "smtp" (default)
+	// Use EMAIL_PROVIDER env var to choose
+	provider := os.Getenv("EMAIL_PROVIDER")
+	logrus.Infof("EMAIL_PROVIDER env var value: '%s'", provider) // Debug log
+	if provider == "" {
+		provider = "smtp" // default to SMTP for backward compatibility
+		logrus.Info("EMAIL_PROVIDER not set, defaulting to 'smtp'")
+	}
+
+	// Auto-detect Brevo if using smtp-relay.brevo.com
+	smtpHost := config.Env.SMTP.Host
+	if strings.Contains(strings.ToLower(smtpHost), "brevo") || strings.Contains(strings.ToLower(smtpHost), "sendinblue") {
+		logrus.Info("Brevo/Sendinblue SMTP server detected")
+	}
+
+	var sender email.Sender
+
+	if !emailEnabled {
+		// Email disabled - use nil sender (registration will auto-activate users)
+		sender = nil
+		logrus.Info("Email service is DISABLED - users will be auto-activated")
+	} else if provider == "brevo-api" {
+		// Brevo HTTP API (recommended for cloud environments - no SMTP port blocking)
+		apiKey := config.Env.SMTP.Password // Reuse password field for API key
+		fromEmail := config.Env.SMTP.FromEmail
+		if fromEmail == "" {
+			fromEmail = "no-reply@medikaone.id"
+		}
+		sender = email.NewBrevoAPISender(apiKey, fromEmail, time.Duration(timeoutSeconds)*time.Second)
+		logrus.Info("Using Brevo HTTP API for email (port 443 - no SMTP blocking)")
+	} else {
+		// Traditional SMTP sender (may be blocked in cloud environments)
+		host := config.Env.SMTP.Host
+		if host == "" {
+			host = "smtp.gmail.com"
+		}
+		port := config.Env.SMTP.Port
+		if port == 0 {
+			port = 587
+		}
+		username := config.Env.SMTP.Username
+		password := config.Env.SMTP.Password
+		fromEmail := config.Env.SMTP.FromEmail
+		if fromEmail == "" {
+			fromEmail = "no-reply@medikaone.id"
+		}
+
+		// Auto-detect STARTTLS vs SSL based on port
+		useSTARTTLS := port == 587
+
+		sender = email.NewSMTPSender(&email.Config{
+			Enabled:     true,
+			Provider:    "smtp",
+			Host:        host,
+			Port:        port,
+			Username:    username,
+			Password:    password,
+			FromEmail:   fromEmail,
+			FromName:    "",
+			UseSTARTTLS: useSTARTTLS,
+			Timeout:     time.Duration(timeoutSeconds) * time.Second,
+		})
+		logrus.Infof("Using SMTP email sender: %s:%d", host, port)
+	}
 
 	// Services
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
