@@ -43,14 +43,36 @@ RUN echo '#!/bin/sh' > /healthcheck.sh && \
 
 # Entrypoint script that runs migration before starting server
 RUN echo '#!/bin/sh' > /entrypoint.sh && \
-    echo 'set +e' >> /entrypoint.sh && \
-    echo 'echo "Running database migrations..."' >> /entrypoint.sh && \
-    echo './main migrate --action=up' >> /entrypoint.sh && \
+    echo 'set -e' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo '# Function to log with timestamp' >> /entrypoint.sh && \
+    echo 'log() {' >> /entrypoint.sh && \
+    echo '  echo "[$(date +"%Y-%m-%d %H:%M:%S")] $*"' >> /entrypoint.sh && \
+    echo '}' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
+    echo 'log "Starting Journal API deployment"' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo '# Run database migrations' >> /entrypoint.sh && \
+    echo 'log "Running database migrations..."' >> /entrypoint.sh && \
+    echo 'set +e  # Allow migration to exit with non-zero if all migrations are already applied' >> /entrypoint.sh && \
+    echo './main migrate --action=up 2>&1' >> /entrypoint.sh && \
     echo 'MIGRATION_EXIT=$?' >> /entrypoint.sh && \
-    echo 'if [ $MIGRATION_EXIT -ne 0 ]; then' >> /entrypoint.sh && \
-    echo '  echo "Migration completed with exit code $MIGRATION_EXIT (some migrations may have been skipped)"' >> /entrypoint.sh && \
+    echo 'set -e  # Re-enable exit on error' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo '# Migration exit codes:' >> /entrypoint.sh && \
+    echo '# 0 = success (migrations applied or already up to date)' >> /entrypoint.sh && \
+    echo '# Non-zero may indicate migrations are already current (which is OK)' >> /entrypoint.sh && \
+    echo 'if [ $MIGRATION_EXIT -eq 0 ]; then' >> /entrypoint.sh && \
+    echo '  log "✓ Database migrations completed successfully"' >> /entrypoint.sh && \
+    echo 'else' >> /entrypoint.sh && \
+    echo '  log "⚠ Migration exited with code $MIGRATION_EXIT (may be OK if migrations are current)"' >> /entrypoint.sh && \
     echo 'fi' >> /entrypoint.sh && \
-    echo 'echo "Starting server..."' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
+    echo 'log "Starting server on port ${PORT:-8080}..."' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
     echo 'exec ./main server' >> /entrypoint.sh && \
     chmod +x /entrypoint.sh
 
