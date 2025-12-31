@@ -62,8 +62,9 @@ func StartServer() {
 		fromEmail = "no-reply@medikaone.id"
 	}
 
-	// Configure email timeout (default 30s, override via EMAIL_TIMEOUT_SECONDS)
-	timeoutSeconds := 30
+	// Configure email timeout (default 10s, override via EMAIL_TIMEOUT_SECONDS)
+	// Lowered from 30s to prevent long hangs on SMTP issues
+	timeoutSeconds := 10
 	if v := os.Getenv("EMAIL_TIMEOUT_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			timeoutSeconds = n
@@ -74,8 +75,15 @@ func StartServer() {
 	// Port 587 = STARTTLS, Port 465 = Direct SSL
 	useSTARTTLS := port == 587
 
+	// Allow disabling email via EMAIL_ENABLED env var
+	emailEnabled := true
+	if v := os.Getenv("EMAIL_ENABLED"); v == "false" || v == "0" {
+		emailEnabled = false
+		logrus.Warn("Email sending is DISABLED via EMAIL_ENABLED env var")
+	}
+
 	sender := email.NewSMTPSender(&email.Config{
-		Enabled:     true,
+		Enabled:     emailEnabled,
 		Provider:    "smtp",
 		Host:        host,
 		Port:        port,
