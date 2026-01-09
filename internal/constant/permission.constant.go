@@ -41,6 +41,11 @@ const (
 	PermissionAppointmentEdit = "appointment.edit"
 )
 
+// Manuscript
+const (
+	PermissionManuscriptManage = "manuscript.manage"
+)
+
 // ==========================
 // DEFAULT ROLE → PERMISSIONS
 // ==========================
@@ -61,6 +66,15 @@ var DefaultRolePermissions = map[string][]string{
 		PermissionEMRView, PermissionEMREdit,
 		PermissionBillingView, PermissionBillingEdit,
 		PermissionAppointmentView, PermissionAppointmentEdit,
+		PermissionManuscriptManage,
+	},
+
+	RoleEditor: {
+		PermissionManuscriptManage,
+	},
+
+	RoleChiefEditor: {
+		PermissionManuscriptManage,
 	},
 
 	// admin RS

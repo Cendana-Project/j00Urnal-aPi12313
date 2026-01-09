@@ -28,6 +28,14 @@ type EnvConfig struct {
 	Database                Database      `mapstructure:"database"`
 	Redis                   Redis         `mapstructure:"redis"`
 	SMTP                    SMTP          `mapstructure:"smtp"`
+	Supabase                Supabase      `mapstructure:"supabase"`
+}
+
+type Supabase struct {
+	URL            string `mapstructure:"url"`
+	ServiceRoleKey string `mapstructure:"service_role_key"`
+	AnonRoleKey    string `mapstructure:"anon_role_key"`
+	Bucket         string `mapstructure:"bucket"`
 }
 
 type Redis struct {
@@ -146,6 +154,9 @@ func setDefaults() {
 	// Token defaults
 	viper.SetDefault("token.access_token_duration", "1h")
 	viper.SetDefault("token.refresh_token_duration", "720h") // 30 days
+
+	// Supabase defaults
+	viper.SetDefault("supabase.bucket", "publication")
 }
 
 // bindEnvVariables explicitly binds all environment variables
@@ -195,6 +206,12 @@ func bindEnvVariables() {
 	viper.BindEnv("smtp.port", "SMTP_PORT")
 	viper.BindEnv("smtp.username", "SMTP_USERNAME")
 	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
+
+	// Supabase
+	viper.BindEnv("supabase.url", "SUPABASE_URL")
+	viper.BindEnv("supabase.service_role_key", "SUPABASE_SERVICE_ROLE_KEY")
+	viper.BindEnv("supabase.anon_role_key", "SUPABASE_ANON_ROLE_KEY")
+	viper.BindEnv("supabase.bucket", "SUPABASE_BUCKET")
 }
 
 // Validate checks if all required configuration values are set correctly
@@ -241,6 +258,13 @@ func (c *EnvConfig) Validate() error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+
+	if c.Supabase.URL == "" {
+		errs = append(errs, "SUPABASE_URL is required")
+	}
+	if c.Supabase.ServiceRoleKey == "" {
+		errs = append(errs, "SUPABASE_SERVICE_ROLE_KEY is required")
 	}
 
 	return nil
