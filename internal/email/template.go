@@ -10,13 +10,15 @@ var (
 	verifyPINTmpl = template.Must(template.New("verifyPIN").Parse(`<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f6f9fc;padding:24px">
   <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;border-radius:12px;padding:24px">
     <h2 style="margin:0 0 8px 0;color:#111">MedikaOne</h2>
-    <p style="color:#555">Halo {{.FirstName}}, gunakan PIN berikut untuk verifikasi email (berlaku {{.TTLMinutes}} menit):</p>
+    <p style="color:#555">Halo {{.FirstName}}, terima kasih telah mendaftar!</p>
+    <p style="color:#555">Gunakan PIN berikut untuk verifikasi email Anda (berlaku {{.TTLMinutes}} menit):</p>
     <div style="text-align:center;margin:16px 0">
       <span style="display:inline-block;font-size:28px;letter-spacing:6px;font-weight:700;background:#0ea5e9;color:#fff;padding:12px 16px;border-radius:10px">{{.PIN}}</span>
     </div>
-    <p style="color:#667">Jika kamu tidak meminta verifikasi ini, abaikan email ini.</p>
+    <p style="color:#667">Jika Anda tidak meminta verifikasi ini, abaikan email ini.</p>
+    <p style="color:#999;font-size:12px;margin-top:16px;padding-top:16px;border-top:1px solid #e6ecf1">💡 Tips: Jika email ini masuk ke folder Spam, tandai sebagai "Not Spam" agar email berikutnya masuk ke Inbox.</p>
   </div>
-  <div style="text-align:center;color:#99a; font-size:12px;margin-top:10px">© {{.Year}} MedikaOne</div>
+  <div style="text-align:center;color:#99a;font-size:12px;margin-top:10px">© {{.Year}} MedikaOne. Semua hak dilindungi.</div>
 </body></html>`))
 
 	resetPINTmpl = template.Must(template.New("resetPIN").Parse(`<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f6f9fc;padding:24px">

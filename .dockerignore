@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Environment files
+.env
+.env.*
+!.env.example
+env.example
+env.render.example
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test files
+*_test.go
+coverage.out
+coverage.html
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+journal-api
+main
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Scripts (not needed in container)
+scripts/
+!scripts/reset-db.sql
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# Docker
+docker-compose.yml
+Dockerfile.dev
+
+# Makefile (not needed in container)
+Makefile
+
+# Logs
+*.log
+
+# Dependencies (will be downloaded during build)
+vendor/
+

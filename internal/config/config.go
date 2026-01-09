@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -67,6 +68,7 @@ type Server struct {
 
 type Database struct {
 	DSN             string        `mapstructure:"dsn"`
+	DirectDSN       string        `mapstructure:"direct_dsn"` // Direct connection for migrations (bypasses PgBouncer)
 	PingInterval    time.Duration `mapstructure:"ping_interval"`
 	ReconnectFactor float64       `mapstructure:"reconnect_factor"`
 	MinJitter       time.Duration `mapstructure:"min_jitter"`
@@ -78,10 +80,11 @@ type Database struct {
 }
 
 type SMTP struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
+	Host      string `mapstructure:"host"`
+	Port      int    `mapstructure:"port"`
+	Username  string `mapstructure:"username"`
+	Password  string `mapstructure:"password"`
+	FromEmail string `mapstructure:"from_email"`
 }
 
 // LoadConfig loads configuration from .env file and environment variables
@@ -111,6 +114,14 @@ func LoadConfig() error {
 	if err := viper.Unmarshal(&Env); err != nil {
 		logrus.Fatal("failed to unmarshal config: ", err)
 		return err
+	}
+
+	// Use PORT env var (set by Render/Heroku) if SERVER_PORT is not explicitly set
+	// Check if SERVER_PORT was actually set in environment, if not, use PORT
+	if os.Getenv("SERVER_PORT") == "" {
+		if port := os.Getenv("PORT"); port != "" {
+			Env.Server.Port = port
+		}
 	}
 
 	// Validate configuration
@@ -173,6 +184,7 @@ func bindEnvVariables() {
 
 	// Database
 	viper.BindEnv("database.dsn", "DATABASE_DSN")
+	viper.BindEnv("database.direct_dsn", "DATABASE_DIRECT_DSN") // For migrations
 	viper.BindEnv("database.ping_interval", "DATABASE_PING_INTERVAL")
 	viper.BindEnv("database.reconnect_factor", "DATABASE_RECONNECT_FACTOR")
 	viper.BindEnv("database.min_jitter", "DATABASE_MIN_JITTER")
@@ -206,6 +218,7 @@ func bindEnvVariables() {
 	viper.BindEnv("smtp.port", "SMTP_PORT")
 	viper.BindEnv("smtp.username", "SMTP_USERNAME")
 	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
+	viper.BindEnv("smtp.from_email", "SMTP_FROM_EMAIL")
 
 	// Supabase
 	viper.BindEnv("supabase.url", "SUPABASE_URL")

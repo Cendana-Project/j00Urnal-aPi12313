@@ -31,6 +31,11 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	if s.cfg == nil || !s.cfg.Enabled {
 		return nil // no-op jika dimatikan
 	}
+
+	// Debug logging
+	fmt.Printf("[SMTP] Attempting to send email to %s via %s:%d (timeout: %v)\n",
+		to, s.cfg.Host, s.cfg.Port, s.cfg.Timeout)
+
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 
 	// Determine 'from' email and name
@@ -77,58 +82,105 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	sb.WriteString(htmlBody)
 	msg := []byte(sb.String())
 
-	// Dial TCP
-	dialer := &net.Dialer{Timeout: s.cfg.Timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	// Determine if we need SSL/TLS directly (port 465) or STARTTLS (port 587)
+	useSSL := s.cfg.Port == 465
 
-	client, err := smtp.NewClient(conn, s.cfg.Host)
-	if err != nil {
-		return err
-	}
-	defer client.Quit()
-
-	// STARTTLS (Gmail port 587)
-	if s.cfg.UseSTARTTLS {
+	var client *smtp.Client
+	if useSSL {
+		// Port 465: Use TLS connection directly (SSL)
+		fmt.Printf("[SMTP] Using SSL/TLS (port 465)\n")
 		tlsCfg := &tls.Config{
 			ServerName: s.cfg.Host,
 			MinVersion: tls.VersionTLS12,
 		}
-		if ok, _ := client.Extension("STARTTLS"); ok {
-			if err := client.StartTLS(tlsCfg); err != nil {
-				return err
+		fmt.Printf("[SMTP] Dialing TLS connection to %s...\n", addr)
+		tlsConn, err := tls.DialWithDialer(&net.Dialer{Timeout: s.cfg.Timeout}, "tcp", addr, tlsCfg)
+		if err != nil {
+			return fmt.Errorf("TLS dial failed: %w", err)
+		}
+		defer tlsConn.Close()
+
+		client, err = smtp.NewClient(tlsConn, s.cfg.Host)
+		if err != nil {
+			return err
+		}
+		defer client.Quit()
+	} else {
+		// Port 587: Use STARTTLS
+		fmt.Printf("[SMTP] Using STARTTLS (port 587)\n")
+		dialer := &net.Dialer{Timeout: s.cfg.Timeout}
+		fmt.Printf("[SMTP] Dialing TCP connection to %s...\n", addr)
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return fmt.Errorf("TCP dial failed: %w", err)
+		}
+		defer conn.Close()
+		fmt.Printf("[SMTP] TCP connection established\n")
+
+		client, err = smtp.NewClient(conn, s.cfg.Host)
+		if err != nil {
+			return fmt.Errorf("SMTP client creation failed: %w", err)
+		}
+		defer client.Quit()
+		fmt.Printf("[SMTP] SMTP client created\n")
+
+		// STARTTLS (for port 587)
+		if s.cfg.UseSTARTTLS {
+			fmt.Printf("[SMTP] Initiating STARTTLS...\n")
+			tlsCfg := &tls.Config{
+				ServerName: s.cfg.Host,
+				MinVersion: tls.VersionTLS12,
+			}
+			if ok, _ := client.Extension("STARTTLS"); ok {
+				if err := client.StartTLS(tlsCfg); err != nil {
+					return fmt.Errorf("STARTTLS failed: %w", err)
+				}
+				fmt.Printf("[SMTP] STARTTLS successful\n")
+			} else {
+				fmt.Printf("[SMTP] STARTTLS not supported by server\n")
 			}
 		}
 	}
 
 	// Auth
+	fmt.Printf("[SMTP] Authenticating as %s...\n", s.cfg.Username)
 	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
 	if ok, _ := client.Extension("AUTH"); ok {
 		if err := client.Auth(auth); err != nil {
-			return err
+			return fmt.Errorf("authentication failed: %w", err)
 		}
+		fmt.Printf("[SMTP] Authentication successful\n")
+	} else {
+		fmt.Printf("[SMTP] No AUTH extension, skipping authentication\n")
 	}
 
 	// From / To / Data
 	// NOTE: Use envelopeFrom (pure email) for SMTP commands
+	fmt.Printf("[SMTP] Setting envelope FROM: %s\n", envelopeFrom)
 	if err := client.Mail(envelopeFrom); err != nil {
-		return err
+		return fmt.Errorf("MAIL FROM failed: %w", err)
 	}
+
+	fmt.Printf("[SMTP] Setting envelope TO: %s\n", to)
 	if err := client.Rcpt(to); err != nil {
-		return err
+		return fmt.Errorf("RCPT TO failed: %w", err)
 	}
+
+	fmt.Printf("[SMTP] Sending email data...\n")
 	w, err := client.Data()
 	if err != nil {
-		return err
+		return fmt.Errorf("DATA command failed: %w", err)
 	}
 	if _, err := w.Write(msg); err != nil {
 		_ = w.Close()
-		return err
+		return fmt.Errorf("write message failed: %w", err)
 	}
-	return w.Close()
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("close data writer failed: %w", err)
+	}
+
+	fmt.Printf("[SMTP] Email sent successfully to %s\n", to)
+	return nil
 }
 
 func formatAddress(email, name string) string {

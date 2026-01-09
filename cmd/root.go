@@ -8,6 +8,7 @@ import (
 
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
+	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -44,7 +45,11 @@ func init() {
 
 	logrus.SetReportCaller(true)
 
+	// Set Gin mode BEFORE any Gin operations
+	// This must be done early to prevent debug mode warnings
 	if config.Env.Env == constant.ProductionEnvironment {
+		// Import gin here to avoid circular dependency
+		gin.SetMode(gin.ReleaseMode)
 		logrus.SetFormatter(&logrus.JSONFormatter{})
 	} else {
 		logrus.SetFormatter(&logrus.TextFormatter{

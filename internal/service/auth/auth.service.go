@@ -228,18 +228,27 @@ func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*
 
 	if u, _ := s.users.FindByEmail(emailAddr); u != nil {
 		if u.Status == "pending" {
+			// If email service is disabled, auto-activate existing pending user
+			if s.email == nil {
+				if err := s.users.UpdateByID(u.ID, map[string]any{"status": "active"}); err != nil {
+					return nil, constant.ErrInternalServerError
+				}
+				u.Status = "active"
+				ulog.Infof(ctx, "Email service disabled - auto-activated existing pending user: %s", emailAddr)
+				return u, nil
+			}
+
+			// Send verification PIN if email service is available
 			pin := sixDigitPIN()
 			key := "verify:pin:" + emailAddr
 			if err := s.redis.Set(ctx, key, pin, s.pinTTL).Err(); err != nil {
 				return nil, constant.ErrInternalServerError
 			}
-			if s.email != nil {
-				html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
-				if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
-					ulog.Errorf(ctx, "smtp send failed (register_resend_pin): %v", err)
-					_ = s.redis.Del(ctx, key).Err()
-					return nil, constant.ErrEmailSendFailed
-				}
+			html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
+			if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
+				ulog.Errorf(ctx, "smtp send failed (register_resend_pin): %v", err)
+				_ = s.redis.Del(ctx, key).Err()
+				return nil, constant.ErrEmailSendFailed
 			}
 			ulog.Infof(ctx, "register resend pin email=%s", emailAddr)
 			return u, nil
@@ -257,12 +266,20 @@ func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*
 	}
 	hash := base64.StdEncoding.EncodeToString(key) + ":" + base64.StdEncoding.EncodeToString(salt)
 
+	// Determine initial status based on email availability
+	// If email service is disabled, auto-activate for development/testing
+	initialStatus := "pending"
+	if s.email == nil {
+		initialStatus = "active" // Auto-activate if no email service
+		ulog.Infof(ctx, "Email service disabled - auto-activating user")
+	}
+
 	u := &entity.User{
 		Email:        emailAddr,
 		Username:     uname, // Fixed: now string
 		Phone:        &phone,
 		PasswordHash: hash,
-		Status:       "pending",
+		Status:       initialStatus,
 		Affiliation:  &req.Affiliation,
 	}
 	if err := s.users.Create(u); err != nil {
@@ -277,20 +294,23 @@ func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*
 		return nil, constant.ErrInternalServerError
 	}
 
-	pin := sixDigitPIN()
-	keyRedis := "verify:pin:" + emailAddr
-	if err := s.redis.Set(ctx, keyRedis, pin, s.pinTTL).Err(); err != nil {
-		return nil, constant.ErrInternalServerError
-	}
+	// Only send verification email if email service is available
 	if s.email != nil {
+		pin := sixDigitPIN()
+		keyRedis := "verify:pin:" + emailAddr
+		if err := s.redis.Set(ctx, keyRedis, pin, s.pinTTL).Err(); err != nil {
+			return nil, constant.ErrInternalServerError
+		}
 		html := email.RenderVerifyPIN("", pin, int(s.pinTTL.Minutes()))
 		if err := s.email.Send(emailAddr, "PIN Verifikasi Akun MedikaOne", html); err != nil {
 			ulog.Errorf(ctx, "smtp send failed (register_send_pin): %v", err)
 			_ = s.redis.Del(ctx, keyRedis).Err()
 			return nil, constant.ErrEmailSendFailed
 		}
+		ulog.Infof(ctx, "register success - verification email sent to %s", emailAddr)
+	} else {
+		ulog.Infof(ctx, "register success - user auto-activated (no email service) email=%s", emailAddr)
 	}
-	ulog.Infof(ctx, "register success email=%s", emailAddr)
 	return u, nil
 }
 

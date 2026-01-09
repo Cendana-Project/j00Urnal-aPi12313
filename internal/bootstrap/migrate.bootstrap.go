@@ -15,8 +15,17 @@ func StartMigrate(actionType string, name string, version *int64) {
 
 	var err error
 
-	db, err := sql.Open("postgres", config.Env.Database.DSN)
+	// Use DirectDSN if available (for migrations), otherwise fallback to DSN
+	// DirectDSN bypasses PgBouncer which is required for migrations
+	dsn := config.Env.Database.DirectDSN
+	if dsn == "" {
+		dsn = config.Env.Database.DSN
+	}
+
+	db, err := sql.Open("postgres", dsn)
 	util.ContinueOrFatal(err)
+	defer db.Close()
+
 	err = goose.SetDialect("postgres")
 	util.ContinueOrFatal(err)
 

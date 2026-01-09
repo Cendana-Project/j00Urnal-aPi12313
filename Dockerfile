@@ -22,11 +22,59 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates and wget for HTTPS requests and health checks
+RUN apk --no-cache add ca-certificates wget
 
 # Create non-root user
 RUN adduser -D -s /bin/sh appuser
+
+# Health check script (create before switching users)
+# Use wget if available, otherwise use nc (netcat) as fallback
+RUN echo '#!/bin/sh' > /healthcheck.sh && \
+    echo 'PORT=${PORT:-8080}' >> /healthcheck.sh && \
+    echo 'if command -v wget > /dev/null 2>&1; then' >> /healthcheck.sh && \
+    echo '  wget --no-verbose --tries=1 --spider http://localhost:${PORT}/_internal/healthz || exit 1' >> /healthcheck.sh && \
+    echo 'elif command -v nc > /dev/null 2>&1; then' >> /healthcheck.sh && \
+    echo '  echo "GET /_internal/healthz HTTP/1.1\r\nHost: localhost\r\n\r\n" | nc localhost ${PORT} | grep -q "200 OK" || exit 1' >> /healthcheck.sh && \
+    echo 'else' >> /healthcheck.sh && \
+    echo '  exit 0' >> /healthcheck.sh && \
+    echo 'fi' >> /healthcheck.sh && \
+    chmod +x /healthcheck.sh
+
+# Entrypoint script that runs migration before starting server
+RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'set -e' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo '# Function to log with timestamp' >> /entrypoint.sh && \
+    echo 'log() {' >> /entrypoint.sh && \
+    echo '  echo "[$(date +"%Y-%m-%d %H:%M:%S")] $*"' >> /entrypoint.sh && \
+    echo '}' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
+    echo 'log "Starting Journal API deployment"' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo '# Run database migrations' >> /entrypoint.sh && \
+    echo 'log "Running database migrations..."' >> /entrypoint.sh && \
+    echo 'set +e  # Allow migration to exit with non-zero if all migrations are already applied' >> /entrypoint.sh && \
+    echo './main migrate --action=up 2>&1' >> /entrypoint.sh && \
+    echo 'MIGRATION_EXIT=$?' >> /entrypoint.sh && \
+    echo 'set -e  # Re-enable exit on error' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo '# Migration exit codes:' >> /entrypoint.sh && \
+    echo '# 0 = success (migrations applied or already up to date)' >> /entrypoint.sh && \
+    echo '# Non-zero may indicate migrations are already current (which is OK)' >> /entrypoint.sh && \
+    echo 'if [ $MIGRATION_EXIT -eq 0 ]; then' >> /entrypoint.sh && \
+    echo '  log "✓ Database migrations completed successfully"' >> /entrypoint.sh && \
+    echo 'else' >> /entrypoint.sh && \
+    echo '  log "⚠ Migration exited with code $MIGRATION_EXIT (may be OK if migrations are current)"' >> /entrypoint.sh && \
+    echo 'fi' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
+    echo 'log "Starting server on port ${PORT:-8080}..."' >> /entrypoint.sh && \
+    echo 'log "=========================================="' >> /entrypoint.sh && \
+    echo 'exec ./main server' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
 # Set working directory
 WORKDIR /root/
@@ -34,18 +82,21 @@ WORKDIR /root/
 # Copy the binary from builder stage
 COPY --from=builder /app/main .
 
+# Copy migration files (needed for goose migrations at runtime)
+COPY --from=builder /app/migration ./migration
+
 # Change ownership to appuser
 RUN chown -R appuser:appuser /root/
 
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 8081
+# Expose port (Render will set PORT env var)
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1
+  CMD /healthcheck.sh
 
-# Run the application
-CMD ["./main", "server"]
+# Run migrations then start server
+ENTRYPOINT ["/entrypoint.sh"]
