@@ -237,7 +237,7 @@ func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*
 				ulog.Infof(ctx, "Email service disabled - auto-activated existing pending user: %s", emailAddr)
 				return u, nil
 			}
-			
+
 			// Send verification PIN if email service is available
 			pin := sixDigitPIN()
 			key := "verify:pin:" + emailAddr

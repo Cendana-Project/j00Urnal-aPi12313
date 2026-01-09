@@ -90,4 +90,3 @@ func (s *BrevoAPISender) SendWithContext(ctx context.Context, to, subject, htmlB
 	fmt.Printf("[Brevo API] ✅ Email sent successfully to %s (status: %d)\n", to, resp.StatusCode)
 	return nil
 }
-

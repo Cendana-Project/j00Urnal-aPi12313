@@ -31,11 +31,11 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	if s.cfg == nil || !s.cfg.Enabled {
 		return nil // no-op jika dimatikan
 	}
-	
+
 	// Debug logging
-	fmt.Printf("[SMTP] Attempting to send email to %s via %s:%d (timeout: %v)\n", 
+	fmt.Printf("[SMTP] Attempting to send email to %s via %s:%d (timeout: %v)\n",
 		to, s.cfg.Host, s.cfg.Port, s.cfg.Timeout)
-	
+
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 
 	// Determine 'from' email and name
@@ -160,12 +160,12 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	if err := client.Mail(envelopeFrom); err != nil {
 		return fmt.Errorf("MAIL FROM failed: %w", err)
 	}
-	
+
 	fmt.Printf("[SMTP] Setting envelope TO: %s\n", to)
 	if err := client.Rcpt(to); err != nil {
 		return fmt.Errorf("RCPT TO failed: %w", err)
 	}
-	
+
 	fmt.Printf("[SMTP] Sending email data...\n")
 	w, err := client.Data()
 	if err != nil {
@@ -178,7 +178,7 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("close data writer failed: %w", err)
 	}
-	
+
 	fmt.Printf("[SMTP] Email sent successfully to %s\n", to)
 	return nil
 }

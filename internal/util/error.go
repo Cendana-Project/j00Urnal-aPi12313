@@ -21,6 +21,10 @@ func HandleError(ctx *gin.Context, err error) {
 	case validator.ValidationErrors:
 		// === Smart mapping untuk error validasi field === // <=== added
 		custom := mapValidationErrors(cErr) // <=== added
+
+		// Log the validation errors for debugging
+		Infof(ctx.Request.Context(), "Validation failed: %v", cErr)
+
 		resp := custom.ToResponse()
 		resp.TraceID = GetTraceID(ctx)
 		resp.Timestamp = time.Now().UTC()
@@ -64,6 +68,10 @@ func HandleError(ctx *gin.Context, err error) {
 		if internalServerErr.MessageDetail == (response.MessageDetail{}) {
 			internalServerErr.MessageDetail = constant.GetMessageDetail(constant.MsgInternalServerError)
 		}
+
+		// Log the actual error that caused 500
+		Errorf(ctx.Request.Context(), "INTERNAL_SERVER_ERROR: %v", err)
+
 		internalServerErr.TraceID = GetTraceID(ctx)
 		internalServerErr.Timestamp = time.Now().UTC()
 		ctx.JSON(internalServerErr.StatusCode, internalServerErr)

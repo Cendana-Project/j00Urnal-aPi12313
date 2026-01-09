@@ -21,6 +21,23 @@ import (
 	warmupHttp "github.com/api-monolith-template/internal/transport/http/warmup"
 	"github.com/api-monolith-template/internal/util"
 	"github.com/sirupsen/logrus"
+
+	issueRepo "github.com/api-monolith-template/internal/repository/issue"
+	journalRepo "github.com/api-monolith-template/internal/repository/journal"
+	manuscriptRepo "github.com/api-monolith-template/internal/repository/manuscript"
+	fileRepo "github.com/api-monolith-template/internal/repository/publicationfile"
+	volumeRepo "github.com/api-monolith-template/internal/repository/volume"
+
+	issueSvc "github.com/api-monolith-template/internal/service/issue"
+	journalSvc "github.com/api-monolith-template/internal/service/journal"
+	manuscriptSvc "github.com/api-monolith-template/internal/service/manuscript"
+	storageSvc "github.com/api-monolith-template/internal/service/storage"
+	volumeSvc "github.com/api-monolith-template/internal/service/volume"
+
+	issueHttp "github.com/api-monolith-template/internal/transport/http/issue"
+	journalHttp "github.com/api-monolith-template/internal/transport/http/journal"
+	manuscriptHttp "github.com/api-monolith-template/internal/transport/http/manuscript"
+	volumeHttp "github.com/api-monolith-template/internal/transport/http/volume"
 )
 
 func StartServer() {
@@ -45,6 +62,22 @@ func StartServer() {
 	// Repositories
 	uRepo := userRepo.NewRepository(gormDB)
 	rRepo := roleRepo.NewRepository(gormDB)
+
+	jRepo := journalRepo.NewRepository(gormDB)
+	vRepo := volumeRepo.NewRepository(gormDB)
+	iRepo := issueRepo.NewRepository(gormDB)
+	mRepo := manuscriptRepo.NewRepository(gormDB)
+	fRepo := fileRepo.NewRepository(gormDB)
+
+	// SMTP sender config (fallback default)
+	host := config.Env.SMTP.Host
+	if host == "" {
+		host = "smtp.gmail.com"
+	}
+	port := config.Env.SMTP.Port
+	if port == 0 {
+		port = 587
+	}
 
 	// Email sender configuration
 	// Allow disabling email via EMAIL_ENABLED env var
@@ -130,10 +163,21 @@ func StartServer() {
 	// Services
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
 
+	storageService := storageSvc.NewService()
+	journalService := journalSvc.NewService(jRepo, fRepo, storageService)
+	volumeService := volumeSvc.NewService(vRepo, jRepo)
+	issueService := issueSvc.NewService(iRepo, vRepo, fRepo, storageService)
+	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, storageService)
+
 	// Controllers
 	authController := authHttp.NewController(authService, uRepo)
 	userController := userHttp.NewController(authService, uRepo)
 	warmupController := warmupHttp.NewController()
+
+	journalController := journalHttp.NewController(journalService)
+	volumeController := volumeHttp.NewController(volumeService)
+	issueController := issueHttp.NewController(issueService)
+	manuscriptController := manuscriptHttp.NewController(manuscriptService)
 
 	// HTTP Transport + routes
 	httpTransport.NewTransport().
@@ -141,8 +185,12 @@ func StartServer() {
 		WithAuthController(authController).
 		WithUserController(userController).
 		WithWarmupController(warmupController).
+		WithJournalController(journalController).
+		WithVolumeController(volumeController).
+		WithIssueController(issueController).
+		WithManuscriptController(manuscriptController).
 		WithRoleRepository(rRepo).
-		InitRoute()
+		InitRoute(rdb)
 
 	// Configure HTTP server with production-ready timeouts
 	readTimeout := 15 * time.Second

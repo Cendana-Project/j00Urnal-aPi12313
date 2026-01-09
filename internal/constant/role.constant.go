@@ -8,4 +8,6 @@ const (
 	RoleNurse        = "NURSE"
 	RoleReceptionist = "RECEPTIONIST"
 	RoleBOD          = "BOD"
+	RoleEditor       = "EDITOR"
+	RoleChiefEditor  = "CHIEF_EDITOR"
 )

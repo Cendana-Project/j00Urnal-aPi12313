@@ -29,6 +29,14 @@ type EnvConfig struct {
 	Database                Database      `mapstructure:"database"`
 	Redis                   Redis         `mapstructure:"redis"`
 	SMTP                    SMTP          `mapstructure:"smtp"`
+	Supabase                Supabase      `mapstructure:"supabase"`
+}
+
+type Supabase struct {
+	URL            string `mapstructure:"url"`
+	ServiceRoleKey string `mapstructure:"service_role_key"`
+	AnonRoleKey    string `mapstructure:"anon_role_key"`
+	Bucket         string `mapstructure:"bucket"`
 }
 
 type Redis struct {
@@ -58,18 +66,18 @@ type Server struct {
 	FrontendURL string `mapstructure:"frontend_url"`
 }
 
-type 	Database struct {
-		DSN             string        `mapstructure:"dsn"`
-		DirectDSN       string        `mapstructure:"direct_dsn"` // Direct connection for migrations (bypasses PgBouncer)
-		PingInterval    time.Duration `mapstructure:"ping_interval"`
-		ReconnectFactor float64       `mapstructure:"reconnect_factor"`
-		MinJitter       time.Duration `mapstructure:"min_jitter"`
-		MaxJitter       time.Duration `mapstructure:"max_jitter"`
-		MaxRetry        int           `mapstructure:"max_retry"`
-		MaxIdleConns    int           `mapstructure:"max_idle_conns"`
-		MaxOpenConns    int           `mapstructure:"max_open_conns"`
-		MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
-	}
+type Database struct {
+	DSN             string        `mapstructure:"dsn"`
+	DirectDSN       string        `mapstructure:"direct_dsn"` // Direct connection for migrations (bypasses PgBouncer)
+	PingInterval    time.Duration `mapstructure:"ping_interval"`
+	ReconnectFactor float64       `mapstructure:"reconnect_factor"`
+	MinJitter       time.Duration `mapstructure:"min_jitter"`
+	MaxJitter       time.Duration `mapstructure:"max_jitter"`
+	MaxRetry        int           `mapstructure:"max_retry"`
+	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
+	MaxOpenConns    int           `mapstructure:"max_open_conns"`
+	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
+}
 
 type SMTP struct {
 	Host      string `mapstructure:"host"`
@@ -157,6 +165,9 @@ func setDefaults() {
 	// Token defaults
 	viper.SetDefault("token.access_token_duration", "1h")
 	viper.SetDefault("token.refresh_token_duration", "720h") // 30 days
+
+	// Supabase defaults
+	viper.SetDefault("supabase.bucket", "publication")
 }
 
 // bindEnvVariables explicitly binds all environment variables
@@ -208,6 +219,12 @@ func bindEnvVariables() {
 	viper.BindEnv("smtp.username", "SMTP_USERNAME")
 	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
 	viper.BindEnv("smtp.from_email", "SMTP_FROM_EMAIL")
+
+	// Supabase
+	viper.BindEnv("supabase.url", "SUPABASE_URL")
+	viper.BindEnv("supabase.service_role_key", "SUPABASE_SERVICE_ROLE_KEY")
+	viper.BindEnv("supabase.anon_role_key", "SUPABASE_ANON_ROLE_KEY")
+	viper.BindEnv("supabase.bucket", "SUPABASE_BUCKET")
 }
 
 // Validate checks if all required configuration values are set correctly
@@ -254,6 +271,13 @@ func (c *EnvConfig) Validate() error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+
+	if c.Supabase.URL == "" {
+		errs = append(errs, "SUPABASE_URL is required")
+	}
+	if c.Supabase.ServiceRoleKey == "" {
+		errs = append(errs, "SUPABASE_SERVICE_ROLE_KEY is required")
 	}
 
 	return nil

@@ -16,7 +16,8 @@ func BindAndValidate(c *gin.Context, dst any) error {
 	dec.DisallowUnknownFields() // strict: unknown fields -> error
 
 	if err := dec.Decode(dst); err != nil {
-		// mapping ke katalog error validasi kamu
+		// Log the actual error for debugging
+		Infof(c.Request.Context(), "BindAndValidate failed: %v", err)
 		return constant.ErrValidationError
 	}
 	// Gunakan ValidateStruct yang sudah didefinisikan di util/validation.go
