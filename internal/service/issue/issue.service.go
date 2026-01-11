@@ -192,40 +192,30 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 
-	// 3. Delete Issue Files (Cover, Full Issue PDF)
-	// We need to check `publication_files` or just check fields?
-	// Issue struct has `CoverPath`.
-	// What about Full Issue PDF?
-	// We should probably rely on `publication_files` table if we used it.
-	// But for now let's just use `CoverPath` logic from `delete` or just storage delete if we know the path.
-
-	// Actually `storage.Delete` requires path.
-	// `CoverPath` stores public URL.
-	// We reuse the logic to extract path.
-	prefix := fmt.Sprintf("%s/storage/v1/object/public/%s/", config.Env.Supabase.URL, config.Env.Supabase.Bucket)
-
-	if iss.CoverPath != nil && *iss.CoverPath != "" {
-		if strings.HasPrefix(*iss.CoverPath, prefix) {
-			path := strings.TrimPrefix(*iss.CoverPath, prefix)
-			_ = s.storage.Delete(ctx, path)
+	// 3. Delete All Issue Files (Cover, Full Issue PDF, etc) from Supabase
+	// Fetch all files associated with this issue from publication_files
+	files, err := s.fileRepo.ListByEntity(ctx, constant.EntityTypeIssue, id)
+	if err == nil {
+		prefix := fmt.Sprintf("%s/storage/v1/object/public/%s/", config.Env.Supabase.URL, config.Env.Supabase.Bucket)
+		for _, f := range files {
+			if f.FilePath != "" {
+				if strings.HasPrefix(f.FilePath, prefix) {
+					path := strings.TrimPrefix(f.FilePath, prefix)
+					_ = s.storage.Delete(ctx, path)
+				}
+			}
+			// We can also delete the record from DB explicitly, but cascade might handle it.
+			// Ideally we assume DB cascade handles metadata deletion if foreign keys are set.
+			// If not, we should delete them here.
+			// Checking schema... assuming Foreign Key exists for EntityID?
+			// entity_type/entity_id are loose references usually (polymorphic-like).
+			// So we should delete these records manually to avoid orphans in DB too.
+			_ = s.fileRepo.Delete(ctx, f.ID)
 		}
+	} else {
+		// Log error but proceed?
+		// fmt.Printf("failed to list files for issue %s: %v\n", id, err)
 	}
-
-	// Also delete any `publication_files` associated with this issue?
-	// We don't have a `list` method for publication files by entity.
-	// But we should clean them up.
-	// If we don't, we leave orphans in `publication_files` table (metadata).
-	// Ideally `Delete` method in repo should cascade delete `publication_files` rows via DB constraint.
-	// But Supabase files?
-	// We need to fetch `publication_files` for this entity.
-	// For now, let's assume `CoverPath` is the main one. The PDF is stored in `publication_files`.
-	// If we don't fetch from `publication_files`, we miss the PDF.
-
-	// TODO: Future improvement - Fetch all publication_files for this entity and delete them.
-	// Since we don't have that helper yet, and per user request "cascade ke bawah" (Issue -> Manuscript), skipping PDF cleanup handling for now (except if it was Cover).
-	// Actually user said "jika di delete maka file yang ada di supabase juga terdelete juga".
-	// I should probably ensure PDF is deleted.
-	// But I don't see `FullIssuePDF` path in `Issue` entity.
 
 	// 4. Delete Issue Record
 	return s.issueRepo.Delete(ctx, id)
