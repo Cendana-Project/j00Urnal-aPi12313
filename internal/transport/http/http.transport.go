@@ -78,6 +78,11 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 
 	v1 := t.router.Group("/v1")
 
+	// ========== PUBLIC READ ACCESS ==========
+	v1.GET("/journals/:id", t.journalController.GetByID)
+	v1.GET("/volumes/:id", t.volumeController.GetByID)
+	v1.GET("/issues/:id", t.issueController.GetByID)
+
 	// ========== AUTH — PUBLIC ==========
 	auth := v1.Group("/auth")
 	{
@@ -100,36 +105,42 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		protected.GET("/me", t.userController.Me)
 		protected.PUT("/auth/password", t.authController.PasswordChange)
 		protected.POST("/auth/logout", t.authController.Logout)
+		protected.DELETE("/users/:id", t.userController.Delete) // TODO: Add specific permission check?
+
+		// Journal Management Permission Helper
+		requireJournalManage := transportmw.RequirePermissions(t.roleRepo, constant.PermissionJournalManage)
 
 		// Journals
 		journals := protected.Group("/journals")
 		{
-			journals.POST("", t.journalController.Create)
-			journals.GET("", t.journalController.GetAll)      // Public? Requirement: "Public can READ ACTIVE". So maybe move GetAll/Get to public group?
-			journals.GET("/:id", t.journalController.GetByID) // Public?
-			journals.PUT("/:id", t.journalController.Update)
-			journals.PATCH("/:id/status", t.journalController.SetStatus)
-			journals.POST("/:id/cover", t.journalController.UploadCover)
+			journals.POST("", requireJournalManage, t.journalController.Create)
+			journals.GET("", t.journalController.GetAll)
+			journals.PUT("/:id", requireJournalManage, t.journalController.Update)
+			journals.PATCH("/:id/status", requireJournalManage, t.journalController.SetStatus)
+			journals.POST("/:id/cover", requireJournalManage, t.journalController.UploadCover)
+			journals.DELETE("/:id", requireJournalManage, t.journalController.Delete)
 
 			// Volumes nested under journals
-			journals.POST("/:id/volumes", t.volumeController.Create)
+			journals.POST("/:id/volumes", requireJournalManage, t.volumeController.Create)
 		}
 
 		volumes := protected.Group("/volumes")
 		{
-			volumes.PUT("/:id", t.volumeController.Update)
-			volumes.PATCH("/:id/status", t.volumeController.SetStatus)
+			volumes.PUT("/:id", requireJournalManage, t.volumeController.Update)
+			volumes.PATCH("/:id/status", requireJournalManage, t.volumeController.SetStatus)
+			volumes.DELETE("/:id", requireJournalManage, t.volumeController.Delete)
 			// Issues nested under volumes
-			volumes.POST("/:id/issues", t.issueController.Create)
+			volumes.POST("/:id/issues", requireJournalManage, t.issueController.Create)
 		}
 
 		// Issues
 		issues := protected.Group("/issues")
 		{
-			issues.PUT("/:id", t.issueController.UpdateMetadata)
-			issues.PATCH("/:id/status", t.issueController.SetStatus)
-			issues.POST("/:id/cover", t.issueController.UploadCover)
-			issues.POST("/:id/full-pdf", t.issueController.UploadPDF)
+			issues.PUT("/:id", requireJournalManage, t.issueController.UpdateMetadata)
+			issues.PATCH("/:id/status", requireJournalManage, t.issueController.SetStatus)
+			issues.POST("/:id/cover", requireJournalManage, t.issueController.UploadCover)
+			issues.POST("/:id/full-pdf", requireJournalManage, t.issueController.UploadPDF)
+			issues.DELETE("/:id", requireJournalManage, t.issueController.Delete)
 		}
 
 		manuscripts := protected.Group("/manuscripts")

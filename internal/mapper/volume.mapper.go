@@ -6,7 +6,7 @@ import (
 )
 
 func ToVolumeResponse(v *entity.Volume) response.VolumeResponse {
-	return response.VolumeResponse{
+	resp := response.VolumeResponse{
 		ID:        v.ID,
 		JournalID: v.JournalID,
 		Year:      v.Year,
@@ -15,4 +15,13 @@ func ToVolumeResponse(v *entity.Volume) response.VolumeResponse {
 		CreatedAt: v.CreatedAt,
 		UpdatedAt: v.UpdatedAt,
 	}
+
+	if len(v.Issues) > 0 {
+		resp.Issues = make([]response.IssueResponse, len(v.Issues))
+		for k, i := range v.Issues {
+			resp.Issues[k] = ToIssueResponse(&i)
+		}
+	}
+
+	return resp
 }

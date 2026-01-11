@@ -72,3 +72,20 @@ func toMeDTO(u *entity.User, roleSlug string) response.MeResponse {
 		Role:        roleSlug,
 	}
 }
+
+func (c *Controller) Delete(ctx *gin.Context) {
+	id := ctx.Param("id")
+
+	// Optional: Check permission if caller is not the user themselves?
+	// But usually DELETE /users/:id is admin only or self.
+	// We'll leave RBAC to the route configuration.
+
+	if err := c.svc.DeleteUser(ctx.Request.Context(), id); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Message = "User deleted successfully"
+	util.HandleResponse(ctx, res, nil)
+}

@@ -19,5 +19,6 @@ type Issue struct {
 	DeletedAt       gorm.DeletedAt             `json:"-" gorm:"index;type:timestamp"`
 
 	// Relationships
-	Volume *Volume `json:"volume,omitempty" gorm:"foreignKey:VolumeID;references:ID"`
+	Volume      *Volume      `json:"volume,omitempty" gorm:"foreignKey:VolumeID;references:ID"`
+	Manuscripts []Manuscript `json:"manuscripts,omitempty" gorm:"foreignKey:IssueID;references:ID"`
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/api-monolith-template/internal/model/response"
 	rolerepo "github.com/api-monolith-template/internal/repository/role"
 	userrepo "github.com/api-monolith-template/internal/repository/user"
+	"github.com/api-monolith-template/internal/service/manuscript"
 	ulog "github.com/api-monolith-template/internal/util"
 )
 
@@ -50,23 +51,26 @@ type Service struct {
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 	jwtSecret  []byte
+
+	manuscriptService *manuscript.Service
 }
 
-func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *redis.Client, sender EmailSender) *Service {
+func NewService(users *userrepo.Repository, roles *rolerepo.Repository, rdb *redis.Client, sender EmailSender, ms *manuscript.Service) *Service {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	acc := config.Env.Token.AccessTokenDuration
 	ref := config.Env.Token.RefreshTokenDuration
 
 	return &Service{
-		users:      users,
-		roles:      roles,
-		redis:      rdb,
-		email:      sender,
-		loc:        loc,
-		pinTTL:     10 * time.Minute,
-		accessTTL:  acc,
-		refreshTTL: ref,
-		jwtSecret:  []byte(config.Env.Token.AccessTokenSecret),
+		users:             users,
+		roles:             roles,
+		redis:             rdb,
+		email:             sender,
+		loc:               loc,
+		pinTTL:            10 * time.Minute,
+		accessTTL:         acc,
+		refreshTTL:        ref,
+		jwtSecret:         []byte(config.Env.Token.AccessTokenSecret),
+		manuscriptService: ms,
 	}
 }
 
@@ -729,5 +733,33 @@ func (s *Service) LogoutAll(ctx context.Context, accessToken string) error { // 
 	}
 
 	ulog.Infof(ctx, "logout-all success user_id=%s", sub)
+	return nil
+}
+
+func (s *Service) DeleteUser(ctx context.Context, userID string) error {
+	// 1. Check if user exists
+	u, err := s.users.GetByID(userID)
+	if err != nil {
+		return err
+	}
+	if u == nil {
+		return constant.ErrUserNotFound
+	}
+
+	// 2. Cascade Delete Manuscripts (where user is Main Author)
+	if err := s.manuscriptService.DeleteByAuthor(ctx, userID); err != nil {
+		return err
+	}
+
+	// 3. Delete User Record
+	if err := s.users.Delete(userID); err != nil {
+		return err
+	}
+
+	// 4. Cleanup Redis (Auth tokens, etc)
+	_ = s.redis.Del(ctx, keyUserRefreshSet(userID)).Err()
+	// We might want to blacklist tokens, but simpler to just delete refresh tokens.
+
+	ulog.Infof(ctx, "delete user success user_id=%s", userID)
 	return nil
 }

@@ -7,17 +7,20 @@ import (
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/repository/journal"
 	"github.com/api-monolith-template/internal/repository/volume"
+	"github.com/api-monolith-template/internal/service/issue"
 )
 
 type Service struct {
-	volumeRepo  *volume.Repository
-	journalRepo *journal.Repository
+	volumeRepo   *volume.Repository
+	journalRepo  *journal.Repository
+	issueService *issue.Service
 }
 
-func NewService(vr *volume.Repository, jr *journal.Repository) *Service {
+func NewService(vr *volume.Repository, jr *journal.Repository, is *issue.Service) *Service {
 	return &Service{
-		volumeRepo:  vr,
-		journalRepo: jr,
+		volumeRepo:   vr,
+		journalRepo:  jr,
+		issueService: is,
 	}
 }
 
@@ -95,6 +98,27 @@ func (s *Service) SetStatus(ctx context.Context, id string, status constant.Publ
 		return nil, err
 	}
 	return vol, nil
+}
+
+func (s *Service) Delete(ctx context.Context, id string) error {
+	// 1. Get Volume
+	vol, err := s.volumeRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if vol == nil {
+		return constant.ErrRecordNotFound
+	}
+
+	// 2. Cascade Delete Issues
+	for _, iss := range vol.Issues {
+		if err := s.issueService.Delete(ctx, iss.ID); err != nil {
+			return err
+		}
+	}
+
+	// 3. Delete Volume Record
+	return s.volumeRepo.Delete(ctx, id)
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (*entity.Volume, error) {
