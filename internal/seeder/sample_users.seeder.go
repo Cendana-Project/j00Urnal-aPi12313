@@ -84,27 +84,6 @@ func SeedSampleUsers(db *gorm.DB) error {
 				return fmt.Errorf("update user phone idx %d (%s): %w", i, u.Email, err)
 			}
 		}
-
-		/*
-			// Fields not present in Users table schema yet:
-			updates := map[string]any{
-				"address": u.Address,
-			}
-			if u.Gender == "L" || u.Gender == "P" {
-				updates["gender"] = u.Gender
-			}
-			if len(u.NIK) == 16 {
-				updates["nik"] = u.NIK
-			}
-			if dobPtr != nil {
-				updates["dob"] = dobPtr
-			}
-			if len(updates) > 0 {
-				if err := db.Model(&entity.User{}).Where("id = ?", created.ID).Updates(updates).Error; err != nil {
-					return fmt.Errorf("update user idx %d (%s): %w", i, u.Email, err)
-				}
-			}
-		*/
 	}
 	return nil
 }

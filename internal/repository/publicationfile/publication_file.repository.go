@@ -30,6 +30,17 @@ func (r *Repository) GetByEntity(ctx context.Context, entityType constant.Entity
 	return &file, err
 }
 
+func (r *Repository) ListByEntity(ctx context.Context, entityType constant.EntityType, entityID string) ([]entity.PublicationFile, error) {
+	var files []entity.PublicationFile
+	err := r.db.WithContext(ctx).
+		Where("entity_type = ? AND entity_id = ?", entityType, entityID).
+		Find(&files).Error
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&entity.PublicationFile{}, "id = ?", id).Error
 }

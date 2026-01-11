@@ -74,6 +74,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		panic("gin engine is nil")
 	}
 	// ========== WARMUP — PUBLIC ==========
+	t.router.Use(transportmw.RateLimitMiddleware()) // <=== Rate Limiting
 	t.router.GET("/ping", func(c *gin.Context) { t.warmupController.Ping(c) })
 
 	v1 := t.router.Group("/v1")
@@ -105,10 +106,12 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		protected.GET("/me", t.userController.Me)
 		protected.PUT("/auth/password", t.authController.PasswordChange)
 		protected.POST("/auth/logout", t.authController.Logout)
-		protected.DELETE("/users/:id", t.userController.Delete) // TODO: Add specific permission check?
 
 		// Journal Management Permission Helper
 		requireJournalManage := transportmw.RequirePermissions(t.roleRepo, constant.PermissionJournalManage)
+		requireUserDelete := transportmw.RequirePermissions(t.roleRepo, constant.PermissionUserDelete)
+
+		protected.DELETE("/users/:id", requireUserDelete, t.userController.Delete)
 
 		// Journals
 		journals := protected.Group("/journals")
