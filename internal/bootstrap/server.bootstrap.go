@@ -161,13 +161,13 @@ func StartServer() {
 	}
 
 	// Services
-	authService := authSvc.NewService(uRepo, rRepo, rdb, sender)
-
 	storageService := storageSvc.NewService()
-	journalService := journalSvc.NewService(jRepo, fRepo, storageService)
-	volumeService := volumeSvc.NewService(vRepo, jRepo)
-	issueService := issueSvc.NewService(iRepo, vRepo, fRepo, storageService)
 	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, storageService)
+	authService := authSvc.NewService(uRepo, rRepo, rdb, sender, manuscriptService)
+
+	issueService := issueSvc.NewService(iRepo, vRepo, fRepo, storageService, manuscriptService)
+	volumeService := volumeSvc.NewService(vRepo, jRepo, issueService)
+	journalService := journalSvc.NewService(jRepo, fRepo, storageService, volumeService)
 
 	// Controllers
 	authController := authHttp.NewController(authService, uRepo)
@@ -177,7 +177,7 @@ func StartServer() {
 	journalController := journalHttp.NewController(journalService)
 	volumeController := volumeHttp.NewController(volumeService)
 	issueController := issueHttp.NewController(issueService)
-	manuscriptController := manuscriptHttp.NewController(manuscriptService)
+	manuscriptController := manuscriptHttp.NewController(manuscriptService, rRepo)
 
 	// HTTP Transport + routes
 	httpTransport.NewTransport().

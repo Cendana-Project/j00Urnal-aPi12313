@@ -121,6 +121,19 @@ var (
 		Code:       "CONFLICT",
 		StatusCode: http.StatusConflict,
 		Message:    "conflict",
+		Detail:     GetMessageDetail(MsgConflict), // Ensure generic conflict has detail if needed, or leave as is
+	}
+	ErrVolumeNotActive = response.CustomError{
+		Code:       "VOLUME_NOT_ACTIVE",
+		StatusCode: http.StatusConflict,
+		Message:    "parent volume is not active",
+		Detail:     GetMessageDetail(MsgVolumeNotActive),
+	}
+	ErrJournalNotActive = response.CustomError{
+		Code:       "JOURNAL_NOT_ACTIVE",
+		StatusCode: http.StatusConflict,
+		Message:    "parent journal is not active",
+		Detail:     GetMessageDetail(MsgJournalNotActive),
 	}
 
 	// ====== Auth / Token / OTP/PIN ======

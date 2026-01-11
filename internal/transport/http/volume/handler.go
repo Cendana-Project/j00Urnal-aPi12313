@@ -78,3 +78,32 @@ func (c *Controller) SetStatus(ctx *gin.Context) {
 	res.Data = mapper.ToVolumeResponse(v)
 	util.HandleResponse(ctx, res, nil)
 }
+
+func (c *Controller) GetByID(ctx *gin.Context) {
+	id := ctx.Param("id")
+	v, err := c.svc.GetByID(ctx.Request.Context(), id)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	if v == nil {
+		util.HandleError(ctx, constant.ErrRecordNotFound)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Data = mapper.ToVolumeResponse(v)
+	util.HandleResponse(ctx, res, nil)
+}
+
+func (c *Controller) Delete(ctx *gin.Context) {
+	id := ctx.Param("id")
+	if err := c.svc.Delete(ctx.Request.Context(), id); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Message = "Volume deleted successfully"
+	util.HandleResponse(ctx, res, nil)
+}

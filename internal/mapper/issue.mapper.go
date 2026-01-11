@@ -6,7 +6,7 @@ import (
 )
 
 func ToIssueResponse(i *entity.Issue) response.IssueResponse {
-	return response.IssueResponse{
+	resp := response.IssueResponse{
 		ID:              i.ID,
 		VolumeID:        i.VolumeID,
 		Number:          i.Number,
@@ -16,4 +16,13 @@ func ToIssueResponse(i *entity.Issue) response.IssueResponse {
 		CreatedAt:       i.CreatedAt,
 		UpdatedAt:       i.UpdatedAt,
 	}
+
+	if len(i.Manuscripts) > 0 {
+		resp.Manuscripts = make([]response.ManuscriptResponse, len(i.Manuscripts))
+		for k, m := range i.Manuscripts {
+			resp.Manuscripts[k] = ToManuscriptResponse(&m)
+		}
+	}
+
+	return resp
 }

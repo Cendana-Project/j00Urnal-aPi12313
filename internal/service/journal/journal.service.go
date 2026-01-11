@@ -6,25 +6,30 @@ import (
 	"io"
 	"mime/multipart"
 	"path/filepath"
+	"strings"
 
+	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/repository/journal"
 	"github.com/api-monolith-template/internal/repository/publicationfile"
 	"github.com/api-monolith-template/internal/service/storage"
+	"github.com/api-monolith-template/internal/service/volume"
 )
 
 type Service struct {
-	journalRepo *journal.Repository
-	fileRepo    *publicationfile.Repository
-	storage     *storage.Service
+	journalRepo   *journal.Repository
+	fileRepo      *publicationfile.Repository
+	storage       *storage.Service
+	volumeService *volume.Service
 }
 
-func NewService(jr *journal.Repository, fr *publicationfile.Repository, s *storage.Service) *Service {
+func NewService(jr *journal.Repository, fr *publicationfile.Repository, s *storage.Service, vs *volume.Service) *Service {
 	return &Service{
-		journalRepo: jr,
-		fileRepo:    fr,
-		storage:     s,
+		journalRepo:   jr,
+		fileRepo:      fr,
+		storage:       s,
+		volumeService: vs,
 	}
 }
 
@@ -128,6 +133,37 @@ func (s *Service) UploadCover(ctx context.Context, journalID string, fileHeader 
 	}
 
 	return url, nil
+}
+
+func (s *Service) Delete(ctx context.Context, id string) error {
+	// 1. Get Journal (With Volumes)
+	// JournalRepo.GetByID preloads Volumes and Volumes.Issues
+	j, err := s.journalRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if j == nil {
+		return constant.ErrRecordNotFound
+	}
+
+	// 2. Cascade Delete Volumes
+	for _, v := range j.Volumes {
+		if err := s.volumeService.Delete(ctx, v.ID); err != nil {
+			return err
+		}
+	}
+
+	// 3. Delete Journal Cover
+	prefix := fmt.Sprintf("%s/storage/v1/object/public/%s/", config.Env.Supabase.URL, config.Env.Supabase.Bucket)
+	if j.CoverPath != nil && *j.CoverPath != "" {
+		if strings.HasPrefix(*j.CoverPath, prefix) {
+			path := strings.TrimPrefix(*j.CoverPath, prefix)
+			_ = s.storage.Delete(ctx, path)
+		}
+	}
+
+	// 4. Delete Journal Record
+	return s.journalRepo.Delete(ctx, id)
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (*entity.Journal, error) {

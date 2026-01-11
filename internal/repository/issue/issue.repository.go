@@ -25,9 +25,16 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Issue, err
 	var issue entity.Issue
 	err := r.db.WithContext(ctx).
 		Preload("Volume.Journal").
+		Preload("Manuscripts.Authors").
+		Preload("Manuscripts.MainAuthor").
+		Preload("Manuscripts.Files").
 		First(&issue, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	return &issue, err
+}
+
+func (r *Repository) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Delete(&entity.Issue{}, "id = ?", id).Error
 }

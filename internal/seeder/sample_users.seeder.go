@@ -2,7 +2,6 @@ package seeder
 
 import (
 	"fmt"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -18,104 +17,94 @@ func SeedSampleUsers(db *gorm.DB) error {
 		Password  string
 		RoleSlug  string
 		Phone     string
+		ID        string
 		Gender    string // L|P
 		NIK       string // 16 digit
 		DOB       string // YYYY-MM-DD
 		Address   string
 	}
 
-	genNIK := func(prefix string, i int) string {
-		base := fmt.Sprintf("%s%012d", prefix, i)
-		if len(base) > 16 {
-			return base[:16]
-		}
-		return base
-	}
-
 	var users []sample
 
-	// super_admin (1)
+	// 1. Super Admin (ID: ...0001) - handled in seeder.go if ENV set, but let's add default sample if not?
+	// The seeder.go handles SuperAdmin via ENV. Here we seed others.
+	// Actually current logic in seeder.go calls CreateUser for SuperAdmin.
+	// We should avoid conflict. seeder.go uses ...0001. So start here from ...0002.
+
+	// Helper to fmt ID
+	genID := func(i int) string {
+		return fmt.Sprintf("550e8400-e29b-41d4-a716-44665544%04d", i)
+	}
+
+	// 1. Super Admin (ID: ...0001)
 	users = append(users, sample{
-		Email:     "superadmin@medikaone.id",
-		FirstName: "Super",
-		LastName:  "Admin",
-		Password:  "Password123",
-		RoleSlug:  constant.RoleSuperAdmin,
-		Phone:     "081270000001",
-		Gender:    "L",
-		NIK:       genNIK("1001", 1),
-		DOB:       "1970-01-01",
-		Address:   "Jl. Pusat No. 1, Jakarta",
+		Email: "superadmin@medikaone.id", FirstName: "Super", LastName: "Admin", Password: "Password123!", RoleSlug: constant.RoleSuperAdmin, Phone: "081270000001", ID: genID(1),
 	})
 
-	// patient (3)
-	for i := 1; i <= 3; i++ {
+	// 2. Editor (ID: ...0010)
+	users = append(users, sample{
+		Email: "editor@medikaone.id", FirstName: "Editor", LastName: "One", Password: "Password123!", RoleSlug: constant.RoleEditor, Phone: "081200000010", ID: genID(10),
+	})
+
+	// 3. Chief Editor (ID: ...0011)
+	users = append(users, sample{
+		Email: "chief@medikaone.id", FirstName: "Chief", LastName: "Editor", Password: "Password123!", RoleSlug: constant.RoleChiefEditor, Phone: "081200000011", ID: genID(11),
+	})
+
+	// 4. Reviewers (ID: ...0020 - 0022)
+	for i := 0; i < 3; i++ {
+		uid := 20 + i
 		users = append(users, sample{
-			Email:     fmt.Sprintf("patient%03d@medikaone.id", i),
-			FirstName: "Patient",
-			LastName:  fmt.Sprintf("%03d", i),
-			Password:  "Password123",
-			RoleSlug:  constant.RolePatient,
-			Phone:     fmt.Sprintf("081200000%03d", i),
-			Gender:    []string{"L", "P"}[i%2],
-			NIK:       genNIK("1101", i),
-			DOB:       "1990-01-01",
-			Address:   "Jl. Contoh No. 123, Jakarta",
+			Email: fmt.Sprintf("reviewer%d@medikaone.id", i+1), FirstName: "Reviewer", LastName: fmt.Sprintf("%d", i+1), Password: "Password123!", RoleSlug: constant.RoleReviewer, Phone: fmt.Sprintf("0812000000%d", uid), ID: genID(uid),
 		})
 	}
 
-	// doctor (3)
-	for i := 1; i <= 3; i++ {
+	// 5. Authors (ID: ...0030 - 0032)
+	for i := 0; i < 3; i++ {
+		uid := 30 + i
 		users = append(users, sample{
-			Email:     fmt.Sprintf("doctor%03d@medikaone.id", i),
-			FirstName: "Doctor",
-			LastName:  fmt.Sprintf("%03d", i),
-			Password:  "Password123",
-			RoleSlug:  constant.RoleDoctor,
-			Phone:     fmt.Sprintf("081210000%03d", i),
-			Gender:    []string{"L", "P"}[i%2],
-			NIK:       genNIK("1201", i),
-			DOB:       "1985-02-02",
-			Address:   "Jl. Sehat No. 45, Jakarta",
+			Email: fmt.Sprintf("author%d@medikaone.id", i+1), FirstName: "Author", LastName: fmt.Sprintf("%d", i+1), Password: "Password123!", RoleSlug: constant.RoleAuthor, Phone: fmt.Sprintf("0812000000%d", uid), ID: genID(uid),
 		})
 	}
-
-	// staff (admin, nurse, receptionist, bod) masing-masing 1
-	users = append(users,
-		sample{Email: "admin001@medikaone.id", FirstName: "Admin", LastName: "001", Password: "Password123", RoleSlug: constant.RoleAdmin, Phone: "081230000001", Gender: "L", NIK: genNIK("1301", 1), DOB: "1980-03-03", Address: "Jl. Klinik No. 1, Jakarta"},
-		sample{Email: "nurse001@medikaone.id", FirstName: "Nurse", LastName: "001", Password: "Password123", RoleSlug: constant.RoleNurse, Phone: "081240000001", Gender: "P", NIK: genNIK("1401", 1), DOB: "1992-04-04", Address: "Jl. Perawat No. 7, Jakarta"},
-		sample{Email: "receptionist001@medikaone.id", FirstName: "Receptionist", LastName: "001", Password: "Password123", RoleSlug: constant.RoleReceptionist, Phone: "081250000001", Gender: "P", NIK: genNIK("1501", 1), DOB: "1993-05-05", Address: "Jl. Lobi No. 2, Jakarta"},
-		sample{Email: "bod001@medikaone.id", FirstName: "BOD", LastName: "001", Password: "Password123", RoleSlug: constant.RoleBOD, Phone: "081260000001", Gender: "L", NIK: genNIK("1601", 1), DOB: "1975-06-06", Address: "Jl. Direktur No. 9, Jakarta"},
-	)
 
 	for i, u := range users {
-		created, err := CreateUserActiveWithRole(db, u.Email, u.FirstName, u.LastName, u.Password, u.RoleSlug)
+		created, err := CreateUserActiveWithRole(db, u.ID, u.Email, u.FirstName, u.LastName, u.Password, u.RoleSlug)
 		if err != nil {
 			return err
 		}
-		var dobPtr *time.Time
-		if u.DOB != "" {
-			if tm, err := time.Parse("2006-01-02", u.DOB); err == nil {
-				dobPtr = &tm
+		// var dobPtr *time.Time
+		// if u.DOB != "" {
+		// 	if tm, err := time.Parse("2006-01-02", u.DOB); err == nil {
+		// 		dobPtr = &tm
+		// 	}
+		// }
+		// Update phone (since it exists in schema)
+		if u.Phone != "" {
+			if err := db.Model(&entity.User{}).Where("id = ?", created.ID).Update("phone", u.Phone).Error; err != nil {
+				return fmt.Errorf("update user phone idx %d (%s): %w", i, u.Email, err)
 			}
 		}
-		updates := map[string]any{
-			"phone":   u.Phone,
-			"address": u.Address,
-		}
-		if u.Gender == "L" || u.Gender == "P" {
-			updates["gender"] = u.Gender
-		}
-		if len(u.NIK) == 16 {
-			updates["nik"] = u.NIK
-		}
-		if dobPtr != nil {
-			updates["dob"] = dobPtr
-		}
 
-		if err := db.Model(&entity.User{}).Where("id = ?", created.ID).Updates(updates).Error; err != nil {
-			return fmt.Errorf("update user idx %d (%s): %w", i, u.Email, err)
-		}
+		/*
+			// Fields not present in Users table schema yet:
+			updates := map[string]any{
+				"address": u.Address,
+			}
+			if u.Gender == "L" || u.Gender == "P" {
+				updates["gender"] = u.Gender
+			}
+			if len(u.NIK) == 16 {
+				updates["nik"] = u.NIK
+			}
+			if dobPtr != nil {
+				updates["dob"] = dobPtr
+			}
+			if len(updates) > 0 {
+				if err := db.Model(&entity.User{}).Where("id = ?", created.ID).Updates(updates).Error; err != nil {
+					return fmt.Errorf("update user idx %d (%s): %w", i, u.Email, err)
+				}
+			}
+		*/
 	}
 	return nil
 }

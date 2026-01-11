@@ -44,7 +44,18 @@ func (r *Repository) ListByIssue(ctx context.Context, issueID string) ([]entity.
 	err := r.db.WithContext(ctx).
 		Where("volume_number_id = ?", issueID).
 		Preload("Authors").
+		Preload("MainAuthor").
+		Preload("Files").
 		Order("created_at DESC").
+		Find(&manuscripts).Error
+	return manuscripts, err
+}
+
+func (r *Repository) ListByMainAuthor(ctx context.Context, authorID string) ([]entity.Manuscript, error) {
+	var manuscripts []entity.Manuscript
+	err := r.db.WithContext(ctx).
+		Where("main_author_id = ?", authorID).
+		Preload("Files").
 		Find(&manuscripts).Error
 	return manuscripts, err
 }

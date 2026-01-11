@@ -46,6 +46,11 @@ const (
 	PermissionManuscriptManage = "manuscript.manage"
 )
 
+// Journal
+const (
+	PermissionJournalManage = "journal.manage"
+)
+
 // ==========================
 // DEFAULT ROLE → PERMISSIONS
 // ==========================
@@ -67,60 +72,25 @@ var DefaultRolePermissions = map[string][]string{
 		PermissionBillingView, PermissionBillingEdit,
 		PermissionAppointmentView, PermissionAppointmentEdit,
 		PermissionManuscriptManage,
+		PermissionJournalManage,
 	},
 
 	RoleEditor: {
 		PermissionManuscriptManage,
+		PermissionJournalManage,
 	},
 
 	RoleChiefEditor: {
 		PermissionManuscriptManage,
+		PermissionJournalManage,
 	},
 
-	// admin RS
-	RoleAdmin: {
-		PermissionUserView, PermissionUserCreate, PermissionUserUpdate,
-		PermissionRoleView, PermissionRoleAssign, PermissionPermissionView,
-		PermissionPatientView, PermissionPatientEdit,
-		PermissionDoctorView, PermissionDoctorEdit,
-		PermissionEMRView, PermissionEMREdit,
-		PermissionBillingView, PermissionBillingEdit,
-		PermissionAppointmentView, PermissionAppointmentEdit,
+	RoleAuthor: {
+		PermissionAppointmentView, // Maybe needed? Or just minimal
+		// Author should have permissions relevant to them if any
 	},
 
-	// nurse
-	RoleNurse: {
-		PermissionPatientView, PermissionPatientEdit,
-		PermissionEMRView, PermissionEMREdit,
-		PermissionBillingView,
-		PermissionAppointmentView, PermissionAppointmentEdit,
-	},
-
-	// receptionist
-	RoleReceptionist: {
-		PermissionAppointmentView, PermissionAppointmentEdit,
-		PermissionPatientView,
-		PermissionBillingView, PermissionBillingEdit,
-	},
-
-	// BOD (direksi)
-	RoleBOD: {
-		PermissionBillingView,
-		PermissionPermissionView, PermissionRoleView,
-		PermissionDoctorView, PermissionPatientView,
-		PermissionAppointmentView,
-	},
-
-	// patient (minimum untuk update profil)
-	RolePatient: {
-		PermissionAppointmentView,
-		PermissionPatientView, PermissionPatientEdit,
-	},
-
-	// doctor (minimum untuk update profil)
-	RoleDoctor: {
-		PermissionAppointmentView,
-		PermissionDoctorView, PermissionDoctorEdit,
-		PermissionEMRView,
+	RoleReviewer: {
+		// Reviewer permissions
 	},
 }

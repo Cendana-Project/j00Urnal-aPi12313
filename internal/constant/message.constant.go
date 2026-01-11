@@ -55,6 +55,8 @@ const (
 	MsgConflict                 MessageCode = "CONFLICT"
 	MsgNotFound                 MessageCode = "NOT_FOUND"
 	MsgEmailSendFailed          MessageCode = "EMAIL_SEND_FAILED"
+	MsgVolumeNotActive          MessageCode = "VOLUME_NOT_ACTIVE"
+	MsgJournalNotActive         MessageCode = "JOURNAL_NOT_ACTIVE"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -126,6 +128,18 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "Failed to send email. Please check your email configuration or try again later.",
 		TitleIdn: "Gagal Mengirim Email",
 		DescIdn:  "Gagal mengirim email. Silakan periksa konfigurasi email Anda atau coba lagi nanti.",
+	},
+	MsgVolumeNotActive: {
+		TitleEng: "Volume Not Active",
+		DescEng:  "Parent Volume must be active to activate Issue",
+		TitleIdn: "Volume Tidak Aktif",
+		DescIdn:  "Volume induk harus aktif untuk mengaktifkan Isu",
+	},
+	MsgJournalNotActive: {
+		TitleEng: "Journal Not Active",
+		DescEng:  "Parent Journal must be active to activate Issue",
+		TitleIdn: "Jurnal Tidak Aktif",
+		DescIdn:  "Jurnal induk harus aktif untuk mengaktifkan Isu",
 	},
 }
 

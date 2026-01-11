@@ -100,7 +100,13 @@ ifndef NAME
 	@exit 1
 endif
 	@echo "Creating migration: $(NAME)"
+	@echo "Creating migration: $(NAME)"
 	$(GO) run main.go migrate create $(NAME)
+
+# Run database seeder
+seed:
+	@echo "Seeding database..."
+	$(GO) run main.go seed
 
 # Format code
 fmt:

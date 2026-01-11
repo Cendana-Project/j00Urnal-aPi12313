@@ -16,7 +16,7 @@ import (
 // CreateUserActiveWithRole membuat user aktif + assign role (idempotent by email).
 // - Jika user sudah ada: pastikan punya role tsb, mark active jika belum, dan SET username jika masih NULL.
 // - Jika belum ada: buat user active + username unik, lalu assign role.
-func CreateUserActiveWithRole(db *gorm.DB, email, firstName, lastName, rawPassword, roleSlug string) (*entity.User, error) {
+func CreateUserActiveWithRole(db *gorm.DB, id, email, firstName, lastName, rawPassword, roleSlug string) (*entity.User, error) {
 	if email == "" || rawPassword == "" || roleSlug == "" {
 		return nil, errors.New("email/password/role wajib diisi")
 	}
@@ -40,9 +40,9 @@ func CreateUserActiveWithRole(db *gorm.DB, email, firstName, lastName, rawPasswo
 		}
 		if cnt == 0 {
 			if err := db.Table("user_roles").Create(map[string]any{
-				"user_id":    u.ID,
-				"role_id":    role.ID,
-				"created_at": time.Now(),
+				"user_id":     u.ID,
+				"role_id":     role.ID,
+				"assigned_at": time.Now(),
 			}).Error; err != nil {
 				return &u, err
 			}
@@ -93,6 +93,9 @@ func CreateUserActiveWithRole(db *gorm.DB, email, firstName, lastName, rawPasswo
 		PasswordHash: hash,
 		Status:       "active",
 		VerifiedAt:   &now,
+	}
+	if id != "" {
+		u.ID = id
 	}
 	if err := db.Create(&u).Error; err != nil {
 		return nil, err
