@@ -10,6 +10,7 @@ import (
 
 func SeedSampleUsers(db *gorm.DB) error {
 	type sample struct {
+		ID          string
 		Email       string
 		FirstName   string
 		LastName    string
@@ -19,51 +20,72 @@ func SeedSampleUsers(db *gorm.DB) error {
 		Affiliation string
 	}
 
-	var users []sample
-
-	// 1. Super Admin (ID: ...0001) - handled in seeder.go if ENV set, but let's add default sample if not?
-	// The seeder.go handles SuperAdmin via ENV. Here we seed others.
-	// Actually current logic in seeder.go calls CreateUser for SuperAdmin.
-	// We should avoid conflict. seeder.go uses ...0001. So start here from ...0002.
-
 	// Helper to fmt ID
 	genID := func(i int) string {
 		return fmt.Sprintf("550e8400-e29b-41d4-a716-44665544%04d", i)
 	}
 
-	// 1. Super Admin (ID: ...0001)
-	users = append(users, sample{
-		Email: "superadmin@medikaone.id", FirstName: "Super", LastName: "Admin", Password: "Password123!", RoleSlug: constant.RoleSuperAdmin, Phone: "081270000001", ID: genID(1),
-	})
+	var users []sample
 
-	// 2. Editor (ID: ...0010)
+	// 1. Super Admin (ID: ...0010)
 	users = append(users, sample{
-		Email: "editor@medikaone.id", FirstName: "Editor", LastName: "One", Password: "Password123!", RoleSlug: constant.RoleEditor, Phone: "081200000010", ID: genID(10),
-	})
-
-	// 3. Chief Editor (ID: ...0011)
-	users = append(users, sample{
+		ID:          genID(10),
 		Email:       "superadmin@journalapi.id",
 		FirstName:   "Super",
 		LastName:    "Admin",
-		Password:    "Password123",
+		Password:    "Password123!",
 		RoleSlug:    constant.RoleSuperAdmin,
 		Phone:       "081270000001",
 		Affiliation: "Journal API Team",
 	})
 
-	// Add Editor and Chief Editor
-	users = append(users,
-		sample{Email: "editor001@journalapi.id", FirstName: "Editor", LastName: "One", Password: "Password123", RoleSlug: constant.RoleEditor, Phone: "081280000001", Affiliation: "Journal of Science"},
-		sample{Email: "chiefeditor@journalapi.id", FirstName: "Chief", LastName: "Editor", Password: "Password123", RoleSlug: constant.RoleChiefEditor, Phone: "081290000001", Affiliation: "University of Technology"},
-	)
+	// 2. Editor (ID: ...0020)
+	users = append(users, sample{
+		ID:          genID(20),
+		Email:       "editor001@journalapi.id",
+		FirstName:   "Editor",
+		LastName:    "One",
+		Password:    "Password123!",
+		RoleSlug:    constant.RoleEditor,
+		Phone:       "081280000001",
+		Affiliation: "Journal of Science",
+	})
 
-	// regular users with different roles
-	users = append(users,
-		sample{Email: "admin001@journalapi.id", FirstName: "Admin", LastName: "001", Password: "Password123", RoleSlug: constant.RoleAdmin, Phone: "081230000001", Affiliation: "Faculty of Engineering"},
-		sample{Email: "patient001@journalapi.id", FirstName: "User", LastName: "Patient", Password: "Password123", RoleSlug: constant.RolePatient, Phone: "081200000001", Affiliation: "Public User"},
-		sample{Email: "doctor001@journalapi.id", FirstName: "User", LastName: "Doctor", Password: "Password123", RoleSlug: constant.RoleDoctor, Phone: "081210000001", Affiliation: "General Clinic"},
-	)
+	// 3. Chief Editor (ID: ...0030)
+	users = append(users, sample{
+		ID:          genID(30),
+		Email:       "chiefeditor@journalapi.id",
+		FirstName:   "Chief",
+		LastName:    "Editor",
+		Password:    "Password123!",
+		RoleSlug:    constant.RoleChiefEditor,
+		Phone:       "081290000001",
+		Affiliation: "University of Technology",
+	})
+
+	// 4. Author (ID: ...0040)
+	users = append(users, sample{
+		ID:          genID(40),
+		Email:       "author001@journalapi.id",
+		FirstName:   "Author",
+		LastName:    "One",
+		Password:    "Password123!",
+		RoleSlug:    constant.RoleAuthor,
+		Phone:       "081230000001",
+		Affiliation: "Research Institute",
+	})
+
+	// 5. Reviewer (ID: ...0050)
+	users = append(users, sample{
+		ID:          genID(50),
+		Email:       "reviewer001@journalapi.id",
+		FirstName:   "Reviewer",
+		LastName:    "One",
+		Password:    "Password123!",
+		RoleSlug:    constant.RoleReviewer,
+		Phone:       "081240000001",
+		Affiliation: "Peer Review Board",
+	})
 
 	for i, u := range users {
 		created, err := CreateUserActiveWithRole(db, u.ID, u.Email, u.FirstName, u.LastName, u.Password, u.RoleSlug)

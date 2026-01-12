@@ -26,24 +26,11 @@ func SeedPermissions(db *gorm.DB) error {
 
 		{Name: "Permission View", Slug: constant.PermissionPermissionView, IsActive: true},
 
-		// profile
-		{Name: "Patient View", Slug: constant.PermissionPatientView, IsActive: true},
-		{Name: "Patient Edit", Slug: constant.PermissionPatientEdit, IsActive: true},
-		{Name: "Doctor View", Slug: constant.PermissionDoctorView, IsActive: true},
-		{Name: "Doctor Edit", Slug: constant.PermissionDoctorEdit, IsActive: true},
-
-		// emr & billing
-		{Name: "EMR View", Slug: constant.PermissionEMRView, IsActive: true},
-		{Name: "EMR Edit", Slug: constant.PermissionEMREdit, IsActive: true},
-		{Name: "Billing View", Slug: constant.PermissionBillingView, IsActive: true},
-		{Name: "Billing Edit", Slug: constant.PermissionBillingEdit, IsActive: true},
-
-		// appointment
-		{Name: "Appointment View", Slug: constant.PermissionAppointmentView, IsActive: true},
-		{Name: "Appointment Edit", Slug: constant.PermissionAppointmentEdit, IsActive: true},
-
 		// manuscript
 		{Name: "Manuscript Manage", Slug: constant.PermissionManuscriptManage, IsActive: true},
+
+		// journal
+		{Name: "Journal Manage", Slug: constant.PermissionJournalManage, IsActive: true},
 	}
 
 	// upsert per slug (idempotent)
@@ -88,7 +75,9 @@ func SeedPermissions(db *gorm.DB) error {
 		for _, ps := range permSlugs {
 			pid, err := getPermID(ps)
 			if err != nil {
-				return err
+				// We skip if permission is not in our toCreate list but in DefaultRolePermissions
+				// This handles clinical permissions that might still be in the map but not seeded
+				continue
 			}
 			if err := db.Exec(`
 				INSERT INTO role_permissions (role_id, permission_id, created_at)
