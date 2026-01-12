@@ -6,7 +6,7 @@ import (
 )
 
 func ToJournalResponse(j *entity.Journal) response.JournalResponse {
-	return response.JournalResponse{
+	resp := response.JournalResponse{
 		ID:          j.ID,
 		Name:        j.Name,
 		Description: j.Description,
@@ -16,4 +16,13 @@ func ToJournalResponse(j *entity.Journal) response.JournalResponse {
 		CreatedAt:   j.CreatedAt,
 		UpdatedAt:   j.UpdatedAt,
 	}
+
+	if len(j.Volumes) > 0 {
+		resp.Volumes = make([]response.VolumeResponse, len(j.Volumes))
+		for k, v := range j.Volumes {
+			resp.Volumes[k] = ToVolumeResponse(&v)
+		}
+	}
+
+	return resp
 }

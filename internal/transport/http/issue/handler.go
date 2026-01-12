@@ -159,6 +159,29 @@ func (c *Controller) handleUpload(ctx *gin.Context, fType constant.FileType, fie
 		return
 	}
 
+	// Validate based on type
+	var maxBytes int64
+	var allowedMimes []string
+
+	if fType == constant.FileTypeCover {
+		maxBytes = 5 * 1024 * 1024 // 5MB
+		allowedMimes = []string{"image/jpeg", "image/png", "image/webp"}
+	} else if fType == constant.FileTypeFullIssuePDF {
+		maxBytes = 50 * 1024 * 1024 // 50MB
+		allowedMimes = []string{"application/pdf"}
+	}
+
+	if maxBytes > 0 {
+		if err := util.ValidateFile(fileHeader, maxBytes, allowedMimes); err != nil {
+			util.HandleError(ctx, response.CustomError{
+				Code:       constant.ErrValidationFailed.Code,
+				StatusCode: http.StatusBadRequest,
+				Message:    err.Error(),
+			})
+			return
+		}
+	}
+
 	userID := util.GetUserID(ctx)
 	url, err := c.svc.UploadFile(ctx.Request.Context(), id, fileHeader, fType, userID)
 	if err != nil {
@@ -168,5 +191,34 @@ func (c *Controller) handleUpload(ctx *gin.Context, fType constant.FileType, fie
 
 	res := response.NewResponseOK()
 	res.Data = gin.H{"file_path": url}
+	util.HandleResponse(ctx, res, nil)
+}
+
+func (c *Controller) GetByID(ctx *gin.Context) {
+	id := ctx.Param("id")
+	i, err := c.svc.GetByID(ctx.Request.Context(), id)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	if i == nil {
+		util.HandleError(ctx, constant.ErrRecordNotFound)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Data = mapper.ToIssueResponse(i)
+	util.HandleResponse(ctx, res, nil)
+}
+
+func (c *Controller) Delete(ctx *gin.Context) {
+	id := ctx.Param("id")
+	if err := c.svc.Delete(ctx.Request.Context(), id); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Message = "Issue deleted successfully"
 	util.HandleResponse(ctx, res, nil)
 }

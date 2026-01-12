@@ -103,6 +103,16 @@ func (c *Controller) UploadCover(ctx *gin.Context) {
 		return
 	}
 
+	// Validate File: Max 5MB, Images only
+	if err := util.ValidateFile(fileHeader, 5*1024*1024, []string{"image/jpeg", "image/png", "image/webp"}); err != nil {
+		util.HandleError(ctx, response.CustomError{
+			Code:       constant.ErrValidationFailed.Code,
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		})
+		return
+	}
+
 	userID := util.GetUserID(ctx)
 	url, err := c.svc.UploadCover(ctx.Request.Context(), id, fileHeader, userID)
 	if err != nil {
@@ -129,6 +139,18 @@ func (c *Controller) GetByID(ctx *gin.Context) {
 
 	res := response.NewResponseOK()
 	res.Data = mapper.ToJournalResponse(j)
+	util.HandleResponse(ctx, res, nil)
+}
+
+func (c *Controller) Delete(ctx *gin.Context) {
+	id := ctx.Param("id")
+	if err := c.svc.Delete(ctx.Request.Context(), id); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Message = "Journal deleted successfully"
 	util.HandleResponse(ctx, res, nil)
 }
 

@@ -82,6 +82,10 @@ func (r *Repository) GetByEmail(email string) (*entity.User, error) {
 
 func (r *Repository) Update(u *entity.User) error { return r.db.Save(u).Error }
 
+func (r *Repository) Delete(id string) error {
+	return r.db.Delete(&entity.User{}, "id = ?", id).Error
+}
+
 type InsertUser struct {
 	ID           string
 	Email        string

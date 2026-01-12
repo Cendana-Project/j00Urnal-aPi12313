@@ -25,6 +25,7 @@ func (r *Repository) Update(ctx context.Context, journal *entity.Journal) error 
 func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Journal, error) {
 	var journal entity.Journal
 	err := r.db.WithContext(ctx).
+		Preload("Volumes").
 		Preload("Volumes.Issues").
 		First(&journal, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

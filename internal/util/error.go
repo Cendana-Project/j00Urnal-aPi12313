@@ -64,6 +64,37 @@ func HandleError(ctx *gin.Context, err error) {
 			return
 		}
 
+		// Handle DB Errors specifically
+		lowerErr := strings.ToLower(errStr)
+		if strings.Contains(lowerErr, "duplicate key") || strings.Contains(lowerErr, "unique constraint") {
+			// 409 Conflict
+			conflictErr := constant.ErrConflict.ToResponse()
+			conflictErr.MessageDetail = response.MessageDetail{
+				TitleEng: "Duplicate Data",
+				DescEng:  "Data already exists (duplicate key violation)",
+				TitleIdn: "Data Duplikat",
+				DescIdn:  "Data sudah ada (pelanggaran kunci unik)",
+			}
+			conflictErr.TraceID = GetTraceID(ctx)
+			conflictErr.Timestamp = time.Now().UTC()
+			ctx.JSON(conflictErr.StatusCode, conflictErr)
+			return
+		}
+		if strings.Contains(lowerErr, "foreign key constraint") {
+			// 400 Bad Request (usually referencing non-existent entity)
+			fkErr := constant.ErrValidationError.ToResponse()
+			fkErr.MessageDetail = response.MessageDetail{
+				TitleEng: "Invalid Reference",
+				DescEng:  "Referenced data does not exist (foreign key violation)",
+				TitleIdn: "Referensi Tidak Valid",
+				DescIdn:  "Data yang dirujuk tidak ditemukan",
+			}
+			fkErr.TraceID = GetTraceID(ctx)
+			fkErr.Timestamp = time.Now().UTC()
+			ctx.JSON(fkErr.StatusCode, fkErr)
+			return
+		}
+
 		internalServerErr := constant.ErrInternalServerError.ToResponse()
 		if internalServerErr.MessageDetail == (response.MessageDetail{}) {
 			internalServerErr.MessageDetail = constant.GetMessageDetail(constant.MsgInternalServerError)

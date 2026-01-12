@@ -21,7 +21,27 @@ func SeedSampleUsers(db *gorm.DB) error {
 
 	var users []sample
 
-	// super_admin (1)
+	// 1. Super Admin (ID: ...0001) - handled in seeder.go if ENV set, but let's add default sample if not?
+	// The seeder.go handles SuperAdmin via ENV. Here we seed others.
+	// Actually current logic in seeder.go calls CreateUser for SuperAdmin.
+	// We should avoid conflict. seeder.go uses ...0001. So start here from ...0002.
+
+	// Helper to fmt ID
+	genID := func(i int) string {
+		return fmt.Sprintf("550e8400-e29b-41d4-a716-44665544%04d", i)
+	}
+
+	// 1. Super Admin (ID: ...0001)
+	users = append(users, sample{
+		Email: "superadmin@medikaone.id", FirstName: "Super", LastName: "Admin", Password: "Password123!", RoleSlug: constant.RoleSuperAdmin, Phone: "081270000001", ID: genID(1),
+	})
+
+	// 2. Editor (ID: ...0010)
+	users = append(users, sample{
+		Email: "editor@medikaone.id", FirstName: "Editor", LastName: "One", Password: "Password123!", RoleSlug: constant.RoleEditor, Phone: "081200000010", ID: genID(10),
+	})
+
+	// 3. Chief Editor (ID: ...0011)
 	users = append(users, sample{
 		Email:       "superadmin@journalapi.id",
 		FirstName:   "Super",
@@ -46,7 +66,7 @@ func SeedSampleUsers(db *gorm.DB) error {
 	)
 
 	for i, u := range users {
-		created, err := CreateUserActiveWithRole(db, u.Email, u.FirstName, u.LastName, u.Password, u.RoleSlug)
+		created, err := CreateUserActiveWithRole(db, u.ID, u.Email, u.FirstName, u.LastName, u.Password, u.RoleSlug)
 		if err != nil {
 			return err
 		}

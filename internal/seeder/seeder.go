@@ -2,7 +2,6 @@ package seeder
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"time"
 
@@ -20,29 +19,12 @@ func Run(db *gorm.DB) error {
 		if err := SeedRoles(tx); err != nil {
 			return fmt.Errorf("seed roles: %w", err)
 		}
-		// 2) permissions + mapping
+		// 3) permissions + mapping
 		if err := SeedPermissions(tx); err != nil {
 			return fmt.Errorf("seed permissions: %w", err)
 		}
-		// 3) optional super_admin (aktif)
-		if email := os.Getenv("SUPERADMIN_EMAIL"); email != "" {
-			pass := os.Getenv("SUPERADMIN_PASSWORD")
-			if pass == "" {
-				return fmt.Errorf("env SUPERADMIN_PASSWORD required when SUPERADMIN_EMAIL set")
-			}
-			first := os.Getenv("SUPERADMIN_FIRST_NAME")
-			if first == "" {
-				first = "Super"
-			}
-			last := os.Getenv("SUPERADMIN_LAST_NAME")
-			if last == "" {
-				last = "Admin"
-			}
-			if _, err := CreateUserActiveWithRole(tx, email, first, last, pass, constant.RoleSuperAdmin); err != nil {
-				return fmt.Errorf("seed super_admin: %w", err)
-			}
-		}
-		// 4) sample users
+
+		// 4) sample users (includes super admin)
 		if err := SeedSampleUsers(tx); err != nil {
 			return fmt.Errorf("seed sample users: %w", err)
 		}
@@ -58,14 +40,13 @@ func Run(db *gorm.DB) error {
 // Flush: bersihkan data hasil seeding (idempotent, tidak hapus user).
 func Flush(db *gorm.DB) error {
 	// role slugs yg kita seed
+	// role slugs yg kita seed
 	roleSlugs := []string{
 		constant.RoleSuperAdmin,
-		constant.RoleAdmin,
-		constant.RolePatient,
-		constant.RoleDoctor,
-		constant.RoleNurse,
-		constant.RoleReceptionist,
-		constant.RoleBOD,
+		constant.RoleEditor,
+		constant.RoleChiefEditor,
+		constant.RoleAuthor,
+		constant.RoleReviewer,
 	}
 
 	// kumpulkan semua permission slugs dari peta default

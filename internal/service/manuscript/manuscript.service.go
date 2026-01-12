@@ -7,8 +7,10 @@ import (
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/response"
@@ -88,7 +90,50 @@ func (s *Service) Update(ctx context.Context, id string, title, abstract string)
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
+	// 1. Get Manuscript with Files
+	m, err := s.manuscriptRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return constant.ErrRecordNotFound
+	}
+
+	// 2. Delete Files from Storage
+	prefix := fmt.Sprintf("%s/storage/v1/object/public/%s/", config.Env.Supabase.URL, config.Env.Supabase.Bucket)
+	for _, f := range m.Files {
+		// Extract path from URL
+		if strings.HasPrefix(f.FilePath, prefix) {
+			path := strings.TrimPrefix(f.FilePath, prefix)
+			// Ignore error, try to delete all
+			_ = s.storage.Delete(ctx, path)
+		} else {
+			// Fallback: try to find "manuscripts/"
+			idx := strings.Index(f.FilePath, "manuscripts/")
+			if idx != -1 {
+				_ = s.storage.Delete(ctx, f.FilePath[idx:])
+			}
+		}
+	}
+
+	// 3. Delete Record
 	return s.manuscriptRepo.Delete(ctx, id)
+}
+
+func (s *Service) DeleteByAuthor(ctx context.Context, authorID string) error {
+	// 1. List manuscripts where user is main author
+	manuscripts, err := s.manuscriptRepo.ListByMainAuthor(ctx, authorID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Cascade delete
+	for _, m := range manuscripts {
+		if err := s.Delete(ctx, m.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (*entity.Manuscript, error) {

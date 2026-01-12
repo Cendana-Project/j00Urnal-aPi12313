@@ -40,3 +40,7 @@ func (r *Repository) Exists(ctx context.Context, journalID string, year, number 
 		Count(&count).Error
 	return count > 0, err
 }
+
+func (r *Repository) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Delete(&entity.Volume{}, "id = ?", id).Error
+}
