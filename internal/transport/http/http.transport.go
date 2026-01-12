@@ -118,7 +118,6 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		journals := protected.Group("/journals")
 		{
 			journals.POST("", requireJournalManage, t.journalController.Create)
-			journals.GET("", t.journalController.GetAll)
 			journals.PUT("/:id", requireJournalManage, t.journalController.Update)
 			journals.PATCH("/:id/status", requireJournalManage, t.journalController.SetStatus)
 			journals.POST("/:id/cover", requireJournalManage, t.journalController.UploadCover)
