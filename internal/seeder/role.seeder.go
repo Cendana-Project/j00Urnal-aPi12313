@@ -21,6 +21,8 @@ func SeedRoles(db *gorm.DB) error {
 		{ID: uuid.NewString(), Name: "Nurse", Slug: constant.RoleNurse, Active: true, CreatedAt: now},
 		{ID: uuid.NewString(), Name: "Receptionist", Slug: constant.RoleReceptionist, Active: true, CreatedAt: now},
 		{ID: uuid.NewString(), Name: "BOD", Slug: constant.RoleBOD, Active: true, CreatedAt: now},
+		{ID: uuid.NewString(), Name: "Editor", Slug: constant.RoleEditor, Active: true, CreatedAt: now},
+		{ID: uuid.NewString(), Name: "Chief Editor", Slug: constant.RoleChiefEditor, Active: true, CreatedAt: now},
 	}
 	for _, r := range roles {
 		var cnt int64

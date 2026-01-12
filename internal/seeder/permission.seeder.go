@@ -41,6 +41,9 @@ func SeedPermissions(db *gorm.DB) error {
 		// appointment
 		{Name: "Appointment View", Slug: constant.PermissionAppointmentView, IsActive: true},
 		{Name: "Appointment Edit", Slug: constant.PermissionAppointmentEdit, IsActive: true},
+
+		// manuscript
+		{Name: "Manuscript Manage", Slug: constant.PermissionManuscriptManage, IsActive: true},
 	}
 
 	// upsert per slug (idempotent)

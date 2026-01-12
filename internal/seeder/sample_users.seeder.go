@@ -2,90 +2,47 @@ package seeder
 
 import (
 	"fmt"
-	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/constant"
-	"github.com/api-monolith-template/internal/model/entity"
 )
 
 func SeedSampleUsers(db *gorm.DB) error {
 	type sample struct {
-		Email     string
-		FirstName string
-		LastName  string
-		Password  string
-		RoleSlug  string
-		Phone     string
-		Gender    string // L|P
-		NIK       string // 16 digit
-		DOB       string // YYYY-MM-DD
-		Address   string
-	}
-
-	genNIK := func(prefix string, i int) string {
-		base := fmt.Sprintf("%s%012d", prefix, i)
-		if len(base) > 16 {
-			return base[:16]
-		}
-		return base
+		Email       string
+		FirstName   string
+		LastName    string
+		Password    string
+		RoleSlug    string
+		Phone       string
+		Affiliation string
 	}
 
 	var users []sample
 
 	// super_admin (1)
 	users = append(users, sample{
-		Email:     "superadmin@medikaone.id",
-		FirstName: "Super",
-		LastName:  "Admin",
-		Password:  "Password123",
-		RoleSlug:  constant.RoleSuperAdmin,
-		Phone:     "081270000001",
-		Gender:    "L",
-		NIK:       genNIK("1001", 1),
-		DOB:       "1970-01-01",
-		Address:   "Jl. Pusat No. 1, Jakarta",
+		Email:       "superadmin@journalapi.id",
+		FirstName:   "Super",
+		LastName:    "Admin",
+		Password:    "Password123",
+		RoleSlug:    constant.RoleSuperAdmin,
+		Phone:       "081270000001",
+		Affiliation: "Journal API Team",
 	})
 
-	// patient (3)
-	for i := 1; i <= 3; i++ {
-		users = append(users, sample{
-			Email:     fmt.Sprintf("patient%03d@medikaone.id", i),
-			FirstName: "Patient",
-			LastName:  fmt.Sprintf("%03d", i),
-			Password:  "Password123",
-			RoleSlug:  constant.RolePatient,
-			Phone:     fmt.Sprintf("081200000%03d", i),
-			Gender:    []string{"L", "P"}[i%2],
-			NIK:       genNIK("1101", i),
-			DOB:       "1990-01-01",
-			Address:   "Jl. Contoh No. 123, Jakarta",
-		})
-	}
-
-	// doctor (3)
-	for i := 1; i <= 3; i++ {
-		users = append(users, sample{
-			Email:     fmt.Sprintf("doctor%03d@medikaone.id", i),
-			FirstName: "Doctor",
-			LastName:  fmt.Sprintf("%03d", i),
-			Password:  "Password123",
-			RoleSlug:  constant.RoleDoctor,
-			Phone:     fmt.Sprintf("081210000%03d", i),
-			Gender:    []string{"L", "P"}[i%2],
-			NIK:       genNIK("1201", i),
-			DOB:       "1985-02-02",
-			Address:   "Jl. Sehat No. 45, Jakarta",
-		})
-	}
-
-	// staff (admin, nurse, receptionist, bod) masing-masing 1
+	// Add Editor and Chief Editor
 	users = append(users,
-		sample{Email: "admin001@medikaone.id", FirstName: "Admin", LastName: "001", Password: "Password123", RoleSlug: constant.RoleAdmin, Phone: "081230000001", Gender: "L", NIK: genNIK("1301", 1), DOB: "1980-03-03", Address: "Jl. Klinik No. 1, Jakarta"},
-		sample{Email: "nurse001@medikaone.id", FirstName: "Nurse", LastName: "001", Password: "Password123", RoleSlug: constant.RoleNurse, Phone: "081240000001", Gender: "P", NIK: genNIK("1401", 1), DOB: "1992-04-04", Address: "Jl. Perawat No. 7, Jakarta"},
-		sample{Email: "receptionist001@medikaone.id", FirstName: "Receptionist", LastName: "001", Password: "Password123", RoleSlug: constant.RoleReceptionist, Phone: "081250000001", Gender: "P", NIK: genNIK("1501", 1), DOB: "1993-05-05", Address: "Jl. Lobi No. 2, Jakarta"},
-		sample{Email: "bod001@medikaone.id", FirstName: "BOD", LastName: "001", Password: "Password123", RoleSlug: constant.RoleBOD, Phone: "081260000001", Gender: "L", NIK: genNIK("1601", 1), DOB: "1975-06-06", Address: "Jl. Direktur No. 9, Jakarta"},
+		sample{Email: "editor001@journalapi.id", FirstName: "Editor", LastName: "One", Password: "Password123", RoleSlug: constant.RoleEditor, Phone: "081280000001", Affiliation: "Journal of Science"},
+		sample{Email: "chiefeditor@journalapi.id", FirstName: "Chief", LastName: "Editor", Password: "Password123", RoleSlug: constant.RoleChiefEditor, Phone: "081290000001", Affiliation: "University of Technology"},
+	)
+
+	// regular users with different roles
+	users = append(users,
+		sample{Email: "admin001@journalapi.id", FirstName: "Admin", LastName: "001", Password: "Password123", RoleSlug: constant.RoleAdmin, Phone: "081230000001", Affiliation: "Faculty of Engineering"},
+		sample{Email: "patient001@journalapi.id", FirstName: "User", LastName: "Patient", Password: "Password123", RoleSlug: constant.RolePatient, Phone: "081200000001", Affiliation: "Public User"},
+		sample{Email: "doctor001@journalapi.id", FirstName: "User", LastName: "Doctor", Password: "Password123", RoleSlug: constant.RoleDoctor, Phone: "081210000001", Affiliation: "General Clinic"},
 	)
 
 	for i, u := range users {
@@ -93,27 +50,13 @@ func SeedSampleUsers(db *gorm.DB) error {
 		if err != nil {
 			return err
 		}
-		var dobPtr *time.Time
-		if u.DOB != "" {
-			if tm, err := time.Parse("2006-01-02", u.DOB); err == nil {
-				dobPtr = &tm
-			}
-		}
+
 		updates := map[string]any{
-			"phone":   u.Phone,
-			"address": u.Address,
-		}
-		if u.Gender == "L" || u.Gender == "P" {
-			updates["gender"] = u.Gender
-		}
-		if len(u.NIK) == 16 {
-			updates["nik"] = u.NIK
-		}
-		if dobPtr != nil {
-			updates["dob"] = dobPtr
+			"phone":       u.Phone,
+			"affiliation": u.Affiliation,
 		}
 
-		if err := db.Model(&entity.User{}).Where("id = ?", created.ID).Updates(updates).Error; err != nil {
+		if err := db.Model(created).Updates(updates).Error; err != nil {
 			return fmt.Errorf("update user idx %d (%s): %w", i, u.Email, err)
 		}
 	}

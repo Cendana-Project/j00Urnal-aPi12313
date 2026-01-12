@@ -1,4 +1,4 @@
-.PHONY: run test build clean migrate-up migrate-down migrate-status migrate-create help
+.PHONY: run test build clean migrate-up migrate-down migrate-status migrate-create seed seed-flush help
 .PHONY: docker-build docker-run docker-test docker-clean deploy-check gen-secrets
 .PHONY: render-deploy render-logs render-shell dev-setup
 
@@ -33,6 +33,8 @@ help:
 	@echo "  make migrate-status   - Show migration status"
 	@echo "  make migrate-test     - Test migration idempotency and safety"
 	@echo "  make migrate-create   - Create new migration (use NAME=migration_name)"
+	@echo "  make seed             - Seed the database with initial data"
+	@echo "  make seed-flush       - Flush seeded data from the database"
 	@echo ""
 	@echo "Docker:"
 	@echo "  make docker-build     - Build Docker image"
@@ -73,10 +75,22 @@ test-coverage:
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
-# Run migrations up
+# Run migrations up and seed
 migrate-up:
 	@echo "Running migrations..."
 	$(GO) run main.go migrate up
+	@echo "Seeding database..."
+	$(GO) run main.go seed
+
+# Seed the database
+seed:
+	@echo "Seeding database..."
+	$(GO) run main.go seed
+
+# Flush seeded data
+seed-flush:
+	@echo "Flushing seeded data..."
+	$(GO) run main.go seed-flush
 
 # Rollback last migration
 migrate-down:

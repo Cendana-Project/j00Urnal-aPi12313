@@ -70,6 +70,10 @@ RUN echo '#!/bin/sh' > /entrypoint.sh && \
     echo '  log "⚠ Migration exited with code $MIGRATION_EXIT (may be OK if migrations are current)"' >> /entrypoint.sh && \
     echo 'fi' >> /entrypoint.sh && \
     echo '' >> /entrypoint.sh && \
+    echo 'log "Running database seeding..."' >> /entrypoint.sh && \
+    echo './main seed' >> /entrypoint.sh && \
+    echo 'log "✓ Database seeding completed"' >> /entrypoint.sh && \
+    echo '' >> /entrypoint.sh && \
     echo 'log "=========================================="' >> /entrypoint.sh && \
     echo 'log "Starting server on port ${PORT:-8080}..."' >> /entrypoint.sh && \
     echo 'log "=========================================="' >> /entrypoint.sh && \
