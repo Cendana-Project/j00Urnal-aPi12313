@@ -81,6 +81,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 
 	// ========== PUBLIC READ ACCESS ==========
 	v1.GET("/journals/:id", t.journalController.GetByID)
+	v1.GET("/journals", t.journalController.GetAll)
 	v1.GET("/volumes/:id", t.volumeController.GetByID)
 	v1.GET("/issues/:id", t.issueController.GetByID)
 
