@@ -44,3 +44,15 @@ func (r *Repository) Exists(ctx context.Context, journalID string, year, number 
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&entity.Volume{}, "id = ?", id).Error
 }
+
+func (r *Repository) FindAll(ctx context.Context) ([]*entity.Volume, error) {
+	var volumes []*entity.Volume
+	err := r.db.WithContext(ctx).
+		Preload("Journal").
+		Order("created_at desc").
+		Find(&volumes).Error
+	if err != nil {
+		return nil, err
+	}
+	return volumes, nil
+}

@@ -26,3 +26,12 @@ func ToIssueResponse(i *entity.Issue) response.IssueResponse {
 
 	return resp
 }
+
+func ToIssueResponses(issues []*entity.Issue) []*response.IssueResponse {
+	var responses []*response.IssueResponse
+	for _, i := range issues {
+		resp := ToIssueResponse(i)
+		responses = append(responses, &resp)
+	}
+	return responses
+}

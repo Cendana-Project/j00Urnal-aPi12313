@@ -221,6 +221,10 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.issueRepo.Delete(ctx, id)
 }
 
+func (s *Service) GetAll(ctx context.Context) ([]*entity.Issue, error) {
+	return s.issueRepo.FindAll(ctx)
+}
+
 func (s *Service) GetByID(ctx context.Context, id string) (*entity.Issue, error) {
 	return s.issueRepo.GetByID(ctx, id)
 }

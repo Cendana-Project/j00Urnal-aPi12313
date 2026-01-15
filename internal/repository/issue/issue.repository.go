@@ -38,3 +38,17 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Issue, err
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&entity.Issue{}, "id = ?", id).Error
 }
+
+func (r *Repository) FindAll(ctx context.Context) ([]*entity.Issue, error) {
+	var issues []*entity.Issue
+	err := r.db.WithContext(ctx).
+		Preload("Volume.Journal").
+		Preload("Manuscripts.Authors"). // Optional: depends if we need deep detail for list
+		Preload("Manuscripts.MainAuthor").
+		Order("created_at desc").
+		Find(&issues).Error
+	if err != nil {
+		return nil, err
+	}
+	return issues, nil
+}
