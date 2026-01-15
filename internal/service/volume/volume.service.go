@@ -121,6 +121,10 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.volumeRepo.Delete(ctx, id)
 }
 
+func (s *Service) GetAll(ctx context.Context) ([]*entity.Volume, error) {
+	return s.volumeRepo.FindAll(ctx)
+}
+
 func (s *Service) GetByID(ctx context.Context, id string) (*entity.Volume, error) {
 	return s.volumeRepo.GetByID(ctx, id)
 }

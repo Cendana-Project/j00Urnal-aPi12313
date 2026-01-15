@@ -175,8 +175,8 @@ func StartServer() {
 	warmupController := warmupHttp.NewController()
 
 	journalController := journalHttp.NewController(journalService)
-	volumeController := volumeHttp.NewController(volumeService)
-	issueController := issueHttp.NewController(issueService)
+	volumeController := volumeHttp.NewController(volumeService, rRepo)
+	issueController := issueHttp.NewController(issueService, rRepo)
 	manuscriptController := manuscriptHttp.NewController(manuscriptService, rRepo)
 
 	// HTTP Transport + routes

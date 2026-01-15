@@ -9,16 +9,18 @@ import (
 	"github.com/api-monolith-template/internal/mapper"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
+	"github.com/api-monolith-template/internal/repository/role"
 	"github.com/api-monolith-template/internal/service/volume"
 	"github.com/api-monolith-template/internal/util"
 )
 
 type Controller struct {
-	svc *volume.Service
+	svc      *volume.Service
+	roleRepo *role.Repository
 }
 
-func NewController(svc *volume.Service) *Controller {
-	return &Controller{svc: svc}
+func NewController(svc *volume.Service, roleRepo *role.Repository) *Controller {
+	return &Controller{svc: svc, roleRepo: roleRepo}
 }
 
 func (c *Controller) Create(ctx *gin.Context) {
@@ -38,6 +40,38 @@ func (c *Controller) Create(ctx *gin.Context) {
 	res := response.NewResponseOK()
 	res.StatusCode = http.StatusCreated
 	res.Data = mapper.ToVolumeResponse(v)
+	util.HandleResponse(ctx, res, nil)
+}
+
+func (c *Controller) GetAll(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	roles, err := c.roleRepo.ListRolesByUser(ctx.Request.Context(), userID)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	isAllowed := false
+	for _, r := range roles {
+		if r.Slug == constant.RoleSuperAdmin || r.Slug == constant.RoleChiefEditor {
+			isAllowed = true
+			break
+		}
+	}
+
+	if !isAllowed {
+		util.HandleError(ctx, constant.ErrForbidden)
+		return
+	}
+
+	volumes, err := c.svc.GetAll(ctx.Request.Context())
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Data = mapper.ToVolumeResponses(volumes)
 	util.HandleResponse(ctx, res, nil)
 }
 

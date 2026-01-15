@@ -25,3 +25,12 @@ func ToVolumeResponse(v *entity.Volume) response.VolumeResponse {
 
 	return resp
 }
+
+func ToVolumeResponses(volumes []*entity.Volume) []*response.VolumeResponse {
+	var responses []*response.VolumeResponse
+	for _, v := range volumes {
+		resp := ToVolumeResponse(v)
+		responses = append(responses, &resp)
+	}
+	return responses
+}

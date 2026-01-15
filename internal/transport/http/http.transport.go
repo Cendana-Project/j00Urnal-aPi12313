@@ -129,6 +129,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 
 		volumes := protected.Group("/volumes")
 		{
+			volumes.GET("", t.volumeController.GetAll)
 			volumes.PUT("/:id", requireJournalManage, t.volumeController.Update)
 			volumes.PATCH("/:id/status", requireJournalManage, t.volumeController.SetStatus)
 			volumes.DELETE("/:id", requireJournalManage, t.volumeController.Delete)
@@ -139,6 +140,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		// Issues
 		issues := protected.Group("/issues")
 		{
+			issues.GET("", t.issueController.GetAll)
 			issues.PUT("/:id", requireJournalManage, t.issueController.UpdateMetadata)
 			issues.PATCH("/:id/status", requireJournalManage, t.issueController.SetStatus)
 			issues.POST("/:id/cover", requireJournalManage, t.issueController.UploadCover)
