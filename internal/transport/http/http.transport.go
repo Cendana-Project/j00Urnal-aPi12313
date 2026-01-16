@@ -84,6 +84,8 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 	v1.GET("/journals", t.journalController.GetAll)
 	v1.GET("/volumes/:id", t.volumeController.GetByID)
 	v1.GET("/issues/:id", t.issueController.GetByID)
+	v1.GET("/manuscripts/:id", t.manuscriptController.GetByID)
+	v1.GET("/manuscripts", t.manuscriptController.GetAll)
 
 	// ========== AUTH — PUBLIC ==========
 	auth := v1.Group("/auth")
@@ -98,8 +100,6 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		auth.POST("/password/forgot", t.authController.PasswordForgot)
 		auth.POST("/password/reset", t.authController.PasswordReset)
 	}
-
-	// Prepare Redis client passed from bootstrap
 
 	protected := v1.Group("/")
 	protected.Use(transportmw.AuthRequired(rdb))
@@ -151,8 +151,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		manuscripts := protected.Group("/manuscripts")
 		{
 			manuscripts.POST("", t.manuscriptController.Create)
-			manuscripts.GET("", t.manuscriptController.GetAll)
-			manuscripts.GET("/:id", t.manuscriptController.GetByID)
+
 			manuscripts.PUT("/:id", t.manuscriptController.Update)
 			manuscripts.DELETE("/:id", t.manuscriptController.Delete)
 
