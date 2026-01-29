@@ -82,3 +82,28 @@ func (s *Service) Delete(ctx context.Context, path string) error {
 
 	return nil
 }
+
+// HealthCheck checks if the Supabase Storage bucket is accessible.
+func (s *Service) HealthCheck(ctx context.Context) error {
+	url := fmt.Sprintf("%s/storage/v1/bucket/%s", config.Env.Supabase.URL, config.Env.Supabase.Bucket)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+config.Env.Supabase.ServiceRoleKey)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("storage health check failed: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}

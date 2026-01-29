@@ -172,7 +172,7 @@ func StartServer() {
 	// Controllers
 	authController := authHttp.NewController(authService, uRepo)
 	userController := userHttp.NewController(authService, uRepo)
-	warmupController := warmupHttp.NewController()
+	warmupController := warmupHttp.NewController(storageService)
 
 	journalController := journalHttp.NewController(journalService)
 	volumeController := volumeHttp.NewController(volumeService, rRepo)
