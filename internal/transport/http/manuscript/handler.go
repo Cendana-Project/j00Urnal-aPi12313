@@ -58,9 +58,48 @@ func (c *Controller) checkAccess(ctx *gin.Context, manuscriptID string) error {
 	return constant.ErrForbidden
 }
 
+// Submit handles manuscript submission by authors
+func (c *Controller) Submit(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+
+	var req request.CreateManuscriptRequest
+	if err := util.BindAndValidate(ctx, &req); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	m, err := c.svc.Submit(ctx.Request.Context(), userID, req)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.StatusCode = http.StatusCreated
+	res.Message = "Manuscript submitted successfully"
+	res.Data = mapper.ToManuscriptResponse(m)
+	util.HandleResponse(ctx, res, nil)
+}
+
 func (c *Controller) Create(ctx *gin.Context) {
 	userID := ctx.GetString("user_id")
-	var req request.CreateManuscriptRequest
+	// Legacy Create (Admin), logic might need adjustment or deprecation.
+	// For now, keeping as is but be aware it uses form fields differently.
+	// Since we are moving to Submit, maybe this should be restricted.
+	// Assuming this endpoint is effectively 'Submit' for older clients?
+	// But signature is different. Old Create took issue_id directly?
+	// Let's keep it assuming existing clients. But for "Create & Upload", use Submit.
+
+	// Previous implementation logic:
+	var req struct {
+		IssueID  string `form:"issue_id" json:"issue_id" binding:"required"`
+		Title    string `form:"title" json:"title" binding:"required"`
+		Abstract string `form:"abstract" json:"abstract" binding:"required"`
+	}
 	if err := util.BindAndValidate(ctx, &req); err != nil {
 		util.HandleError(ctx, err)
 		return
@@ -218,7 +257,9 @@ func (c *Controller) UploadMainFile(ctx *gin.Context) {
 		return
 	}
 
-	f, err := c.svc.UploadFile(ctx.Request.Context(), id, constant.FileTypeMain, fileHeader)
+	// Use constant.ManuscriptFileTypeMain
+	// Note: Check service method signature. If it accepts constant.ManuscriptFileType, this must match.
+	f, err := c.svc.UploadFile(ctx.Request.Context(), id, constant.ManuscriptFileTypeMain, fileHeader)
 	if err != nil {
 		util.HandleError(ctx, err)
 		return
@@ -233,7 +274,7 @@ func (c *Controller) UploadAttachment(ctx *gin.Context) {
 	id := ctx.Param("id")
 	fileType := ctx.PostForm("type")
 	if fileType == "" {
-		fileType = string(constant.FileTypeSupplement)
+		fileType = string(constant.ManuscriptFileTypeSupplement)
 	}
 
 	fileHeader, err := ctx.FormFile("file")
@@ -264,7 +305,7 @@ func (c *Controller) UploadAttachment(ctx *gin.Context) {
 		return
 	}
 
-	f, err := c.svc.UploadFile(ctx.Request.Context(), id, constant.FileType(fileType), fileHeader)
+	f, err := c.svc.UploadFile(ctx.Request.Context(), id, constant.ManuscriptFileType(fileType), fileHeader)
 	if err != nil {
 		util.HandleError(ctx, err)
 		return
@@ -272,5 +313,25 @@ func (c *Controller) UploadAttachment(ctx *gin.Context) {
 
 	res := response.NewResponseOK()
 	res.Data = f
+	util.HandleResponse(ctx, res, nil)
+}
+
+func (c *Controller) Publish(ctx *gin.Context) {
+	id := ctx.Param("id")
+	var req request.PublishManuscriptRequest
+	if err := util.BindAndValidate(ctx, &req); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	m, err := c.svc.PublishToIssue(ctx.Request.Context(), id, req.IssueID)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Message = "Manuscript published successfully"
+	res.Data = mapper.ToManuscriptResponse(m)
 	util.HandleResponse(ctx, res, nil)
 }

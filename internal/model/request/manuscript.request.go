@@ -1,9 +1,10 @@
 package request
 
 type CreateManuscriptRequest struct {
-	IssueID  string `json:"issue_id" binding:"required,uuid"`
-	Title    string `json:"title" binding:"required"`
-	Abstract string `json:"abstract" binding:"required"`
+	Title         string `json:"title" binding:"required"`
+	Abstract      string `json:"abstract" binding:"required"`
+	JournalID     string `json:"journal_id" binding:"required,uuid"`
+	IsTncAccepted bool   `json:"is_tnc_accepted" binding:"required,eq=true"` // Must be true
 }
 
 type UpdateManuscriptRequest struct {
@@ -11,15 +12,19 @@ type UpdateManuscriptRequest struct {
 	Abstract string `json:"abstract" binding:"required"`
 }
 
+type UpdateManuscriptAuthorsRequest struct {
+	Authors []ManuscriptAuthorRequest `json:"authors" binding:"required,dive"`
+}
+
 type ManuscriptAuthorRequest struct {
-	UserID          *string `json:"user_id,omitempty" binding:"omitempty,uuid"`
+	UserID          *string `json:"user_id"`
 	AuthorName      string  `json:"author_name" binding:"required"`
 	AuthorEmail     string  `json:"author_email" binding:"required,email"`
 	Affiliation     string  `json:"affiliation"`
 	IsCorresponding bool    `json:"is_corresponding"`
-	OrderPosition   int     `json:"order_position" binding:"required"`
+	OrderPosition   int     `json:"order_position"`
 }
 
-type UpdateManuscriptAuthorsRequest struct {
-	Authors []ManuscriptAuthorRequest `json:"authors" binding:"required,dive"`
+type PublishManuscriptRequest struct {
+	IssueID string `json:"issue_id" binding:"required,uuid"`
 }

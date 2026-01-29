@@ -6,7 +6,7 @@ import (
 
 type ManuscriptResponse struct {
 	ID            string                     `json:"id"`
-	IssueID       string                     `json:"issue_id"`
+	IssueID       *string                    `json:"issue_id"`
 	Title         string                     `json:"title"`
 	Abstract      string                     `json:"abstract"`
 	Status        string                     `json:"status"`

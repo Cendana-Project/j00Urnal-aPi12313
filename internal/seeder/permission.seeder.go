@@ -31,6 +31,9 @@ func SeedPermissions(db *gorm.DB) error {
 
 		// journal
 		{Name: "Journal Manage", Slug: constant.PermissionJournalManage, IsActive: true},
+
+		// system
+		{Name: "System Manage", Slug: constant.PermissionSystemManage, IsActive: true},
 	}
 
 	// upsert per slug (idempotent)

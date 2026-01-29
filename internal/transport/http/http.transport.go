@@ -17,6 +17,7 @@ import (
 	issueCtrl "github.com/api-monolith-template/internal/transport/http/issue"
 	journalCtrl "github.com/api-monolith-template/internal/transport/http/journal"
 	manuscriptCtrl "github.com/api-monolith-template/internal/transport/http/manuscript"
+	termCtrl "github.com/api-monolith-template/internal/transport/http/term"
 	volumeCtrl "github.com/api-monolith-template/internal/transport/http/volume"
 )
 
@@ -30,6 +31,7 @@ type Transport struct {
 	volumeController     *volumeCtrl.Controller
 	issueController      *issueCtrl.Controller
 	manuscriptController *manuscriptCtrl.Controller
+	termController       *termCtrl.Controller
 
 	roleRepo *roleRepo.Repository
 }
@@ -66,6 +68,10 @@ func (t *Transport) WithIssueController(c *issueCtrl.Controller) *Transport {
 }
 func (t *Transport) WithManuscriptController(c *manuscriptCtrl.Controller) *Transport {
 	t.manuscriptController = c
+	return t
+}
+func (t *Transport) WithTermController(c *termCtrl.Controller) *Transport {
+	t.termController = c
 	return t
 }
 
@@ -150,7 +156,8 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 
 		manuscripts := protected.Group("/manuscripts")
 		{
-			manuscripts.POST("", t.manuscriptController.Create)
+			manuscripts.POST("", t.manuscriptController.Submit)
+			manuscripts.POST("/admin", transportmw.RequirePermissions(t.roleRepo, constant.PermissionManuscriptManage), t.manuscriptController.Create)
 
 			manuscripts.PUT("/:id", t.manuscriptController.Update)
 			manuscripts.DELETE("/:id", t.manuscriptController.Delete)
@@ -166,7 +173,14 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		admin := protected.Group("/admin")
 		admin.Use(transportmw.RequirePermissions(t.roleRepo, constant.PermissionManuscriptManage))
 		{
+			admin.POST("/manuscripts/:id/publish", t.manuscriptController.Publish)
+		}
 
+		// Terms (Admin Only for Create)
+		terms := protected.Group("/terms")
+		{
+			terms.GET("/current", t.termController.GetCurrent)
+			terms.POST("", transportmw.RequirePermissions(t.roleRepo, constant.PermissionSystemManage), t.termController.Create)
 		}
 	}
 
