@@ -32,3 +32,21 @@ func (c *Controller) Ping(ctx *gin.Context) {
 	}
 	util.HandleResponse(ctx, &resp, nil)
 }
+
+func (c *Controller) Health(ctx *gin.Context) {
+	resp := response.BaseResponse{
+		StatusCode: http.StatusOK,
+		Message:    "success",
+		MessageDetail: response.MessageDetail{
+			TitleEng: "Health Check",
+			DescEng:  "Service is healthy",
+			TitleIdn: "Health Check",
+			DescIdn:  "Layanan sehat",
+		},
+		Data: map[string]interface{}{
+			"timestamp": time.Now().Unix(),
+			"status":    "up",
+		},
+	}
+	util.HandleResponse(ctx, &resp, nil)
+}

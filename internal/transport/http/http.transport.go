@@ -76,6 +76,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 	// ========== WARMUP — PUBLIC ==========
 	t.router.Use(transportmw.RateLimitMiddleware()) // <=== Rate Limiting
 	t.router.GET("/ping", func(c *gin.Context) { t.warmupController.Ping(c) })
+	t.router.GET("/health", func(c *gin.Context) { t.warmupController.Health(c) })
 
 	v1 := t.router.Group("/v1")
 
