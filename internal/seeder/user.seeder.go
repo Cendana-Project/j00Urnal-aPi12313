@@ -27,10 +27,24 @@ func CreateUserActiveWithRole(db *gorm.DB, id, email, firstName, lastName, rawPa
 		return nil, err
 	}
 
-	// Cek user by email
+	// Cek user by email or ID (unscoped to find deleted ones too)
 	var u entity.User
-	err := db.Where("email = ?", email).First(&u).Error
+	// If id is provided, check both. If not, just email.
+	// But safely, check email mainly, or ID if hardcoded.
+	query := db.Unscoped().Where("email = ?", email)
+	if id != "" {
+		query = query.Or("id = ?", id)
+	}
+	err := query.First(&u).Error
 	if err == nil {
+		// If user was soft-deleted, restore them
+		if u.DeletedAt.Valid {
+			if err := db.Unscoped().Model(&u).Update("deleted_at", nil).Error; err != nil {
+				return &u, err
+			}
+			u.DeletedAt.Valid = false // Update struct
+		}
+
 		// Assign role jika belum
 		var cnt int64
 		if err := db.Table("user_roles").
@@ -50,6 +64,7 @@ func CreateUserActiveWithRole(db *gorm.DB, id, email, firstName, lastName, rawPa
 		// Mark active bila belum
 		if u.Status != "active" {
 			now := time.Now()
+			// Use Unscoped to update even if it was just restored (though Update above handles it)
 			if err := db.Model(&entity.User{}).Where("id = ?", u.ID).
 				Updates(map[string]any{
 					"status":      "active",

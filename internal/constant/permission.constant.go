@@ -44,6 +44,7 @@ const (
 // Manuscript
 const (
 	PermissionManuscriptManage = "manuscript.manage"
+	PermissionSystemManage     = "system.manage"
 )
 
 // Journal
@@ -54,13 +55,6 @@ const (
 // ==========================
 // DEFAULT ROLE → PERMISSIONS
 // ==========================
-//
-// Catatan:
-// - super_admin mendapat SEMUA permission
-// - admin (rumah sakit) = manajemen RS
-// - nurse & receptionist hak operasional
-// - bod pengawasan & laporan (read mostly)
-// - patient & doctor minimal yang diperlukan
 var DefaultRolePermissions = map[string][]string{
 	// super admin: semua
 	RoleSuperAdmin: {
@@ -73,6 +67,7 @@ var DefaultRolePermissions = map[string][]string{
 		PermissionAppointmentView, PermissionAppointmentEdit,
 		PermissionManuscriptManage,
 		PermissionJournalManage,
+		PermissionSystemManage,
 	},
 
 	RoleEditor: {

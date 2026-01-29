@@ -28,6 +28,11 @@ func Run(db *gorm.DB) error {
 		if err := SeedSampleUsers(tx); err != nil {
 			return fmt.Errorf("seed sample users: %w", err)
 		}
+
+		// 5) Terms & Conditions
+		if err := SeedTerms(tx); err != nil {
+			return fmt.Errorf("seed terms: %w", err)
+		}
 		return nil
 	}); err != nil {
 		return err
