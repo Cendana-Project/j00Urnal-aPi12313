@@ -93,7 +93,12 @@ func (s *Service) Submit(ctx context.Context, userID string, req request.CreateM
 		IsTncAccepted: true,
 		TncAcceptedAt: &now,
 		TermID:        &activeTerm.ID,
+		CurrentStep:   req.CurrentStep,
 		CreatedAt:     now,
+	}
+
+	if manuscript.CurrentStep == 0 {
+		manuscript.CurrentStep = 1
 	}
 
 	// 4. Create in DB (to get ID)
@@ -158,7 +163,7 @@ func (s *Service) Create(ctx context.Context, mainAuthorID string, issueID strin
 	return manuscript, nil
 }
 
-func (s *Service) Update(ctx context.Context, id string, title, abstract string) (*entity.Manuscript, error) {
+func (s *Service) Update(ctx context.Context, id string, req request.UpdateManuscriptRequest) (*entity.Manuscript, error) {
 	manuscript, err := s.manuscriptRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -167,8 +172,15 @@ func (s *Service) Update(ctx context.Context, id string, title, abstract string)
 		return nil, constant.ErrRecordNotFound
 	}
 
-	manuscript.Title = title
-	manuscript.Abstract = abstract
+	if req.Title != "" {
+		manuscript.Title = req.Title
+	}
+	if req.Abstract != "" {
+		manuscript.Abstract = req.Abstract
+	}
+	if req.CurrentStep != 0 {
+		manuscript.CurrentStep = req.CurrentStep
+	}
 
 	if err := s.manuscriptRepo.Update(ctx, manuscript); err != nil {
 		return nil, err
@@ -269,6 +281,10 @@ func (s *Service) PublishToIssue(ctx context.Context, manuscriptID string, issue
 
 func (s *Service) GetByID(ctx context.Context, id string) (*entity.Manuscript, error) {
 	return s.manuscriptRepo.GetByID(ctx, id)
+}
+
+func (s *Service) GetActiveDraft(ctx context.Context, authorID string) (*entity.Manuscript, error) {
+	return s.manuscriptRepo.GetActiveDraftByAuthor(ctx, authorID)
 }
 
 func (s *Service) ListByIssue(ctx context.Context, issueID string) ([]entity.Manuscript, error) {

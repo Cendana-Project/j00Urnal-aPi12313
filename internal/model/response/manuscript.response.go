@@ -10,6 +10,7 @@ type ManuscriptResponse struct {
 	Title         string                     `json:"title"`
 	Abstract      string                     `json:"abstract"`
 	Status        string                     `json:"status"`
+	CurrentStep   int                        `json:"current_step"`
 	MainAuthorID  string                     `json:"main_author_id"`
 	PublishedAt   time.Time                  `json:"published_at"`
 	CreatedAt     time.Time                  `json:"created_at"`

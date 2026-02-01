@@ -74,6 +74,7 @@ func ToManuscriptResponse(m *entity.Manuscript) response.ManuscriptResponse {
 		Title:         m.Title,
 		Abstract:      m.Abstract,
 		Status:        string(m.Status),
+		CurrentStep:   m.CurrentStep,
 		MainAuthorID:  m.MainAuthorID,
 		PublishedAt:   m.PublishedAt,
 		CreatedAt:     m.CreatedAt,

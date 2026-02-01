@@ -157,6 +157,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 
 		manuscripts := protected.Group("/manuscripts")
 		{
+			manuscripts.GET("/active-draft", t.manuscriptController.GetActiveDraft)
 			manuscripts.POST("", t.manuscriptController.Submit)
 			manuscripts.POST("/admin", transportmw.RequirePermissions(t.roleRepo, constant.PermissionManuscriptManage), t.manuscriptController.Create)
 

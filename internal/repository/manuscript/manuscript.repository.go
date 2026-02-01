@@ -60,6 +60,20 @@ func (r *Repository) ListByMainAuthor(ctx context.Context, authorID string) ([]e
 	return manuscripts, err
 }
 
+func (r *Repository) GetActiveDraftByAuthor(ctx context.Context, authorID string) (*entity.Manuscript, error) {
+	var manuscript entity.Manuscript
+	err := r.db.WithContext(ctx).
+		Where("main_author_id = ? AND status = 'DRAFT'", authorID).
+		Preload("Authors").
+		Preload("Files").
+		Order("updated_at DESC").
+		First(&manuscript).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &manuscript, err
+}
+
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&entity.Manuscript{}, "id = ?", id).Error
 }

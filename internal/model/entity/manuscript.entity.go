@@ -18,6 +18,7 @@ type Manuscript struct {
 	IsTncAccepted bool                      `json:"is_tnc_accepted" gorm:"type:boolean;default:false"`
 	TncAcceptedAt *time.Time                `json:"tnc_accepted_at" gorm:"type:timestamp"`
 	TermID        *string                   `json:"term_id" gorm:"type:uuid;column:term_id"` // Link to specific T&C version
+	CurrentStep   int                       `json:"current_step" gorm:"type:integer;not null;default:1"`
 
 	PublishedAt time.Time      `json:"published_at" gorm:"type:timestamp;not null;default:now()"`
 	CreatedAt   time.Time      `json:"created_at" gorm:"type:timestamp;not null;default:now()"`

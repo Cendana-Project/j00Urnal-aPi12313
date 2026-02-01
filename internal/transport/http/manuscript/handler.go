@@ -152,6 +152,32 @@ func (c *Controller) GetByID(ctx *gin.Context) {
 	util.HandleResponse(ctx, res, nil)
 }
 
+func (c *Controller) GetActiveDraft(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+
+	m, err := c.svc.GetActiveDraft(ctx.Request.Context(), userID)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	if m == nil {
+		res := response.NewResponseOK()
+		res.Message = "No active draft found"
+		res.Data = nil
+		util.HandleResponse(ctx, res, nil)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Data = mapper.ToManuscriptResponse(m)
+	util.HandleResponse(ctx, res, nil)
+}
+
 func (c *Controller) Update(ctx *gin.Context) {
 	id := ctx.Param("id")
 	var req request.UpdateManuscriptRequest
@@ -165,7 +191,7 @@ func (c *Controller) Update(ctx *gin.Context) {
 		return
 	}
 
-	m, err := c.svc.Update(ctx.Request.Context(), id, req.Title, req.Abstract)
+	m, err := c.svc.Update(ctx.Request.Context(), id, req)
 	if err != nil {
 		util.HandleError(ctx, err)
 		return
