@@ -68,19 +68,40 @@ func ToManuscriptResponse(m *entity.Manuscript) response.ManuscriptResponse {
 		}
 	}
 
+	// Assigned editor
+	var assignedEditorID *string
+	var assignedEditorName *string
+	if m.AssignedEditorID != nil {
+		assignedEditorID = m.AssignedEditorID
+		if m.AssignedEditor != nil {
+			firstName := ""
+			if m.AssignedEditor.FirstName != nil {
+				firstName = *m.AssignedEditor.FirstName
+			}
+			lastName := ""
+			if m.AssignedEditor.LastName != nil {
+				lastName = *m.AssignedEditor.LastName
+			}
+			name := fmt.Sprintf("%s %s", firstName, lastName)
+			assignedEditorName = &name
+		}
+	}
+
 	return response.ManuscriptResponse{
-		ID:            m.ID,
-		IssueID:       m.IssueID,
-		Title:         m.Title,
-		Abstract:      m.Abstract,
-		Status:        string(m.Status),
-		MainAuthorID:  m.MainAuthorID,
-		PublishedAt:   m.PublishedAt,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		Authors:       allAuthors,
-		AuthorsSorted: allAuthorsSorted,
-		Files:         files,
+		ID:                 m.ID,
+		IssueID:            m.IssueID,
+		Title:              m.Title,
+		Abstract:           m.Abstract,
+		Status:             string(m.Status),
+		MainAuthorID:       m.MainAuthorID,
+		AssignedEditorID:   assignedEditorID,
+		AssignedEditorName: assignedEditorName,
+		PublishedAt:        m.PublishedAt,
+		CreatedAt:          m.CreatedAt,
+		UpdatedAt:          m.UpdatedAt,
+		Authors:            allAuthors,
+		AuthorsSorted:      allAuthorsSorted,
+		Files:              files,
 	}
 }
 

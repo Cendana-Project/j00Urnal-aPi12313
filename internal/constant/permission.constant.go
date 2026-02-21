@@ -47,6 +47,12 @@ const (
 	PermissionSystemManage     = "system.manage"
 )
 
+// Review workflow
+const (
+	PermissionSubmissionAssignEditor = "submission.assign_editor" // Chief Editor only
+	PermissionReviewManage           = "review.manage"            // Editor only
+)
+
 // Journal
 const (
 	PermissionJournalManage = "journal.manage"
@@ -68,16 +74,20 @@ var DefaultRolePermissions = map[string][]string{
 		PermissionManuscriptManage,
 		PermissionJournalManage,
 		PermissionSystemManage,
+		PermissionSubmissionAssignEditor,
+		PermissionReviewManage,
 	},
 
 	RoleEditor: {
 		PermissionManuscriptManage,
 		PermissionJournalManage,
+		PermissionReviewManage,
 	},
 
 	RoleChiefEditor: {
 		PermissionManuscriptManage,
 		PermissionJournalManage,
+		PermissionSubmissionAssignEditor,
 	},
 
 	RoleAuthor: {

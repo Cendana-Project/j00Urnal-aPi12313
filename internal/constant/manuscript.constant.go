@@ -25,3 +25,47 @@ const (
 	ManuscriptFileTypeTurnitin    ManuscriptFileType = "TURNITIN"
 	ManuscriptFileTypeCoverLetter ManuscriptFileType = "COVER_LETTER"
 )
+
+// ====== Review Round ======
+
+type ReviewRoundStatus string
+
+const (
+	ReviewRoundStatusPending           ReviewRoundStatus = "PENDING"
+	ReviewRoundStatusInReview          ReviewRoundStatus = "IN_REVIEW"
+	ReviewRoundStatusRevisionRequested ReviewRoundStatus = "REVISION_REQUESTED"
+	ReviewRoundStatusCompleted         ReviewRoundStatus = "COMPLETED"
+)
+
+// ====== Review Assignment ======
+
+type ReviewAssignmentStatus string
+
+const (
+	ReviewAssignmentStatusInvited   ReviewAssignmentStatus = "INVITED"
+	ReviewAssignmentStatusAccepted  ReviewAssignmentStatus = "ACCEPTED"
+	ReviewAssignmentStatusDeclined  ReviewAssignmentStatus = "DECLINED"
+	ReviewAssignmentStatusCompleted ReviewAssignmentStatus = "COMPLETED"
+	ReviewAssignmentStatusExpired   ReviewAssignmentStatus = "EXPIRED"
+)
+
+// ====== Review Recommendation ======
+
+type ReviewRecommendation string
+
+const (
+	ReviewRecommendationAccept        ReviewRecommendation = "ACCEPT"
+	ReviewRecommendationReject        ReviewRecommendation = "REJECT"
+	ReviewRecommendationMajorRevision ReviewRecommendation = "MAJOR_REVISION"
+	ReviewRecommendationMinorRevision ReviewRecommendation = "MINOR_REVISION"
+)
+
+// ====== Review File Type ======
+
+type ReviewFileType string
+
+const (
+	ReviewFileTypeComment    ReviewFileType = "REVIEW_COMMENT"
+	ReviewFileTypeRevision   ReviewFileType = "REVISION"
+	ReviewFileTypeAttachment ReviewFileType = "REVIEW_ATTACHMENT"
+)

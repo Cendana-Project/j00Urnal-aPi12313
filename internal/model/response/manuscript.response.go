@@ -5,18 +5,20 @@ import (
 )
 
 type ManuscriptResponse struct {
-	ID            string                     `json:"id"`
-	IssueID       *string                    `json:"issue_id"`
-	Title         string                     `json:"title"`
-	Abstract      string                     `json:"abstract"`
-	Status        string                     `json:"status"`
-	MainAuthorID  string                     `json:"main_author_id"`
-	PublishedAt   time.Time                  `json:"published_at"`
-	CreatedAt     time.Time                  `json:"created_at"`
-	UpdatedAt     *time.Time                 `json:"updated_at"`
-	Authors       []ManuscriptAuthorResponse `json:"authors,omitempty"`
-	AuthorsSorted []string                   `json:"authors_sorted,omitempty"`
-	Files         []ManuscriptFileResponse   `json:"files,omitempty"`
+	ID                 string                     `json:"id"`
+	IssueID            *string                    `json:"issue_id"`
+	Title              string                     `json:"title"`
+	Abstract           string                     `json:"abstract"`
+	Status             string                     `json:"status"`
+	MainAuthorID       string                     `json:"main_author_id"`
+	AssignedEditorID   *string                    `json:"assigned_editor_id,omitempty"`
+	AssignedEditorName *string                    `json:"assigned_editor_name,omitempty"`
+	PublishedAt        time.Time                  `json:"published_at"`
+	CreatedAt          time.Time                  `json:"created_at"`
+	UpdatedAt          *time.Time                 `json:"updated_at"`
+	Authors            []ManuscriptAuthorResponse `json:"authors,omitempty"`
+	AuthorsSorted      []string                   `json:"authors_sorted,omitempty"`
+	Files              []ManuscriptFileResponse   `json:"files,omitempty"`
 }
 
 type ManuscriptAuthorResponse struct {

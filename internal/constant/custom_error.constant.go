@@ -222,6 +222,44 @@ var (
 		Detail:     GetMessageDetail(MsgRoleNotFound),
 	}
 
+	// ====== Review / Invitation ======
+	ErrInvitationExpired = response.CustomError{
+		Code:       "INVITATION_EXPIRED",
+		StatusCode: http.StatusGone,
+		Message:    "Reviewer invitation has expired (7-day limit exceeded)",
+		Detail:     GetMessageDetail(MsgInvitationExpired),
+	}
+	ErrInvitationAlreadyAccepted = response.CustomError{
+		Code:       "INVITATION_ALREADY_ACCEPTED",
+		StatusCode: http.StatusConflict,
+		Message:    "This invitation has already been accepted",
+		Detail:     GetMessageDetail(MsgInvitationAlreadyAccepted),
+	}
+	ErrInvitationNotFound = response.CustomError{
+		Code:       "INVITATION_NOT_FOUND",
+		StatusCode: http.StatusNotFound,
+		Message:    "Invitation not found or invalid token",
+		Detail:     GetMessageDetail(MsgNotFound),
+	}
+	ErrReviewNotCompleted = response.CustomError{
+		Code:       "REVIEW_NOT_COMPLETED",
+		StatusCode: http.StatusBadRequest,
+		Message:    "Not all reviews have been completed for this round",
+		Detail:     GetMessageDetail(MsgReviewNotCompleted),
+	}
+	ErrInvalidManuscriptStatus = response.CustomError{
+		Code:       "INVALID_MANUSCRIPT_STATUS",
+		StatusCode: http.StatusBadRequest,
+		Message:    "Manuscript is not in the correct status for this action",
+		Detail:     GetMessageDetail(MsgInvalidManuscriptStatus),
+	}
+	ErrEditorNotAssigned = response.CustomError{
+		Code:       "EDITOR_NOT_ASSIGNED",
+		StatusCode: http.StatusForbidden,
+		Message:    "You are not assigned as editor for this manuscript",
+		Detail:     GetMessageDetail(MsgEditorNotAssigned),
+	}
+
 	// ====== Lain-lain yang masih direferensi di util/transport lama ======
 	ErrUnauthorizedUpdate = response.CustomError{
 		Code:       "UNAUTHORIZED_UPDATE",

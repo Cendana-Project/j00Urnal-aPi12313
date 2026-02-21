@@ -26,12 +26,14 @@ import (
 	journalRepo "github.com/api-monolith-template/internal/repository/journal"
 	manuscriptRepo "github.com/api-monolith-template/internal/repository/manuscript"
 	fileRepo "github.com/api-monolith-template/internal/repository/publicationfile"
+	reviewRepo "github.com/api-monolith-template/internal/repository/review"
 	termRepo "github.com/api-monolith-template/internal/repository/term"
 	volumeRepo "github.com/api-monolith-template/internal/repository/volume"
 
 	issueSvc "github.com/api-monolith-template/internal/service/issue"
 	journalSvc "github.com/api-monolith-template/internal/service/journal"
 	manuscriptSvc "github.com/api-monolith-template/internal/service/manuscript"
+	reviewSvc "github.com/api-monolith-template/internal/service/review"
 	storageSvc "github.com/api-monolith-template/internal/service/storage"
 	termSvc "github.com/api-monolith-template/internal/service/term"
 	volumeSvc "github.com/api-monolith-template/internal/service/volume"
@@ -39,6 +41,7 @@ import (
 	issueHttp "github.com/api-monolith-template/internal/transport/http/issue"
 	journalHttp "github.com/api-monolith-template/internal/transport/http/journal"
 	manuscriptHttp "github.com/api-monolith-template/internal/transport/http/manuscript"
+	reviewHttp "github.com/api-monolith-template/internal/transport/http/review"
 	termHttp "github.com/api-monolith-template/internal/transport/http/term"
 	volumeHttp "github.com/api-monolith-template/internal/transport/http/volume"
 )
@@ -72,6 +75,7 @@ func StartServer() {
 	mRepo := manuscriptRepo.NewRepository(gormDB)
 	fRepo := fileRepo.NewRepository(gormDB)
 	tRepo := termRepo.NewRepository(gormDB)
+	rvRepo := reviewRepo.NewRepository(gormDB)
 
 	// SMTP sender config (fallback default)
 	host := config.Env.SMTP.Host
@@ -169,6 +173,7 @@ func StartServer() {
 	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, jRepo, tRepo, storageService)
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender, manuscriptService)
 	termService := termSvc.NewService(tRepo)
+	reviewService := reviewSvc.NewService(rvRepo, manuscriptService, storageService, sender, uRepo, rRepo)
 
 	issueService := issueSvc.NewService(iRepo, vRepo, fRepo, storageService, manuscriptService)
 	volumeService := volumeSvc.NewService(vRepo, jRepo, issueService)
@@ -183,6 +188,7 @@ func StartServer() {
 	volumeController := volumeHttp.NewController(volumeService, rRepo)
 	issueController := issueHttp.NewController(issueService, rRepo)
 	manuscriptController := manuscriptHttp.NewController(manuscriptService, rRepo)
+	reviewController := reviewHttp.NewController(reviewService)
 	termController := termHttp.NewController(termService)
 
 	// HTTP Transport + routes
@@ -195,6 +201,7 @@ func StartServer() {
 		WithVolumeController(volumeController).
 		WithIssueController(issueController).
 		WithManuscriptController(manuscriptController).
+		WithReviewController(reviewController).
 		WithTermController(termController).
 		WithRoleRepository(rRepo).
 		InitRoute(rdb)
