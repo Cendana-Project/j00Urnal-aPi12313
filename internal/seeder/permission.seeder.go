@@ -34,6 +34,10 @@ func SeedPermissions(db *gorm.DB) error {
 
 		// system
 		{Name: "System Manage", Slug: constant.PermissionSystemManage, IsActive: true},
+
+		// review workflow
+		{Name: "Submission Assign Editor", Slug: constant.PermissionSubmissionAssignEditor, IsActive: true},
+		{Name: "Review Manage", Slug: constant.PermissionReviewManage, IsActive: true},
 	}
 
 	// upsert per slug (idempotent)

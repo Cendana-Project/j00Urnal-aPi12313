@@ -20,6 +20,7 @@ import (
 	"github.com/api-monolith-template/internal/repository/manuscript"
 	"github.com/api-monolith-template/internal/repository/term"
 	"github.com/api-monolith-template/internal/service/storage"
+	"github.com/api-monolith-template/pkg/pagination"
 )
 
 var (
@@ -273,6 +274,41 @@ func (s *Service) GetByID(ctx context.Context, id string) (*entity.Manuscript, e
 
 func (s *Service) ListByIssue(ctx context.Context, issueID string) ([]entity.Manuscript, error) {
 	return s.manuscriptRepo.ListByIssue(ctx, issueID)
+}
+
+// UpdateStatus is the central place for manuscript status transitions.
+// Review service calls this instead of touching the manuscript table directly (DRY).
+func (s *Service) UpdateStatus(ctx context.Context, id string, status constant.ManuscriptStatus) error {
+	m, err := s.manuscriptRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return constant.ErrRecordNotFound
+	}
+	return s.manuscriptRepo.UpdateStatus(ctx, id, status)
+}
+
+// AssignEditor is called by the Chief Editor to assign an editor to a manuscript.
+func (s *Service) AssignEditor(ctx context.Context, manuscriptID, editorID string) error {
+	m, err := s.manuscriptRepo.GetByID(ctx, manuscriptID)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return constant.ErrRecordNotFound
+	}
+	return s.manuscriptRepo.AssignEditor(ctx, manuscriptID, editorID)
+}
+
+// ListByStatuses lists manuscripts filtered by statuses with pagination.
+func (s *Service) ListByStatuses(ctx context.Context, statuses []constant.ManuscriptStatus, pg *pagination.Pagination) ([]entity.Manuscript, int64, error) {
+	return s.manuscriptRepo.ListByStatuses(ctx, statuses, pg)
+}
+
+// ListByAssignedEditor lists manuscripts assigned to a specific editor.
+func (s *Service) ListByAssignedEditor(ctx context.Context, editorID string, statuses []constant.ManuscriptStatus, pg *pagination.Pagination) ([]entity.Manuscript, int64, error) {
+	return s.manuscriptRepo.ListByAssignedEditor(ctx, editorID, statuses, pg)
 }
 
 func (s *Service) UpdateAuthors(ctx context.Context, manuscriptID string, authors []entity.ManuscriptAuthor) error {

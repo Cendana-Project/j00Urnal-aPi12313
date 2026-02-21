@@ -55,8 +55,13 @@ const (
 	MsgConflict                 MessageCode = "CONFLICT"
 	MsgNotFound                 MessageCode = "NOT_FOUND"
 	MsgEmailSendFailed          MessageCode = "EMAIL_SEND_FAILED"
-	MsgVolumeNotActive          MessageCode = "VOLUME_NOT_ACTIVE"
-	MsgJournalNotActive         MessageCode = "JOURNAL_NOT_ACTIVE"
+	MsgVolumeNotActive              MessageCode = "VOLUME_NOT_ACTIVE"
+	MsgJournalNotActive             MessageCode = "JOURNAL_NOT_ACTIVE"
+	MsgInvitationExpired            MessageCode = "INVITATION_EXPIRED"
+	MsgInvitationAlreadyAccepted    MessageCode = "INVITATION_ALREADY_ACCEPTED"
+	MsgReviewNotCompleted           MessageCode = "REVIEW_NOT_COMPLETED"
+	MsgInvalidManuscriptStatus      MessageCode = "INVALID_MANUSCRIPT_STATUS"
+	MsgEditorNotAssigned            MessageCode = "EDITOR_NOT_ASSIGNED"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -140,6 +145,36 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "Parent Journal must be active to activate Issue",
 		TitleIdn: "Jurnal Tidak Aktif",
 		DescIdn:  "Jurnal induk harus aktif untuk mengaktifkan Isu",
+	},
+	MsgInvitationExpired: {
+		TitleEng: "Invitation Expired",
+		DescEng:  "The reviewer invitation has expired. Please contact the editor for a new invitation.",
+		TitleIdn: "Undangan Kedaluwarsa",
+		DescIdn:  "Undangan reviewer telah kedaluwarsa. Silakan hubungi editor untuk undangan baru.",
+	},
+	MsgInvitationAlreadyAccepted: {
+		TitleEng: "Invitation Already Accepted",
+		DescEng:  "This invitation has already been accepted.",
+		TitleIdn: "Undangan Sudah Diterima",
+		DescIdn:  "Undangan ini sudah diterima sebelumnya.",
+	},
+	MsgReviewNotCompleted: {
+		TitleEng: "Review Not Completed",
+		DescEng:  "Not all reviews have been completed for this round.",
+		TitleIdn: "Review Belum Selesai",
+		DescIdn:  "Belum semua review selesai untuk ronde ini.",
+	},
+	MsgInvalidManuscriptStatus: {
+		TitleEng: "Invalid Manuscript Status",
+		DescEng:  "The manuscript is not in the correct status for this action.",
+		TitleIdn: "Status Manuskrip Tidak Valid",
+		DescIdn:  "Manuskrip tidak dalam status yang tepat untuk aksi ini.",
+	},
+	MsgEditorNotAssigned: {
+		TitleEng: "Editor Not Assigned",
+		DescEng:  "You are not assigned as editor for this manuscript.",
+		TitleIdn: "Editor Tidak Ditugaskan",
+		DescIdn:  "Anda tidak ditugaskan sebagai editor untuk manuskrip ini.",
 	},
 }
 

@@ -3,10 +3,13 @@ package manuscript
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 
+	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
+	"github.com/api-monolith-template/pkg/pagination"
 )
 
 type Repository struct {
@@ -31,6 +34,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Manuscript
 		Preload("Authors").
 		Preload("Files").
 		Preload("MainAuthor").
+		Preload("AssignedEditor").
 		Preload("Issue.Volume.Journal").
 		First(&manuscript, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -99,4 +103,77 @@ func (r *Repository) GetLatestMainFileVersion(ctx context.Context, manuscriptID 
 		Select("COALESCE(MAX(version), 0)").
 		Scan(&version).Error
 	return version, err
+}
+
+// ====== Status & Editor Assignment (DRY: single place for status updates) ======
+
+func (r *Repository) UpdateStatus(ctx context.Context, id string, status constant.ManuscriptStatus) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+		Where("id = ?", id).
+		Updates(map[string]any{"status": status, "updated_at": now}).Error
+}
+
+func (r *Repository) AssignEditor(ctx context.Context, manuscriptID, editorID string) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+		Where("id = ?", manuscriptID).
+		Updates(map[string]any{
+			"assigned_editor_id": editorID,
+			"status":             constant.ManuscriptStatusAssignedToEditor,
+			"updated_at":         now,
+		}).Error
+}
+
+// ====== List queries with pagination ======
+
+func (r *Repository) ListByStatuses(ctx context.Context, statuses []constant.ManuscriptStatus, pg *pagination.Pagination) ([]entity.Manuscript, int64, error) {
+	var manuscripts []entity.Manuscript
+	var total int64
+
+	base := r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+		Where("status IN ?", statuses).
+		Where("deleted_at IS NULL")
+
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := base.
+		Scopes(pg.Paginate()).
+		Preload("MainAuthor").
+		Preload("AssignedEditor").
+		Preload("Journal").
+		Order("created_at DESC").
+		Find(&manuscripts).Error
+
+	return manuscripts, total, err
+}
+
+func (r *Repository) ListByAssignedEditor(ctx context.Context, editorID string, statuses []constant.ManuscriptStatus, pg *pagination.Pagination) ([]entity.Manuscript, int64, error) {
+	var manuscripts []entity.Manuscript
+	var total int64
+
+	base := r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+		Where("assigned_editor_id = ?", editorID).
+		Where("deleted_at IS NULL")
+
+	if len(statuses) > 0 {
+		base = base.Where("status IN ?", statuses)
+	}
+
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := base.
+		Scopes(pg.Paginate()).
+		Preload("MainAuthor").
+		Preload("AssignedEditor").
+		Preload("Authors").
+		Preload("Journal").
+		Order("created_at DESC").
+		Find(&manuscripts).Error
+
+	return manuscripts, total, err
 }

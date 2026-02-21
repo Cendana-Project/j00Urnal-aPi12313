@@ -17,6 +17,7 @@ import (
 	issueCtrl "github.com/api-monolith-template/internal/transport/http/issue"
 	journalCtrl "github.com/api-monolith-template/internal/transport/http/journal"
 	manuscriptCtrl "github.com/api-monolith-template/internal/transport/http/manuscript"
+	reviewCtrl "github.com/api-monolith-template/internal/transport/http/review"
 	termCtrl "github.com/api-monolith-template/internal/transport/http/term"
 	volumeCtrl "github.com/api-monolith-template/internal/transport/http/volume"
 )
@@ -31,6 +32,7 @@ type Transport struct {
 	volumeController     *volumeCtrl.Controller
 	issueController      *issueCtrl.Controller
 	manuscriptController *manuscriptCtrl.Controller
+	reviewController     *reviewCtrl.Controller
 	termController       *termCtrl.Controller
 
 	roleRepo *roleRepo.Repository
@@ -68,6 +70,10 @@ func (t *Transport) WithIssueController(c *issueCtrl.Controller) *Transport {
 }
 func (t *Transport) WithManuscriptController(c *manuscriptCtrl.Controller) *Transport {
 	t.manuscriptController = c
+	return t
+}
+func (t *Transport) WithReviewController(c *reviewCtrl.Controller) *Transport {
+	t.reviewController = c
 	return t
 }
 func (t *Transport) WithTermController(c *termCtrl.Controller) *Transport {
@@ -183,6 +189,36 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			terms.GET("/current", t.termController.GetCurrent)
 			terms.POST("", transportmw.RequirePermissions(t.roleRepo, constant.PermissionSystemManage), t.termController.Create)
 		}
+
+		// ========== REVIEW WORKFLOW ==========
+
+		requireAssignEditor := transportmw.RequirePermissions(t.roleRepo, constant.PermissionSubmissionAssignEditor)
+		requireReviewManage := transportmw.RequirePermissions(t.roleRepo, constant.PermissionReviewManage)
+
+		// Chief Editor: submission list & editor assignment
+		chiefEditor := protected.Group("/chief-editor")
+		chiefEditor.Use(requireAssignEditor)
+		{
+			chiefEditor.GET("/submissions", t.reviewController.ListChiefEditorSubmissions)
+			chiefEditor.GET("/editor-candidates", t.reviewController.ListEditorCandidates)
+			chiefEditor.POST("/manuscripts/assign-editor", t.reviewController.AssignEditor)
+		}
+
+		// Editor: manage assigned manuscripts & review workflow
+		editor := protected.Group("/editor")
+		editor.Use(requireReviewManage)
+		{
+			editor.GET("/submissions", t.reviewController.ListEditorSubmissions)
+			editor.GET("/manuscripts/:id/reviews", t.reviewController.GetReviewDetails)
+			editor.POST("/manuscripts/send-to-review", t.reviewController.SendToReview)
+			editor.POST("/manuscripts/accept", t.reviewController.AcceptManuscript)
+			editor.POST("/manuscripts/decline", t.reviewController.DeclineManuscript)
+			editor.POST("/manuscripts/request-revision", t.reviewController.RequestRevision)
+			editor.GET("/reviewer-candidates", t.reviewController.ListReviewerCandidates)
+			editor.POST("/invite-reviewer", t.reviewController.InviteReviewer)
+			editor.POST("/rounds/decision", t.reviewController.MakeRoundDecision)
+		}
+
 	}
 
 	// 404
