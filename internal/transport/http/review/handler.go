@@ -34,16 +34,8 @@ func (c *Controller) ListChiefEditorSubmissions(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 	pg := pagination.New(page, pageSize)
 
-	statuses := []constant.ManuscriptStatus{
-		constant.ManuscriptStatusSubmitted,
-		constant.ManuscriptStatusUnderChiefReview,
-		constant.ManuscriptStatusAssignedToEditor,
-		constant.ManuscriptStatusUnderReview,
-		constant.ManuscriptStatusRevisionRequired,
-		constant.ManuscriptStatusRevised,
-		constant.ManuscriptStatusAccepted,
-		constant.ManuscriptStatusRejected,
-	}
+	statuses := constant.StatusQueue
+	statuses = append(statuses, constant.ManuscriptStatusAccepted, constant.ManuscriptStatusRejected)
 
 	manuscripts, total, err := c.svc.ListSubmissions(ctx.Request.Context(), statuses, pg)
 	if err != nil {

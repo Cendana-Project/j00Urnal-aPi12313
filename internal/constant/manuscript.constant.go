@@ -4,18 +4,58 @@ type ManuscriptStatus string
 type ManuscriptFileType string
 
 const (
-	// Manuscript Statuses
-	ManuscriptStatusDraft            ManuscriptStatus = "DRAFT"
+	// My Queue
 	ManuscriptStatusSubmitted        ManuscriptStatus = "SUBMITTED"
-	ManuscriptStatusUnderChiefReview ManuscriptStatus = "UNDER_CHIEF_REVIEW"
 	ManuscriptStatusAssignedToEditor ManuscriptStatus = "ASSIGNED_TO_EDITOR"
 	ManuscriptStatusUnderReview      ManuscriptStatus = "UNDER_REVIEW"
 	ManuscriptStatusRevisionRequired ManuscriptStatus = "REVISION_REQUIRED"
 	ManuscriptStatusRevised          ManuscriptStatus = "REVISED"
-	ManuscriptStatusAccepted         ManuscriptStatus = "ACCEPTED"
-	ManuscriptStatusRejected         ManuscriptStatus = "REJECTED"
-	ManuscriptStatusPublished        ManuscriptStatus = "PUBLISHED"
 
+	// Archived
+	ManuscriptStatusAccepted  ManuscriptStatus = "ACCEPTED"
+	ManuscriptStatusRejected  ManuscriptStatus = "REJECTED"
+	ManuscriptStatusPublished ManuscriptStatus = "PUBLISHED"
+)
+
+var (
+	StatusQueue = []ManuscriptStatus{
+		ManuscriptStatusSubmitted,
+		ManuscriptStatusAssignedToEditor,
+		ManuscriptStatusUnderReview,
+		ManuscriptStatusRevisionRequired,
+		ManuscriptStatusRevised,
+	}
+
+	StatusArchives = []ManuscriptStatus{
+		ManuscriptStatusAccepted,
+		ManuscriptStatusRejected,
+		ManuscriptStatusPublished,
+	}
+)
+
+func (s ManuscriptStatus) IsQueue() bool {
+	switch s {
+	case ManuscriptStatusSubmitted,
+		ManuscriptStatusAssignedToEditor,
+		ManuscriptStatusUnderReview,
+		ManuscriptStatusRevisionRequired,
+		ManuscriptStatusRevised:
+		return true
+	}
+	return false
+}
+
+func (s ManuscriptStatus) IsArchived() bool {
+	switch s {
+	case ManuscriptStatusAccepted,
+		ManuscriptStatusRejected,
+		ManuscriptStatusPublished:
+		return true
+	}
+	return false
+}
+
+const (
 	// Manuscript File Types
 	ManuscriptFileTypeMain        ManuscriptFileType = "MAIN"
 	ManuscriptFileTypeFigure      ManuscriptFileType = "FIGURE"

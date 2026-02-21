@@ -72,7 +72,7 @@ func (s *Service) AssignEditor(ctx context.Context, manuscriptID, editorID, chie
 	if m == nil {
 		return constant.ErrRecordNotFound
 	}
-	if m.Status != constant.ManuscriptStatusSubmitted && m.Status != constant.ManuscriptStatusUnderChiefReview {
+	if m.Status != constant.ManuscriptStatusSubmitted {
 		return constant.ErrInvalidManuscriptStatus
 	}
 
@@ -121,15 +121,20 @@ func (s *Service) ListEditorSubmissions(ctx context.Context, editorID string, ta
 
 	switch tab {
 	case "my_queue":
-		statuses = []constant.ManuscriptStatus{constant.ManuscriptStatusAssignedToEditor}
-	case "in_review":
-		statuses = []constant.ManuscriptStatus{constant.ManuscriptStatusUnderReview}
-	case "revision":
-		statuses = []constant.ManuscriptStatus{constant.ManuscriptStatusRevisionRequired, constant.ManuscriptStatusRevised}
+		statuses = []constant.ManuscriptStatus{
+			constant.ManuscriptStatusAssignedToEditor,
+			constant.ManuscriptStatusUnderReview,
+			constant.ManuscriptStatusRevisionRequired,
+			constant.ManuscriptStatusRevised,
+		}
 	case "archives":
-		statuses = []constant.ManuscriptStatus{constant.ManuscriptStatusAccepted, constant.ManuscriptStatusRejected}
+		statuses = []constant.ManuscriptStatus{
+			constant.ManuscriptStatusAccepted,
+			constant.ManuscriptStatusRejected,
+			constant.ManuscriptStatusPublished,
+		}
 	default:
-		// all active
+		// Default to queue if unknown
 		statuses = []constant.ManuscriptStatus{
 			constant.ManuscriptStatusAssignedToEditor,
 			constant.ManuscriptStatusUnderReview,

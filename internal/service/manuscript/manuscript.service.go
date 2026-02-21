@@ -89,7 +89,7 @@ func (s *Service) Submit(ctx context.Context, userID string, req request.CreateM
 		JournalID:     req.JournalID,
 		Title:         req.Title,
 		Abstract:      req.Abstract,
-		Status:        constant.ManuscriptStatusDraft, // Start as Draft
+		Status:        constant.ManuscriptStatusSubmitted, // Start as Submitted
 		MainAuthorID:  userID,
 		IsTncAccepted: true,
 		TncAcceptedAt: &now,
