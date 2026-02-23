@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/api-monolith-template/internal/infrastructure"
+
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/constant"
@@ -12,23 +14,21 @@ import (
 	"github.com/api-monolith-template/pkg/pagination"
 )
 
-type Repository struct {
-	db *gorm.DB
-}
+type Repository struct{}
 
 func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db}
+	return &Repository{}
 }
 
 // ====== Review Round ======
 
 func (r *Repository) CreateRound(ctx context.Context, round *entity.ReviewRound) error {
-	return r.db.WithContext(ctx).Create(round).Error
+	return infrastructure.GetDB().WithContext(ctx).Create(round).Error
 }
 
 func (r *Repository) GetRoundByID(ctx context.Context, id string) (*entity.ReviewRound, error) {
 	var round entity.ReviewRound
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Assignments.Reviewer").
 		Preload("Assignments.Files").
 		Preload("Creator").
@@ -42,7 +42,7 @@ func (r *Repository) GetRoundByID(ctx context.Context, id string) (*entity.Revie
 
 func (r *Repository) GetLatestRoundByManuscript(ctx context.Context, manuscriptID string) (*entity.ReviewRound, error) {
 	var round entity.ReviewRound
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("manuscript_id = ?", manuscriptID).
 		Order("round_number DESC").
 		Preload("Assignments.Reviewer").
@@ -57,7 +57,7 @@ func (r *Repository) GetLatestRoundByManuscript(ctx context.Context, manuscriptI
 
 func (r *Repository) ListRoundsByManuscript(ctx context.Context, manuscriptID string) ([]entity.ReviewRound, error) {
 	var rounds []entity.ReviewRound
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("manuscript_id = ?", manuscriptID).
 		Order("round_number ASC").
 		Preload("Assignments.Reviewer").
@@ -70,19 +70,19 @@ func (r *Repository) ListRoundsByManuscript(ctx context.Context, manuscriptID st
 
 func (r *Repository) UpdateRound(ctx context.Context, id string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
-	return r.db.WithContext(ctx).Model(&entity.ReviewRound{}).
+	return infrastructure.GetDB().WithContext(ctx).Model(&entity.ReviewRound{}).
 		Where("id = ?", id).Updates(updates).Error
 }
 
 // ====== Review Assignment ======
 
 func (r *Repository) CreateAssignment(ctx context.Context, assignment *entity.ReviewAssignment) error {
-	return r.db.WithContext(ctx).Create(assignment).Error
+	return infrastructure.GetDB().WithContext(ctx).Create(assignment).Error
 }
 
 func (r *Repository) GetAssignmentByID(ctx context.Context, id string) (*entity.ReviewAssignment, error) {
 	var assignment entity.ReviewAssignment
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Reviewer").
 		Preload("Assigner").
 		Preload("ReviewRound.Manuscript.MainAuthor").
@@ -96,7 +96,7 @@ func (r *Repository) GetAssignmentByID(ctx context.Context, id string) (*entity.
 
 func (r *Repository) GetAssignmentByToken(ctx context.Context, token string) (*entity.ReviewAssignment, error) {
 	var assignment entity.ReviewAssignment
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Reviewer").
 		Preload("Assigner").
 		Preload("ReviewRound.Manuscript").
@@ -109,7 +109,7 @@ func (r *Repository) GetAssignmentByToken(ctx context.Context, token string) (*e
 
 func (r *Repository) ListAssignmentsByRound(ctx context.Context, roundID string) ([]entity.ReviewAssignment, error) {
 	var assignments []entity.ReviewAssignment
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("review_round_id = ?", roundID).
 		Preload("Reviewer").
 		Preload("Assigner").
@@ -121,19 +121,19 @@ func (r *Repository) ListAssignmentsByRound(ctx context.Context, roundID string)
 
 func (r *Repository) UpdateAssignment(ctx context.Context, id string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
-	return r.db.WithContext(ctx).Model(&entity.ReviewAssignment{}).
+	return infrastructure.GetDB().WithContext(ctx).Model(&entity.ReviewAssignment{}).
 		Where("id = ?", id).Updates(updates).Error
 }
 
 // ====== Review File ======
 
 func (r *Repository) CreateReviewFile(ctx context.Context, file *entity.ReviewFile) error {
-	return r.db.WithContext(ctx).Create(file).Error
+	return infrastructure.GetDB().WithContext(ctx).Create(file).Error
 }
 
 func (r *Repository) ListFilesByRound(ctx context.Context, roundID string) ([]entity.ReviewFile, error) {
 	var files []entity.ReviewFile
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("review_round_id = ?", roundID).
 		Preload("Uploader").
 		Order("uploaded_at ASC").
@@ -143,7 +143,7 @@ func (r *Repository) ListFilesByRound(ctx context.Context, roundID string) ([]en
 
 func (r *Repository) ListFilesByAssignment(ctx context.Context, assignmentID string) ([]entity.ReviewFile, error) {
 	var files []entity.ReviewFile
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("review_assignment_id = ?", assignmentID).
 		Preload("Uploader").
 		Order("uploaded_at ASC").
@@ -183,7 +183,7 @@ func (r *Repository) ListReviewerCandidates(ctx context.Context, search string, 
 	// Count
 	countArgs := make([]any, len(args))
 	copy(countArgs, args)
-	if err := r.db.WithContext(ctx).Raw("SELECT COUNT(DISTINCT u.id) "+baseQuery, countArgs...).Scan(&total).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Raw("SELECT COUNT(DISTINCT u.id) "+baseQuery, countArgs...).Scan(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -206,7 +206,7 @@ func (r *Repository) ListReviewerCandidates(ctx context.Context, search string, 
 	}
 	args = append(args, limit, offset)
 
-	if err := r.db.WithContext(ctx).Raw(selectQuery, args...).Scan(&candidates).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(selectQuery, args...).Scan(&candidates).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -241,7 +241,7 @@ func (r *Repository) ListEditorCandidates(ctx context.Context, search string, pg
 	// Count
 	countArgs := make([]any, len(args))
 	copy(countArgs, args)
-	if err := r.db.WithContext(ctx).Raw("SELECT COUNT(DISTINCT u.id) "+baseQuery, countArgs...).Scan(&total).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Raw("SELECT COUNT(DISTINCT u.id) "+baseQuery, countArgs...).Scan(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -260,7 +260,7 @@ func (r *Repository) ListEditorCandidates(ctx context.Context, search string, pg
 	}
 	args = append(args, limit, offset)
 
-	if err := r.db.WithContext(ctx).Raw(selectQuery, args...).Scan(&candidates).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(selectQuery, args...).Scan(&candidates).Error; err != nil {
 		return nil, 0, err
 	}
 

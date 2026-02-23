@@ -272,9 +272,9 @@ var (
 		Message:    "new password cannot be the same as old password",
 	}
 	ErrPasswordNotMatch = response.CustomError{
-		Code:       "PASSWORD_NOT_MATCH",
+		Code:       "LOGIN_FAILED",
 		StatusCode: http.StatusUnauthorized,
-		Message:    "password not match",
+		Message:    "invalid identity or password",
 		Detail:     GetMessageDetail(MsgPasswordNotMatch),
 	}
 	ErrHospitalNotFound = response.CustomError{

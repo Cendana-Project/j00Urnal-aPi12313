@@ -7,12 +7,13 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/constant" // <=== added
+	"github.com/api-monolith-template/internal/infrastructure"
 	"github.com/api-monolith-template/internal/model/entity"
 )
 
-type Repository struct{ db *gorm.DB }
+type Repository struct{}
 
-func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
+func NewRepository(db *gorm.DB) *Repository { return &Repository{} }
 
 // =====================
 // Global (non-tenant)
@@ -20,7 +21,7 @@ func NewRepository(db *gorm.DB) *Repository { return &Repository{db: db} }
 
 func (r *Repository) FindBySlug(slug string) (*entity.Role, error) {
 	var out entity.Role
-	if err := r.db.Where("slug = ?", slug).First(&out).Error; err != nil {
+	if err := infrastructure.GetDB().Where("slug = ?", slug).First(&out).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -30,7 +31,7 @@ func (r *Repository) FindBySlug(slug string) (*entity.Role, error) {
 }
 
 func (r *Repository) Assign(userID, roleID string) error {
-	return r.db.Exec(`
+	return infrastructure.GetDB().Exec(`
 		INSERT INTO user_roles (user_id, role_id, assigned_at)
 		VALUES (?, ?, NOW())
 		ON CONFLICT (user_id, role_id) DO NOTHING
@@ -39,7 +40,7 @@ func (r *Repository) Assign(userID, roleID string) error {
 
 func (r *Repository) UserHasRole(userID, roleSlug string) (bool, error) {
 	var cnt int64
-	err := r.db.Table("user_roles ur").
+	err := infrastructure.GetDB().Table("user_roles ur").
 		Joins("JOIN roles r ON r.id = ur.role_id").
 		Where("ur.user_id = ? AND r.slug = ?", userID, roleSlug).
 		Count(&cnt).Error
@@ -55,7 +56,7 @@ JOIN role_permissions rp ON rp.role_id = ur.role_id
 JOIN permissions p ON p.id = rp.permission_id
 WHERE ur.user_id = ? AND p.is_active = TRUE
 `
-	if err := r.db.WithContext(ctx).Raw(q, userID).Scan(&perms).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(q, userID).Scan(&perms).Error; err != nil {
 		return nil, err
 	}
 	return perms, nil
@@ -65,7 +66,7 @@ WHERE ur.user_id = ? AND p.is_active = TRUE
 func (r *Repository) GetRoleIDBySlug(ctx context.Context, slug string) (string, error) {
 	var id string
 	const q = `SELECT id FROM roles WHERE UPPER(slug) = UPPER(?) LIMIT 1` // <=== changed
-	if err := r.db.WithContext(ctx).Raw(q, slug).Scan(&id).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(q, slug).Scan(&id).Error; err != nil {
 		return "", err
 	}
 	if id == "" {
@@ -83,7 +84,7 @@ SELECT COUNT(1) AS c
 FROM user_roles ur
 JOIN roles r ON r.id = ur.role_id
 WHERE ur.user_id = ? AND r.slug = ?` // <=== changed (pakai placeholder)
-	if err := r.db.WithContext(ctx).Raw(q, userID, constant.RoleSuperAdmin).Scan(&out).Error; err != nil { // <=== changed
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(q, userID, constant.RoleSuperAdmin).Scan(&out).Error; err != nil { // <=== changed
 		return false, err
 	}
 	return out.C > 0, nil
@@ -98,7 +99,7 @@ FROM user_roles ur
 JOIN roles r ON r.id = ur.role_id
 WHERE ur.user_id = ? AND r.active = TRUE
 ORDER BY r.name`
-	if err := r.db.WithContext(ctx).Raw(q, userID).Scan(&roles).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(q, userID).Scan(&roles).Error; err != nil {
 		return nil, err
 	}
 	return roles, nil

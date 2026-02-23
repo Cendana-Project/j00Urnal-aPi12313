@@ -4,24 +4,24 @@ import (
 	"context"
 	"errors"
 
+	"github.com/api-monolith-template/internal/infrastructure"
+
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/model/entity"
 )
 
-type Repository struct {
-	db *gorm.DB
-}
+type Repository struct{}
 
 func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db}
+	return &Repository{}
 }
 
 // GetActive returns the currently active T&C (highest version active)
 func (r *Repository) GetActive(ctx context.Context) (*entity.PublicationTerm, error) {
 	var term entity.PublicationTerm
 	// Logic: Find Active=true, order by Version DESC, Limit 1
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("is_active = ?", true).
 		Order("version DESC").
 		First(&term).Error
@@ -41,7 +41,7 @@ func (r *Repository) CreateWithVersion(ctx context.Context, content string) (*en
 	var newVersion int = 1
 
 	// Get latest version
-	err := r.db.WithContext(ctx).Order("version DESC").First(&latest).Error
+	err := infrastructure.GetDB().WithContext(ctx).Order("version DESC").First(&latest).Error
 	if err == nil {
 		newVersion = latest.Version + 1
 	}
@@ -52,7 +52,7 @@ func (r *Repository) CreateWithVersion(ctx context.Context, content string) (*en
 		IsActive: true,
 	}
 
-	if err := r.db.WithContext(ctx).Create(term).Error; err != nil {
+	if err := infrastructure.GetDB().WithContext(ctx).Create(term).Error; err != nil {
 		return nil, err
 	}
 	return term, nil

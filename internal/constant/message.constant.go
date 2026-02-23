@@ -35,33 +35,33 @@ const (
 	MsgDateRequired              MessageCode = "DATE_REQUIRED"
 	MsgInvalidDateFormatYYYYMMDD MessageCode = "INVALID_DATE_FORMAT_YYYYMMDD"
 	// Domain-specific additions
-	MsgReviewAlreadyExists      MessageCode = "REVIEW_ALREADY_EXISTS"
-	MsgReviewNotEligible        MessageCode = "REVIEW_NOT_ELIGIBLE"
-	MsgPhotoURLRequired         MessageCode = "PHOTO_URL_REQUIRED"
-	MsgFieldHourAlreadyExists   MessageCode = "FIELD_HOUR_ALREADY_EXISTS"
-	MsgSlotAlreadyExists        MessageCode = "SLOT_ALREADY_EXISTS"
-	MsgNoSlotsCreated           MessageCode = "NO_SLOTS_CREATED"
-	MsgInvalidFacility          MessageCode = "INVALID_FACILITY"
-	MsgUserNotAuthenticated     MessageCode = "USER_NOT_AUTHENTICATED"
-	MsgValidationFailed         MessageCode = "VALIDATION_FAILED"
-	MsgUserUpdatedSuccess       MessageCode = "USER_UPDATED_SUCCESS"
-	MsgMatchEventNotFound       MessageCode = "MATCH_EVENT_NOT_FOUND"
-	MsgOnlySuperAdmin           MessageCode = "ONLY_SUPER_ADMIN"
-	MsgMatchEventNotCancellable MessageCode = "MATCH_EVENT_NOT_CANCELLABLE"
-	MsgUserNotFound             MessageCode = "USER_NOT_FOUND"
-	MsgEmailNotVerified         MessageCode = "EMAIL_NOT_VERIFIED"
-	MsgPasswordNotMatch         MessageCode = "PASSWORD_NOT_MATCH"
-	MsgForbidden                MessageCode = "FORBIDDEN"
-	MsgConflict                 MessageCode = "CONFLICT"
-	MsgNotFound                 MessageCode = "NOT_FOUND"
-	MsgEmailSendFailed          MessageCode = "EMAIL_SEND_FAILED"
-	MsgVolumeNotActive              MessageCode = "VOLUME_NOT_ACTIVE"
-	MsgJournalNotActive             MessageCode = "JOURNAL_NOT_ACTIVE"
-	MsgInvitationExpired            MessageCode = "INVITATION_EXPIRED"
-	MsgInvitationAlreadyAccepted    MessageCode = "INVITATION_ALREADY_ACCEPTED"
-	MsgReviewNotCompleted           MessageCode = "REVIEW_NOT_COMPLETED"
-	MsgInvalidManuscriptStatus      MessageCode = "INVALID_MANUSCRIPT_STATUS"
-	MsgEditorNotAssigned            MessageCode = "EDITOR_NOT_ASSIGNED"
+	MsgReviewAlreadyExists       MessageCode = "REVIEW_ALREADY_EXISTS"
+	MsgReviewNotEligible         MessageCode = "REVIEW_NOT_ELIGIBLE"
+	MsgPhotoURLRequired          MessageCode = "PHOTO_URL_REQUIRED"
+	MsgFieldHourAlreadyExists    MessageCode = "FIELD_HOUR_ALREADY_EXISTS"
+	MsgSlotAlreadyExists         MessageCode = "SLOT_ALREADY_EXISTS"
+	MsgNoSlotsCreated            MessageCode = "NO_SLOTS_CREATED"
+	MsgInvalidFacility           MessageCode = "INVALID_FACILITY"
+	MsgUserNotAuthenticated      MessageCode = "USER_NOT_AUTHENTICATED"
+	MsgValidationFailed          MessageCode = "VALIDATION_FAILED"
+	MsgUserUpdatedSuccess        MessageCode = "USER_UPDATED_SUCCESS"
+	MsgMatchEventNotFound        MessageCode = "MATCH_EVENT_NOT_FOUND"
+	MsgOnlySuperAdmin            MessageCode = "ONLY_SUPER_ADMIN"
+	MsgMatchEventNotCancellable  MessageCode = "MATCH_EVENT_NOT_CANCELLABLE"
+	MsgUserNotFound              MessageCode = "USER_NOT_FOUND"
+	MsgEmailNotVerified          MessageCode = "EMAIL_NOT_VERIFIED"
+	MsgPasswordNotMatch          MessageCode = "PASSWORD_NOT_MATCH"
+	MsgForbidden                 MessageCode = "FORBIDDEN"
+	MsgConflict                  MessageCode = "CONFLICT"
+	MsgNotFound                  MessageCode = "NOT_FOUND"
+	MsgEmailSendFailed           MessageCode = "EMAIL_SEND_FAILED"
+	MsgVolumeNotActive           MessageCode = "VOLUME_NOT_ACTIVE"
+	MsgJournalNotActive          MessageCode = "JOURNAL_NOT_ACTIVE"
+	MsgInvitationExpired         MessageCode = "INVITATION_EXPIRED"
+	MsgInvitationAlreadyAccepted MessageCode = "INVITATION_ALREADY_ACCEPTED"
+	MsgReviewNotCompleted        MessageCode = "REVIEW_NOT_COMPLETED"
+	MsgInvalidManuscriptStatus   MessageCode = "INVALID_MANUSCRIPT_STATUS"
+	MsgEditorNotAssigned         MessageCode = "EDITOR_NOT_ASSIGNED"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -109,7 +109,7 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 	MsgMatchEventNotCancellable:  {TitleEng: "Match Event Not Cancellable", DescEng: "This match event cannot be cancelled", TitleIdn: "Event pertandingan tidak dapat dibatalkan", DescIdn: "Event pertandingan ini tidak dapat dibatalkan"},
 	MsgUserNotFound:              {TitleEng: "User Not Found", DescEng: "The requested user could not be found", TitleIdn: "User Tidak Ditemukan", DescIdn: "User yang diminta tidak dapat ditemukan"},
 	MsgEmailNotVerified:          {TitleEng: "Email Not Verified", DescEng: "Please verify your email address", TitleIdn: "Email Belum Diverifikasi", DescIdn: "Silakan verifikasi alamat email Anda"},
-	MsgPasswordNotMatch:          {TitleEng: "Password Not Match", DescEng: "The provided password is incorrect", TitleIdn: "Password Tidak Cocok", DescIdn: "Password yang diberikan tidak benar"},
+	MsgPasswordNotMatch:          {TitleEng: "Login Failed", DescEng: "Invalid identity or password", TitleIdn: "Login Gagal", DescIdn: "Identitas atau password tidak valid"},
 	MsgForbidden: {
 		TitleEng: "Forbidden",
 		DescEng:  "You do not have access to this resource",

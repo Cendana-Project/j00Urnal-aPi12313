@@ -401,7 +401,7 @@ func (s *Service) Login(ctx context.Context, identity, password string) (pair st
 	}
 	if u == nil {
 		ulog.Errorf(ctx, "login fail: user not found")
-		return pair, nil, time.Time{}, time.Time{}, constant.ErrUserNotFound
+		return pair, nil, time.Time{}, time.Time{}, constant.ErrPasswordNotMatch
 	}
 	if strings.ToLower(u.Status) != "active" {
 		ulog.Errorf(ctx, "login fail: email not verified")

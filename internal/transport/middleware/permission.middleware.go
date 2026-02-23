@@ -1,16 +1,22 @@
 package middleware
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/api-monolith-template/internal/constant"
-	rolerepo "github.com/api-monolith-template/internal/repository/role"
+	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/util"
 )
 
+type PermissionLister interface {
+	ListPermissionsByUser(ctx context.Context, userID string) ([]entity.Permission, error)
+}
+
 // RequirePermissions memastikan user (dari JWT) memiliki minimal
 // salah satu dari permission 'required'.
-func RequirePermissions(roleRepo *rolerepo.Repository, required ...string) gin.HandlerFunc {
+func RequirePermissions(roleRepo PermissionLister, required ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if roleRepo == nil {
 			// repo belum diinject: balas 500 yang rapi, jangan panic

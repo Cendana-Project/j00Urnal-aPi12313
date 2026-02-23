@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/api-monolith-template/internal/infrastructure"
+
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/constant"
@@ -12,25 +14,23 @@ import (
 	"github.com/api-monolith-template/pkg/pagination"
 )
 
-type Repository struct {
-	db *gorm.DB
-}
+type Repository struct{}
 
 func NewRepository(db *gorm.DB) *Repository {
-	return &Repository{db: db}
+	return &Repository{}
 }
 
 func (r *Repository) Create(ctx context.Context, manuscript *entity.Manuscript) error {
-	return r.db.WithContext(ctx).Create(manuscript).Error
+	return infrastructure.GetDB().WithContext(ctx).Create(manuscript).Error
 }
 
 func (r *Repository) Update(ctx context.Context, manuscript *entity.Manuscript) error {
-	return r.db.WithContext(ctx).Save(manuscript).Error
+	return infrastructure.GetDB().WithContext(ctx).Save(manuscript).Error
 }
 
 func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Manuscript, error) {
 	var manuscript entity.Manuscript
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Authors").
 		Preload("Files").
 		Preload("MainAuthor").
@@ -45,7 +45,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Manuscript
 
 func (r *Repository) ListByIssue(ctx context.Context, issueID string) ([]entity.Manuscript, error) {
 	var manuscripts []entity.Manuscript
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("volume_number_id = ?", issueID).
 		Preload("Authors").
 		Preload("MainAuthor").
@@ -57,7 +57,7 @@ func (r *Repository) ListByIssue(ctx context.Context, issueID string) ([]entity.
 
 func (r *Repository) ListByMainAuthor(ctx context.Context, authorID string) ([]entity.Manuscript, error) {
 	var manuscripts []entity.Manuscript
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Where("main_author_id = ?", authorID).
 		Preload("Files").
 		Find(&manuscripts).Error
@@ -65,16 +65,16 @@ func (r *Repository) ListByMainAuthor(ctx context.Context, authorID string) ([]e
 }
 
 func (r *Repository) Delete(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&entity.Manuscript{}, "id = ?", id).Error
+	return infrastructure.GetDB().WithContext(ctx).Delete(&entity.Manuscript{}, "id = ?", id).Error
 }
 
 // Author Methods
 func (r *Repository) AddAuthor(ctx context.Context, author *entity.ManuscriptAuthor) error {
-	return r.db.WithContext(ctx).Create(author).Error
+	return infrastructure.GetDB().WithContext(ctx).Create(author).Error
 }
 
 func (r *Repository) UpdateAuthors(ctx context.Context, manuscriptID string, authors []entity.ManuscriptAuthor) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Delete existing authors
 		if err := tx.Where("manuscript_id = ?", manuscriptID).Delete(&entity.ManuscriptAuthor{}).Error; err != nil {
 			return err
@@ -92,12 +92,12 @@ func (r *Repository) UpdateAuthors(ctx context.Context, manuscriptID string, aut
 
 // File Methods
 func (r *Repository) AddFile(ctx context.Context, file *entity.ManuscriptFile) error {
-	return r.db.WithContext(ctx).Create(file).Error
+	return infrastructure.GetDB().WithContext(ctx).Create(file).Error
 }
 
 func (r *Repository) GetLatestMainFileVersion(ctx context.Context, manuscriptID string) (int, error) {
 	var version int
-	err := r.db.WithContext(ctx).
+	err := infrastructure.GetDB().WithContext(ctx).
 		Model(&entity.ManuscriptFile{}).
 		Where("manuscript_id = ? AND file_type = 'MAIN'", manuscriptID).
 		Select("COALESCE(MAX(version), 0)").
@@ -109,14 +109,14 @@ func (r *Repository) GetLatestMainFileVersion(ctx context.Context, manuscriptID 
 
 func (r *Repository) UpdateStatus(ctx context.Context, id string, status constant.ManuscriptStatus) error {
 	now := time.Now()
-	return r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+	return infrastructure.GetDB().WithContext(ctx).Model(&entity.Manuscript{}).
 		Where("id = ?", id).
 		Updates(map[string]any{"status": status, "updated_at": now}).Error
 }
 
 func (r *Repository) AssignEditor(ctx context.Context, manuscriptID, editorID string) error {
 	now := time.Now()
-	return r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+	return infrastructure.GetDB().WithContext(ctx).Model(&entity.Manuscript{}).
 		Where("id = ?", manuscriptID).
 		Updates(map[string]any{
 			"assigned_editor_id": editorID,
@@ -131,7 +131,7 @@ func (r *Repository) ListByStatuses(ctx context.Context, statuses []constant.Man
 	var manuscripts []entity.Manuscript
 	var total int64
 
-	base := r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+	base := infrastructure.GetDB().WithContext(ctx).Model(&entity.Manuscript{}).
 		Where("status IN ?", statuses).
 		Where("deleted_at IS NULL")
 
@@ -154,7 +154,7 @@ func (r *Repository) ListByAssignedEditor(ctx context.Context, editorID string, 
 	var manuscripts []entity.Manuscript
 	var total int64
 
-	base := r.db.WithContext(ctx).Model(&entity.Manuscript{}).
+	base := infrastructure.GetDB().WithContext(ctx).Model(&entity.Manuscript{}).
 		Where("assigned_editor_id = ?", editorID).
 		Where("deleted_at IS NULL")
 

@@ -44,14 +44,21 @@ func InitializeDBConn() *gorm.DB {
 	// Set log level
 	setLogLevel(DB)
 
-	// AutoMigrate only in development
-	// In production, use explicit migrations via goose
-	if config.Env.Env != constant.ProductionEnvironment {
+	// AutoMigrate only in development and NOT using PgBouncer
+	// In production or pooled environments, use explicit migrations via goose
+	isPooled := strings.Contains(config.Env.Database.DSN, "pgbouncer=true") || strings.Contains(config.Env.Database.DSN, "6543")
+
+	if config.Env.Env != constant.ProductionEnvironment && !isPooled {
+		logrus.Info("running GORM AutoMigrate...")
 		if err := autoMigrate(DB); err != nil {
-			logrus.Fatal("failed to auto-migrate: ", err)
+			logrus.WithError(err).Warn("GORM AutoMigrate failed (this is common with PgBouncer). Skipping auto-migrate...")
 		}
 	} else {
-		logrus.Info("skipping GORM AutoMigrate in production (use explicit migrations)")
+		if isPooled {
+			logrus.Info("skipping GORM AutoMigrate due to pooled connection (PgBouncer)")
+		} else {
+			logrus.Info("skipping GORM AutoMigrate in production (use explicit migrations)")
+		}
 	}
 
 	// Register health check
@@ -178,13 +185,21 @@ func logPoolStats(db *sql.DB) {
 	}).Debug("database connection pool stats")
 }
 
+// GetDB returns the current database connection.
+// Use this instead of storing the DB pointer in long-lived structs
+// to ensure you always have the latest connection after a reconnect.
+func GetDB() *gorm.DB {
+	return DB
+}
+
 // reconnectDBConn attempts to reconnect to database with exponential backoff
 func reconnectDBConn() {
 	logrus.Warn("attempting to reconnect to database...")
 
-	// Close existing connection
+	// Close existing connection to free up resources
 	if DB != nil {
 		if sqlDB, err := DB.DB(); err == nil {
+			logrus.Info("closing stale database connection before reconnecting...")
 			sqlDB.Close()
 		}
 	}
