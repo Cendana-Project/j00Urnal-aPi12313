@@ -1,5 +1,7 @@
 package request
 
+import "github.com/api-monolith-template/internal/constant"
+
 type CreateManuscriptRequest struct {
 	Title         string `json:"title" binding:"required"`
 	Abstract      string `json:"abstract" binding:"required"`
@@ -27,4 +29,14 @@ type ManuscriptAuthorRequest struct {
 
 type PublishManuscriptRequest struct {
 	IssueID string `json:"issue_id" binding:"required,uuid"`
+}
+
+type AuthorManuscriptFilterRequest struct {
+	Statuses     []constant.ManuscriptStatus `json:"statuses"`
+	StartDate    *string                     `json:"start_date"`
+	EndDate      *string                     `json:"end_date"`
+	SearchTitle  string                      `json:"search_title"`
+	SearchAuthor string                      `json:"search_author"`
+	Page         int                         `json:"page" binding:"required"`
+	PageSize     int                         `json:"page_size" binding:"required"`
 }

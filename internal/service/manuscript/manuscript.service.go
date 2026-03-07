@@ -211,7 +211,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 func (s *Service) DeleteByAuthor(ctx context.Context, authorID string) error {
 	// 1. List manuscripts where user is main author
-	manuscripts, err := s.manuscriptRepo.ListByMainAuthor(ctx, authorID)
+	manuscripts, _, err := s.manuscriptRepo.ListByMainAuthor(ctx, authorID, request.AuthorManuscriptFilterRequest{}, pagination.New(1, 100))
 	if err != nil {
 		return err
 	}
@@ -274,6 +274,15 @@ func (s *Service) GetByID(ctx context.Context, id string) (*entity.Manuscript, e
 
 func (s *Service) ListByIssue(ctx context.Context, issueID string) ([]entity.Manuscript, error) {
 	return s.manuscriptRepo.ListByIssue(ctx, issueID)
+}
+
+func (s *Service) ListByMainAuthor(
+	ctx context.Context,
+	authorID string,
+	req request.AuthorManuscriptFilterRequest,
+	pg *pagination.Pagination,
+) ([]entity.Manuscript, int64, error) {
+	return s.manuscriptRepo.ListByMainAuthor(ctx, authorID, req, pg)
 }
 
 // UpdateStatus is the central place for manuscript status transitions.
