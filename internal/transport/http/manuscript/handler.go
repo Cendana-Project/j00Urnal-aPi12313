@@ -13,6 +13,7 @@ import (
 	rolerepo "github.com/api-monolith-template/internal/repository/role"
 	"github.com/api-monolith-template/internal/service/manuscript"
 	"github.com/api-monolith-template/internal/util"
+	"github.com/api-monolith-template/pkg/pagination"
 )
 
 type Controller struct {
@@ -132,6 +133,44 @@ func (c *Controller) GetAll(ctx *gin.Context) {
 
 	res := response.NewResponseOK()
 	res.Data = mapper.ToManuscriptListResponse(ms)
+	util.HandleResponse(ctx, res, nil)
+}
+
+func (c *Controller) ListAuthorSubmissions(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+
+	var req request.AuthorManuscriptFilterRequest
+	if err := util.BindAndValidate(ctx, &req); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	// Validate page inputs (defaulting safely)
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 10
+	}
+	pg := pagination.New(req.Page, req.PageSize)
+
+	ms, total, err := c.svc.ListByMainAuthor(ctx.Request.Context(), userID, req, pg)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Data = gin.H{
+		"items":     mapper.ToManuscriptListResponse(ms),
+		"total":     total,
+		"page":      pg.Page,
+		"page_size": pg.PageSize,
+	}
 	util.HandleResponse(ctx, res, nil)
 }
 

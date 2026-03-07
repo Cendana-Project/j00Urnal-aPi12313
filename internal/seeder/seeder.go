@@ -33,6 +33,11 @@ func Run(db *gorm.DB) error {
 		if err := SeedTerms(tx); err != nil {
 			return fmt.Errorf("seed terms: %w", err)
 		}
+
+		// 6) Sample Manuscripts
+		if err := SeedSampleManuscripts(tx); err != nil {
+			return fmt.Errorf("seed sample manuscripts: %w", err)
+		}
 		return nil
 	}); err != nil {
 		return err
@@ -105,6 +110,11 @@ func Flush(db *gorm.DB) error {
 		if err := db.Exec(`DELETE FROM roles WHERE id IN (?)`, roleIDs).Error; err != nil {
 			return err
 		}
+	}
+
+	// 5) flush manuscripts
+	if err := FlushManuscripts(db); err != nil {
+		return err
 	}
 
 	return nil

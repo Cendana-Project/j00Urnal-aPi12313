@@ -11,6 +11,7 @@ import (
 
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
+	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/pkg/pagination"
 )
 
@@ -55,13 +56,50 @@ func (r *Repository) ListByIssue(ctx context.Context, issueID string) ([]entity.
 	return manuscripts, err
 }
 
-func (r *Repository) ListByMainAuthor(ctx context.Context, authorID string) ([]entity.Manuscript, error) {
+func (r *Repository) ListByMainAuthor(
+	ctx context.Context,
+	authorID string,
+	req request.AuthorManuscriptFilterRequest,
+	pg *pagination.Pagination,
+) ([]entity.Manuscript, int64, error) {
 	var manuscripts []entity.Manuscript
-	err := infrastructure.GetDB().WithContext(ctx).
+	var total int64
+
+	base := infrastructure.GetDB().WithContext(ctx).
+		Model(&entity.Manuscript{}).
 		Where("main_author_id = ?", authorID).
+		Where("deleted_at IS NULL")
+
+	if len(req.Statuses) > 0 {
+		base = base.Where("status IN ?", req.Statuses)
+	}
+	if req.StartDate != nil && *req.StartDate != "" {
+		base = base.Where("created_at >= ?", *req.StartDate)
+	}
+	if req.EndDate != nil && *req.EndDate != "" {
+		base = base.Where("created_at <= ?", *req.EndDate)
+	}
+
+	// Search logic: either title matches or one of authors names match
+	if req.SearchTitle != "" || req.SearchAuthor != "" {
+		base = base.Where(
+			"manuscripts.title ILIKE ? OR EXISTS (SELECT 1 FROM manuscript_authors ma WHERE ma.manuscript_id = manuscripts.id AND ma.author_name ILIKE ?)",
+			"%"+req.SearchTitle+"%", "%"+req.SearchAuthor+"%",
+		)
+	}
+
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := base.
+		Scopes(pg.Paginate()).
 		Preload("Files").
+		Preload("Authors").
+		Order("created_at DESC").
 		Find(&manuscripts).Error
-	return manuscripts, err
+
+	return manuscripts, total, err
 }
 
 func (r *Repository) Delete(ctx context.Context, id string) error {
