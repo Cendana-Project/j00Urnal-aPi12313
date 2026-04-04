@@ -3,13 +3,14 @@ package review
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
-	"github.com/api-monolith-template/internal/infrastructure"
-
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/constant"
+	"github.com/api-monolith-template/internal/infrastructure"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/util"
 	"github.com/api-monolith-template/pkg/pagination"
@@ -83,15 +84,39 @@ func (r *Repository) CreateAssignment(ctx context.Context, assignment *entity.Re
 }
 
 func (r *Repository) GetAssignmentByID(ctx context.Context, id string) (*entity.ReviewAssignment, error) {
-	var assignment entity.ReviewAssignment
-	// Only Reviewer is needed for API mapping; avoid preloading Manuscript (SELECT * column mismatch on some DBs / PgBouncer).
-	err := infrastructure.GetDB().WithContext(ctx).
-		Preload("Reviewer").
-		First(&assignment, "id = ?", id).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	uid, err := uuid.Parse(strings.TrimSpace(id))
+	if err != nil {
 		return nil, nil
 	}
-	return &assignment, err
+	idLit := uid.String()
+	var assignment entity.ReviewAssignment
+	// Raw without bind placeholders: PgBouncer transaction pooling drops unnamed prepared statements
+	// used by GORM First/Preload ("pq: unnamed prepared statement does not exist").
+	err = infrastructure.GetDB().WithContext(ctx).Raw(
+		`SELECT * FROM review_assignments WHERE id = '` + idLit + `'::uuid LIMIT 1`,
+	).Scan(&assignment).Error
+	if err != nil {
+		return nil, err
+	}
+	if assignment.ID == "" {
+		return nil, nil
+	}
+	if assignment.ReviewerID != nil {
+		rid := strings.TrimSpace(*assignment.ReviewerID)
+		if rid == "" {
+			return &assignment, nil
+		}
+		if ruid, perr := uuid.Parse(rid); perr == nil {
+			var rev entity.User
+			_ = infrastructure.GetDB().WithContext(ctx).Raw(
+				`SELECT * FROM users WHERE id = '` + ruid.String() + `'::uuid AND deleted_at IS NULL LIMIT 1`,
+			).Scan(&rev).Error
+			if rev.ID != "" {
+				assignment.Reviewer = &rev
+			}
+		}
+	}
+	return &assignment, nil
 }
 
 func (r *Repository) GetAssignmentByToken(ctx context.Context, token string) (*entity.ReviewAssignment, error) {
@@ -99,18 +124,83 @@ func (r *Repository) GetAssignmentByToken(ctx context.Context, token string) (*e
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	var assignment entity.ReviewAssignment
-	err := infrastructure.GetDB().WithContext(ctx).
-		Preload("Reviewer").
-		Preload("Assigner").
-		Preload("ReviewRound.Manuscript.Journal").
-		Preload("ReviewRound.Creator").
-		Where("invitation_token IN ?", candidates).
-		First(&assignment).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+	db := infrastructure.GetDB().WithContext(ctx)
+	for _, tok := range candidates {
+		esc := strings.ReplaceAll(tok, "'", "''")
+		var assignment entity.ReviewAssignment
+		err := db.Raw(
+			`SELECT * FROM review_assignments WHERE invitation_token = '` + esc + `' LIMIT 1`,
+		).Scan(&assignment).Error
+		if err != nil {
+			return nil, err
+		}
+		if assignment.ID == "" {
+			continue
+		}
+		if err := r.hydrateAssignmentInvitationGraph(ctx, &assignment); err != nil {
+			return nil, err
+		}
+		return &assignment, nil
 	}
-	return &assignment, err
+	return nil, nil
+}
+
+// hydrateAssignmentInvitationGraph loads round, manuscript, journal, and round creator using literal UUID
+// queries only (PgBouncer-safe). Matches prior Preload scope for invitation preview / complete / decline.
+func (r *Repository) hydrateAssignmentInvitationGraph(ctx context.Context, a *entity.ReviewAssignment) error {
+	if a == nil || strings.TrimSpace(a.ReviewRoundID) == "" {
+		return nil
+	}
+	rid, err := uuid.Parse(strings.TrimSpace(a.ReviewRoundID))
+	if err != nil {
+		return nil
+	}
+	db := infrastructure.GetDB().WithContext(ctx)
+	var round entity.ReviewRound
+	if err := db.Raw(
+		`SELECT * FROM review_rounds WHERE id = '` + rid.String() + `'::uuid LIMIT 1`,
+	).Scan(&round).Error; err != nil {
+		return err
+	}
+	if round.ID == "" {
+		return nil
+	}
+	a.ReviewRound = &round
+
+	if mid, err := uuid.Parse(strings.TrimSpace(round.ManuscriptID)); err == nil {
+		var ms entity.Manuscript
+		if err := db.Raw(
+			`SELECT * FROM manuscripts WHERE id = '` + mid.String() + `'::uuid AND deleted_at IS NULL LIMIT 1`,
+		).Scan(&ms).Error; err != nil {
+			return err
+		}
+		if ms.ID != "" {
+			round.Manuscript = &ms
+			if jid, err := uuid.Parse(strings.TrimSpace(ms.JournalID)); err == nil {
+				var j entity.Journal
+				if err := db.Raw(
+					`SELECT * FROM journals WHERE id = '` + jid.String() + `'::uuid AND deleted_at IS NULL LIMIT 1`,
+				).Scan(&j).Error; err != nil {
+					return err
+				}
+				if j.ID != "" {
+					ms.Journal = &j
+				}
+			}
+		}
+	}
+	if cid, err := uuid.Parse(strings.TrimSpace(round.CreatedBy)); err == nil {
+		var creator entity.User
+		if err := db.Raw(
+			`SELECT * FROM users WHERE id = '` + cid.String() + `'::uuid AND deleted_at IS NULL LIMIT 1`,
+		).Scan(&creator).Error; err != nil {
+			return err
+		}
+		if creator.ID != "" {
+			round.Creator = &creator
+		}
+	}
+	return nil
 }
 
 func (r *Repository) ListAssignmentsByRound(ctx context.Context, roundID string) ([]entity.ReviewAssignment, error) {
