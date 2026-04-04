@@ -3,7 +3,7 @@ package review
 import (
 	"net/http"
 	"strconv"
-	"time"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -288,13 +288,7 @@ func (c *Controller) InviteReviewer(ctx *gin.Context) {
 		return
 	}
 
-	dueDate, err := time.Parse(time.RFC3339, req.DueDate)
-	if err != nil {
-		util.HandleError(ctx, constant.ErrInvalidDateFormat)
-		return
-	}
-
-	assignment, err := c.svc.InviteReviewer(ctx.Request.Context(), req.RoundID, req.ReviewerID, userID, dueDate)
+	assignment, err := c.svc.InviteReviewer(ctx.Request.Context(), req.ManuscriptID, req.Email, userID)
 	if err != nil {
 		util.HandleError(ctx, err)
 		return
@@ -330,5 +324,138 @@ func (c *Controller) MakeRoundDecision(ctx *gin.Context) {
 
 	res := response.NewResponseOK()
 	res.Message = "Decision recorded"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// ====================================================================
+// Reviewer portal (invitation link + history)
+// ====================================================================
+
+// GetInvitationPreview is public: metadata for landing page from email link.
+func (c *Controller) GetInvitationPreview(ctx *gin.Context) {
+	token := strings.TrimSpace(ctx.Param("token"))
+	if token == "" {
+		util.HandleError(ctx, constant.ErrInvitationNotFound)
+		return
+	}
+	data, err := c.svc.GetInvitationPreview(ctx.Request.Context(), token)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = data
+	util.HandleResponse(ctx, res, nil)
+}
+
+// CompleteReviewerInvitation is public: token + password, auto REVIEWER role.
+func (c *Controller) CompleteReviewerInvitation(ctx *gin.Context) {
+	token := strings.TrimSpace(ctx.Param("token"))
+	if token == "" {
+		util.HandleError(ctx, constant.ErrInvitationNotFound)
+		return
+	}
+	var req request.CompleteReviewerInvitationRequest
+	if err := util.BindAndValidate(ctx, &req); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	if err := c.svc.CompleteReviewerInvitation(ctx.Request.Context(), token, req.Password, req.FirstName, req.LastName); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Invitation accepted. You can sign in with your email and password."
+	util.HandleResponse(ctx, res, nil)
+}
+
+// DeclineReviewerInvitation is public.
+func (c *Controller) DeclineReviewerInvitation(ctx *gin.Context) {
+	token := strings.TrimSpace(ctx.Param("token"))
+	if token == "" {
+		util.HandleError(ctx, constant.ErrInvitationNotFound)
+		return
+	}
+	var req request.DeclineReviewerInvitationRequest
+	_ = ctx.ShouldBindJSON(&req)
+	if err := c.svc.DeclineReviewerInvitation(ctx.Request.Context(), token, req.Reason); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Invitation declined"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// ListReviewerHistory lists completed reviews for the logged-in reviewer.
+func (c *Controller) ListReviewerHistory(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+	page, pageSize = pagination.NormalizeQuery(page, pageSize)
+	pg := pagination.New(page, pageSize)
+	search := strings.TrimSpace(ctx.Query("search"))
+	recFilter := strings.TrimSpace(ctx.Query("recommendation"))
+	edFilter := strings.TrimSpace(ctx.Query("editor_decision"))
+
+	if recFilter != "" {
+		switch recFilter {
+		case "ACCEPT", "REJECT", "MAJOR_REVISION", "MINOR_REVISION":
+		default:
+			util.HandleError(ctx, constant.ErrValidationFailed)
+			return
+		}
+	}
+	if edFilter != "" {
+		switch edFilter {
+		case "ACCEPT", "REJECT", "REVISION_REQUIRED":
+		default:
+			util.HandleError(ctx, constant.ErrValidationFailed)
+			return
+		}
+	}
+
+	rows, total, err := c.svc.ListReviewerHistory(ctx.Request.Context(), userID, search, recFilter, edFilter, pg)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = gin.H{
+		"items":     mapper.ToReviewerHistoryListResponse(rows, pg.Page, pg.PageSize),
+		"total":     total,
+		"page":      pg.Page,
+		"page_size": pg.PageSize,
+	}
+	util.HandleResponse(ctx, res, nil)
+}
+
+// SubmitReviewerReview completes the reviewer's assignment (recommendation + optional comments).
+func (c *Controller) SubmitReviewerReview(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	assignmentID := strings.TrimSpace(ctx.Param("id"))
+	if assignmentID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+	var req request.SubmitReviewRequest
+	if err := util.BindAndValidate(ctx, &req); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	if err := c.svc.SubmitReviewerReview(ctx.Request.Context(), userID, assignmentID, req.Recommendation, req.Comments); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Review submitted"
 	util.HandleResponse(ctx, res, nil)
 }

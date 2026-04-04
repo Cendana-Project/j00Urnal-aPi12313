@@ -11,6 +11,7 @@ import (
 
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
+	"github.com/api-monolith-template/internal/util"
 	"github.com/api-monolith-template/pkg/pagination"
 )
 
@@ -31,6 +32,7 @@ func (r *Repository) GetRoundByID(ctx context.Context, id string) (*entity.Revie
 	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Assignments.Reviewer").
 		Preload("Assignments.Files").
+		Preload("Manuscript.Journal").
 		Preload("Creator").
 		Preload("Files").
 		First(&round, "id = ?", id).Error
@@ -82,11 +84,9 @@ func (r *Repository) CreateAssignment(ctx context.Context, assignment *entity.Re
 
 func (r *Repository) GetAssignmentByID(ctx context.Context, id string) (*entity.ReviewAssignment, error) {
 	var assignment entity.ReviewAssignment
+	// Only Reviewer is needed for API mapping; avoid preloading Manuscript (SELECT * column mismatch on some DBs / PgBouncer).
 	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Reviewer").
-		Preload("Assigner").
-		Preload("ReviewRound.Manuscript.MainAuthor").
-		Preload("Files").
 		First(&assignment, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -95,12 +95,18 @@ func (r *Repository) GetAssignmentByID(ctx context.Context, id string) (*entity.
 }
 
 func (r *Repository) GetAssignmentByToken(ctx context.Context, token string) (*entity.ReviewAssignment, error) {
+	candidates := util.InvitationTokenCandidates(token)
+	if len(candidates) == 0 {
+		return nil, nil
+	}
 	var assignment entity.ReviewAssignment
 	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Reviewer").
 		Preload("Assigner").
-		Preload("ReviewRound.Manuscript").
-		First(&assignment, "invitation_token = ?", token).Error
+		Preload("ReviewRound.Manuscript.Journal").
+		Preload("ReviewRound.Creator").
+		Where("invitation_token IN ?", candidates).
+		First(&assignment).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -265,4 +271,91 @@ func (r *Repository) ListEditorCandidates(ctx context.Context, search string, pg
 	}
 
 	return candidates, total, nil
+}
+
+// CountPendingInvitationByRoundEmail counts INVITED rows for the same round and email.
+// Callers should pass email already normalized (e.g. lower + trim). Uses Raw SQL because GORM's
+// Model().Where() rejects LOWER(TRIM(...)) on invited_email with "invalid field".
+func (r *Repository) CountPendingInvitationByRoundEmail(ctx context.Context, roundID, emailNorm string) (int64, error) {
+	var n int64
+	err := infrastructure.GetDB().WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM review_assignments
+		WHERE review_round_id = ?
+		  AND status = ?
+		  AND LOWER(TRIM(COALESCE(invited_email, ''))) = ?`,
+		roundID, constant.ReviewAssignmentStatusInvited, emailNorm,
+	).Scan(&n).Error
+	return n, err
+}
+
+// ReviewerHistoryRow is a flat row for the reviewer History tab.
+type ReviewerHistoryRow struct {
+	AssignmentID   string
+	ManuscriptID   string
+	AssignedAt     time.Time
+	Section        string
+	Title          string
+	Recommendation *string
+	EditorDecision *string
+	CompletedAt    *time.Time
+}
+
+// ListReviewerHistory lists completed review assignments for a reviewer with manuscript and round decision.
+func (r *Repository) ListReviewerHistory(ctx context.Context, reviewerID, search, recommendationEq, editorDecisionEq string, pg *pagination.Pagination) ([]ReviewerHistoryRow, int64, error) {
+	limit := pagination.DefaultPageSize
+	page := 1
+	if pg != nil {
+		if pg.PageSize > 0 {
+			limit = pg.PageSize
+			if limit > pagination.MaxPageSize {
+				limit = pagination.MaxPageSize
+			}
+		}
+		if pg.Page > 0 {
+			page = pg.Page
+		}
+	}
+	offset := (page - 1) * limit
+
+	baseFrom := `
+FROM review_assignments ra
+JOIN review_rounds rr ON rr.id = ra.review_round_id
+JOIN manuscripts m ON m.id = rr.manuscript_id
+WHERE ra.reviewer_id = ? AND ra.status = ? AND m.deleted_at IS NULL
+`
+	args := []any{reviewerID, constant.ReviewAssignmentStatusCompleted}
+	if search != "" {
+		baseFrom += ` AND m.title ILIKE ?`
+		args = append(args, "%"+search+"%")
+	}
+	if recommendationEq != "" {
+		baseFrom += ` AND ra.recommendation = ?`
+		args = append(args, recommendationEq)
+	}
+	if editorDecisionEq != "" {
+		baseFrom += ` AND rr.editor_decision = ?`
+		args = append(args, editorDecisionEq)
+	}
+
+	var total int64
+	countSQL := `SELECT COUNT(1) ` + baseFrom
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(countSQL, args...).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	selectSQL := `
+SELECT ra.id AS assignment_id, m.id AS manuscript_id, ra.created_at AS assigned_at,
+       m.section AS section, m.title,
+       ra.recommendation, rr.editor_decision, ra.completed_at
+` + baseFrom + `
+ORDER BY ra.completed_at DESC NULLS LAST, ra.created_at DESC
+LIMIT ? OFFSET ?
+`
+	args = append(args, limit, offset)
+
+	var rows []ReviewerHistoryRow
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(selectSQL, args...).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }

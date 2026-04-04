@@ -2,7 +2,9 @@ package email
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
+	"strings"
 	"time"
 )
 
@@ -97,24 +99,57 @@ var (
   <div style="text-align:center;color:#99a;font-size:12px;margin-top:10px">© {{.Year}} MedikaOne. Semua hak dilindungi.</div>
 </body></html>`))
 
-	reviewerInvitationTmpl = template.Must(template.New("reviewerInvitation").Parse(`<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f6f9fc;padding:24px">
-  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;border-radius:12px;padding:24px">
-    <h2 style="margin:0 0 8px 0;color:#111">MedikaOne Journal</h2>
-    <p style="color:#555">Halo {{.ReviewerName}},</p>
-    <p style="color:#555">Anda diundang oleh editor <strong>{{.EditorName}}</strong> untuk me-review manuskrip berikut:</p>
-    <div style="background:#f0f7ff;border:1px solid #cce0ff;border-radius:8px;padding:16px;margin:16px 0">
-      <p style="margin:0;font-weight:700;color:#333">{{.ManuscriptTitle}}</p>
-      <p style="margin:8px 0 0 0;color:#555;font-size:14px">Batas waktu review: <strong>{{.DueDate}}</strong></p>
-    </div>
-    <p style="color:#555">Undangan ini berlaku selama <strong>7 hari</strong>. Silakan terima atau tolak undangan melalui link berikut:</p>
-    <div style="text-align:center;margin:20px 0">
-      <a href="{{.AcceptURL}}" style="display:inline-block;background:#0ea5e9;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin-right:8px">Terima Undangan</a>
-      <a href="{{.DeclineURL}}" style="display:inline-block;background:#ef4444;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Tolak Undangan</a>
-    </div>
-    <p style="color:#999;font-size:12px;margin-top:16px;padding-top:16px;border-top:1px solid #e6ecf1">Jika Anda tidak me-respond undangan ini dalam 7 hari, undangan akan otomatis kedaluwarsa.</p>
-  </div>
-  <div style="text-align:center;color:#99a;font-size:12px;margin-top:10px">© {{.Year}} MedikaOne. Semua hak dilindungi.</div>
-</body></html>`))
+	reviewerInvitationTmpl = template.Must(template.New("reviewerInvitation").Parse(`<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Undangan reviewer</title>
+</head>
+<body style="margin:0;padding:0;background:#e8eef4;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<span style="display:none!important;visibility:hidden;mso-hide:all;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{{.Preheader}}</span>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#e8eef4;padding:28px 12px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(15,23,42,0.08);border:1px solid #dbe4ee;">
+        <tr>
+          <td style="background:#0369a1;padding:22px 26px;">
+            <p style="margin:0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.88);font-weight:600;">MedikaOne Journal</p>
+            <h1 style="margin:10px 0 0 0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.35;">Undangan menjadi reviewer</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:26px 26px 8px 26px;">
+            <p style="margin:0 0 14px 0;font-size:16px;line-height:1.65;color:#334155;">Halo <strong style="color:#0f172a;">{{.ReviewerName}}</strong>,</p>
+            <p style="margin:0 0 20px 0;font-size:15px;line-height:1.65;color:#475569;">Anda diundang oleh editor <strong style="color:#0f172a;">{{.EditorName}}</strong> untuk meninjau manuskrip berikut.</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:12px;margin:0 0 22px 0;">
+              <tr>
+                <td style="padding:18px 20px;">
+                  <p style="margin:0;font-size:17px;font-weight:700;color:#0f172a;line-height:1.45;">{{.ManuscriptTitle}}</p>
+                  <p style="margin:10px 0 0 0;font-size:14px;color:#475569;">Batas waktu review: <strong style="color:#0369a1;">{{.DueDate}}</strong></p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#475569;">Undangan berlaku <strong>7 hari</strong>. Gunakan tautan langsung dari sistem berikut (salin ke peramban jika perlu):</p>
+            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:#334155;">Terima undangan</p>
+            <p style="margin:0 0 16px 0;font-size:13px;line-height:1.55;word-break:break-all;"><a href="{{.AcceptURL}}" style="color:#0369a1">{{.AcceptURL}}</a></p>
+            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:#334155;">Tolak undangan</p>
+            <p style="margin:0 0 0 0;font-size:13px;line-height:1.55;word-break:break-all;"><a href="{{.DeclineURL}}" style="color:#b91c1c">{{.DeclineURL}}</a></p>
+            <p style="margin:22px 0 0 0;padding-top:18px;border-top:1px solid #e2e8f0;font-size:12px;line-height:1.55;color:#94a3b8;">Jika Anda tidak merespons dalam 7 hari, undangan akan kedaluwarsa. Jangan bagikan tautan ini kepada orang lain.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:14px 26px;text-align:center;border-top:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:11px;color:#94a3b8;">© {{.Year}} MedikaOne. Semua hak dilindungi.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`))
 
 	submissionDecisionTmpl = template.Must(template.New("submissionDecision").Parse(`<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f6f9fc;padding:24px">
   <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;border-radius:12px;padding:24px">
@@ -170,6 +205,13 @@ func RenderEditorAssigned(editorName, manuscriptTitle, chiefEditorName string) s
 
 // RenderReviewerInvitation generates HTML for reviewer invitation email.
 func RenderReviewerInvitation(reviewerName, manuscriptTitle, editorName, dueDate, acceptURL, declineURL string) string {
+	pre := "Undangan menjadi reviewer dari " + editorName
+	if t := strings.TrimSpace(manuscriptTitle); t != "" {
+		pre = "Undangan review manuskrip: " + t
+	}
+	if len(pre) > 140 {
+		pre = pre[:137] + "..."
+	}
 	data := struct {
 		ReviewerName    string
 		ManuscriptTitle string
@@ -178,12 +220,42 @@ func RenderReviewerInvitation(reviewerName, manuscriptTitle, editorName, dueDate
 		AcceptURL       string
 		DeclineURL      string
 		Year            int
-	}{reviewerName, manuscriptTitle, editorName, dueDate, acceptURL, declineURL, YearNow()}
+		Preheader       string
+	}{reviewerName, manuscriptTitle, editorName, dueDate, acceptURL, declineURL, YearNow(), pre}
 	var buf bytes.Buffer
 	if err := reviewerInvitationTmpl.Execute(&buf, data); err != nil {
 		return ""
 	}
 	return buf.String()
+}
+
+// RenderReviewerInvitationPlain is the plain-text alternative for transactional APIs and accessibility.
+func RenderReviewerInvitationPlain(reviewerName, manuscriptTitle, editorName, dueDate, acceptURL, declineURL string) string {
+	var b strings.Builder
+	b.WriteString("MedikaOne Journal - Undangan menjadi reviewer\n\n")
+	b.WriteString("Halo ")
+	b.WriteString(reviewerName)
+	b.WriteString(",\n\n")
+	b.WriteString("Anda diundang oleh editor ")
+	b.WriteString(editorName)
+	b.WriteString(" untuk meninjau manuskrip berikut:\n\n")
+	b.WriteString("Judul: ")
+	if strings.TrimSpace(manuscriptTitle) != "" {
+		b.WriteString(manuscriptTitle)
+	} else {
+		b.WriteString("(lihat portal)")
+	}
+	b.WriteString("\nBatas waktu review: ")
+	b.WriteString(dueDate)
+	b.WriteString("\n\nUndangan berlaku 7 hari.\n\n")
+	b.WriteString("Terima undangan:\n")
+	b.WriteString(acceptURL)
+	b.WriteString("\n\nTolak undangan:\n")
+	b.WriteString(declineURL)
+	b.WriteString("\n\n---\n© ")
+	b.WriteString(fmt.Sprintf("%d", YearNow()))
+	b.WriteString(" MedikaOne.\n")
+	return b.String()
 }
 
 // RenderSubmissionDecision generates HTML for manuscript decision notification.

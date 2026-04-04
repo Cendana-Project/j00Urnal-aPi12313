@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type brevoPayload struct {
 	To          []brevoEmailAddress `json:"to"`
 	Subject     string              `json:"subject"`
 	HTMLContent string              `json:"htmlContent"`
+	TextContent string              `json:"textContent,omitempty"`
 }
 
 type brevoEmailAddress struct {
@@ -46,6 +48,10 @@ func (s *BrevoAPISender) Send(to, subject, htmlBody string) error {
 }
 
 func (s *BrevoAPISender) SendWithContext(ctx context.Context, to, subject, htmlBody string) error {
+	return s.SendWithContextAndText(ctx, to, subject, htmlBody, "")
+}
+
+func (s *BrevoAPISender) SendWithContextAndText(ctx context.Context, to, subject, htmlBody, textBody string) error {
 	payload := brevoPayload{
 		Sender: brevoEmailAddress{
 			Email: s.from,
@@ -56,6 +62,9 @@ func (s *BrevoAPISender) SendWithContext(ctx context.Context, to, subject, htmlB
 		},
 		Subject:     subject,
 		HTMLContent: htmlBody,
+	}
+	if t := strings.TrimSpace(textBody); t != "" {
+		payload.TextContent = t
 	}
 
 	jsonData, err := json.Marshal(payload)

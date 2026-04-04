@@ -3,6 +3,7 @@ package mapper
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/response"
@@ -48,7 +49,7 @@ func ToReviewAssignmentResponse(a *entity.ReviewAssignment) response.ReviewAssig
 	resp := response.ReviewAssignmentResponse{
 		ID:                   a.ID,
 		ReviewRoundID:        a.ReviewRoundID,
-		ReviewerID:           a.ReviewerID,
+		InvitedEmail:         a.InvitedEmail,
 		AssignedBy:           a.AssignedBy,
 		Status:               string(a.Status),
 		InvitationExpiresAt:  a.InvitationExpiresAt,
@@ -58,6 +59,10 @@ func ToReviewAssignmentResponse(a *entity.ReviewAssignment) response.ReviewAssig
 		Comments:             a.Comments,
 		CompletedAt:          a.CompletedAt,
 		CreatedAt:            a.CreatedAt,
+	}
+
+	if a.ReviewerID != nil {
+		resp.ReviewerID = *a.ReviewerID
 	}
 
 	if a.Reviewer != nil {
@@ -145,7 +150,87 @@ func ToSubmissionListResponse(manuscripts []entity.Manuscript) []response.Submis
 	return res
 }
 
-// ====== Invitation Info ======
+// ====== Invitation / History ======
+
+const defaultManuscriptSection = "Article Text"
+
+// RecommendationLabel maps stored enum to UI label (align with SubmitReviewRequest).
+func RecommendationLabel(code *string) string {
+	if code == nil {
+		return ""
+	}
+	switch *code {
+	case "ACCEPT":
+		return "Accepted"
+	case "REJECT":
+		return "Declined"
+	case "MAJOR_REVISION":
+		return "Major revision"
+	case "MINOR_REVISION":
+		return "Minor revision"
+	default:
+		return *code
+	}
+}
+
+// EditorRoundDecisionLabel maps round editor_decision to UI label.
+func EditorRoundDecisionLabel(code *string) string {
+	if code == nil {
+		return ""
+	}
+	switch *code {
+	case "ACCEPT":
+		return "Accept"
+	case "REJECT":
+		return "Reject"
+	case "REVISION_REQUIRED":
+		return "Revision required"
+	default:
+		return *code
+	}
+}
+
+func formatReviewerHistoryMMDD(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format("01-02")
+}
+
+func ToReviewerHistoryItemResponse(row review.ReviewerHistoryRow, displayNumber int) response.ReviewerHistoryItemResponse {
+	recLabel := RecommendationLabel(row.Recommendation)
+	edLabel := EditorRoundDecisionLabel(row.EditorDecision)
+	sec := strings.TrimSpace(row.Section)
+	if sec == "" {
+		sec = defaultManuscriptSection
+	}
+	return response.ReviewerHistoryItemResponse{
+		ID:                 displayNumber,
+		AssignmentID:       row.AssignmentID,
+		ManuscriptID:       row.ManuscriptID,
+		MMDDAssigned:       formatReviewerHistoryMMDD(row.AssignedAt),
+		Sec:                sec,
+		Title:              row.Title,
+		Review:             recLabel,
+		EditorDecision:     edLabel,
+		RecommendationCode: row.Recommendation,
+		EditorDecisionCode: row.EditorDecision,
+		CompletedAt:        row.CompletedAt,
+	}
+}
+
+// ToReviewerHistoryListResponse maps rows with 1-based id across the paged list.
+func ToReviewerHistoryListResponse(rows []review.ReviewerHistoryRow, page, pageSize int) []response.ReviewerHistoryItemResponse {
+	offset := 0
+	if page > 0 && pageSize > 0 {
+		offset = (page - 1) * pageSize
+	}
+	out := make([]response.ReviewerHistoryItemResponse, len(rows))
+	for i := range rows {
+		out[i] = ToReviewerHistoryItemResponse(rows[i], offset+i+1)
+	}
+	return out
+}
 
 // ====== Review Detail ======
 

@@ -18,7 +18,8 @@ type ReviewRoundResponse struct {
 type ReviewAssignmentResponse struct {
 	ID                   string     `json:"id"`
 	ReviewRoundID        string     `json:"review_round_id"`
-	ReviewerID           string     `json:"reviewer_id"`
+	ReviewerID           string     `json:"reviewer_id,omitempty"`
+	InvitedEmail         string     `json:"invited_email,omitempty"`
 	ReviewerName         string     `json:"reviewer_name"`
 	ReviewerEmail        string     `json:"reviewer_email"`
 	AssignedBy           string     `json:"assigned_by"`
@@ -67,4 +68,33 @@ type ReviewDetailResponse struct {
 	Title        string                `json:"title"`
 	Status       string                `json:"status"`
 	Rounds       []ReviewRoundResponse `json:"rounds"`
+}
+
+// ReviewerInvitationPreviewResponse is a public, non-sensitive view for the invitation landing page.
+type ReviewerInvitationPreviewResponse struct {
+	Valid               bool      `json:"valid"`
+	InvitationExpiresAt time.Time `json:"invitation_expires_at"`
+	DueDate             time.Time `json:"due_date"`
+	ManuscriptTitle     string    `json:"manuscript_title"`
+	JournalName         string    `json:"journal_name,omitempty"`
+	EditorName          string    `json:"editor_name,omitempty"`
+	InvitedEmailMasked  string    `json:"invited_email_masked"`
+	RequiresPassword    bool      `json:"requires_password"`
+	Section             string    `json:"section"`
+}
+
+// ReviewerHistoryItemResponse matches reviewer History table columns:
+// ID, MM-DD ASSIGNED, SEC, TITLE, REVIEW, EDITOR DECISION (+ ids for navigation).
+type ReviewerHistoryItemResponse struct {
+	ID                   int        `json:"id"` // 1-based row number (table ID column)
+	AssignmentID         string     `json:"assignment_id"`
+	ManuscriptID         string     `json:"manuscript_id"`
+	MMDDAssigned         string     `json:"mm_dd_assigned"` // e.g. "05-24" (UTC)
+	Sec                  string     `json:"sec"`
+	Title                string     `json:"title"`
+	Review               string     `json:"review"`            // reviewer recommendation (display)
+	EditorDecision       string     `json:"editor_decision"`   // editor decision (display)
+	RecommendationCode   *string    `json:"recommendation_code,omitempty"`
+	EditorDecisionCode   *string    `json:"editor_decision_code,omitempty"`
+	CompletedAt          *time.Time `json:"completed_at,omitempty"`
 }

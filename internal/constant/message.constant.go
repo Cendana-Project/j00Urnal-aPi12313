@@ -35,33 +35,37 @@ const (
 	MsgDateRequired              MessageCode = "DATE_REQUIRED"
 	MsgInvalidDateFormatYYYYMMDD MessageCode = "INVALID_DATE_FORMAT_YYYYMMDD"
 	// Domain-specific additions
-	MsgReviewAlreadyExists       MessageCode = "REVIEW_ALREADY_EXISTS"
-	MsgReviewNotEligible         MessageCode = "REVIEW_NOT_ELIGIBLE"
-	MsgPhotoURLRequired          MessageCode = "PHOTO_URL_REQUIRED"
-	MsgFieldHourAlreadyExists    MessageCode = "FIELD_HOUR_ALREADY_EXISTS"
-	MsgSlotAlreadyExists         MessageCode = "SLOT_ALREADY_EXISTS"
-	MsgNoSlotsCreated            MessageCode = "NO_SLOTS_CREATED"
-	MsgInvalidFacility           MessageCode = "INVALID_FACILITY"
-	MsgUserNotAuthenticated      MessageCode = "USER_NOT_AUTHENTICATED"
-	MsgValidationFailed          MessageCode = "VALIDATION_FAILED"
-	MsgUserUpdatedSuccess        MessageCode = "USER_UPDATED_SUCCESS"
-	MsgMatchEventNotFound        MessageCode = "MATCH_EVENT_NOT_FOUND"
-	MsgOnlySuperAdmin            MessageCode = "ONLY_SUPER_ADMIN"
-	MsgMatchEventNotCancellable  MessageCode = "MATCH_EVENT_NOT_CANCELLABLE"
-	MsgUserNotFound              MessageCode = "USER_NOT_FOUND"
-	MsgEmailNotVerified          MessageCode = "EMAIL_NOT_VERIFIED"
-	MsgPasswordNotMatch          MessageCode = "PASSWORD_NOT_MATCH"
-	MsgForbidden                 MessageCode = "FORBIDDEN"
-	MsgConflict                  MessageCode = "CONFLICT"
-	MsgNotFound                  MessageCode = "NOT_FOUND"
-	MsgEmailSendFailed           MessageCode = "EMAIL_SEND_FAILED"
-	MsgVolumeNotActive           MessageCode = "VOLUME_NOT_ACTIVE"
-	MsgJournalNotActive          MessageCode = "JOURNAL_NOT_ACTIVE"
-	MsgInvitationExpired         MessageCode = "INVITATION_EXPIRED"
-	MsgInvitationAlreadyAccepted MessageCode = "INVITATION_ALREADY_ACCEPTED"
-	MsgReviewNotCompleted        MessageCode = "REVIEW_NOT_COMPLETED"
-	MsgInvalidManuscriptStatus   MessageCode = "INVALID_MANUSCRIPT_STATUS"
-	MsgEditorNotAssigned         MessageCode = "EDITOR_NOT_ASSIGNED"
+	MsgReviewAlreadyExists          MessageCode = "REVIEW_ALREADY_EXISTS"
+	MsgReviewNotEligible            MessageCode = "REVIEW_NOT_ELIGIBLE"
+	MsgPhotoURLRequired             MessageCode = "PHOTO_URL_REQUIRED"
+	MsgFieldHourAlreadyExists       MessageCode = "FIELD_HOUR_ALREADY_EXISTS"
+	MsgSlotAlreadyExists            MessageCode = "SLOT_ALREADY_EXISTS"
+	MsgNoSlotsCreated               MessageCode = "NO_SLOTS_CREATED"
+	MsgInvalidFacility              MessageCode = "INVALID_FACILITY"
+	MsgUserNotAuthenticated         MessageCode = "USER_NOT_AUTHENTICATED"
+	MsgValidationFailed             MessageCode = "VALIDATION_FAILED"
+	MsgUserUpdatedSuccess           MessageCode = "USER_UPDATED_SUCCESS"
+	MsgMatchEventNotFound           MessageCode = "MATCH_EVENT_NOT_FOUND"
+	MsgOnlySuperAdmin               MessageCode = "ONLY_SUPER_ADMIN"
+	MsgMatchEventNotCancellable     MessageCode = "MATCH_EVENT_NOT_CANCELLABLE"
+	MsgUserNotFound                 MessageCode = "USER_NOT_FOUND"
+	MsgEmailNotVerified             MessageCode = "EMAIL_NOT_VERIFIED"
+	MsgPasswordNotMatch             MessageCode = "PASSWORD_NOT_MATCH"
+	MsgForbidden                    MessageCode = "FORBIDDEN"
+	MsgConflict                     MessageCode = "CONFLICT"
+	MsgNotFound                     MessageCode = "NOT_FOUND"
+	MsgEmailSendFailed              MessageCode = "EMAIL_SEND_FAILED"
+	MsgVolumeNotActive              MessageCode = "VOLUME_NOT_ACTIVE"
+	MsgJournalNotActive             MessageCode = "JOURNAL_NOT_ACTIVE"
+	MsgInvitationExpired            MessageCode = "INVITATION_EXPIRED"
+	MsgInvitationAlreadyAccepted    MessageCode = "INVITATION_ALREADY_ACCEPTED"
+	MsgReviewNotCompleted           MessageCode = "REVIEW_NOT_COMPLETED"
+	MsgInvalidManuscriptStatus      MessageCode = "INVALID_MANUSCRIPT_STATUS"
+	MsgEditorNotAssigned            MessageCode = "EDITOR_NOT_ASSIGNED"
+	MsgNoActiveReviewRound          MessageCode = "NO_ACTIVE_REVIEW_ROUND"
+	MsgReviewerInviteDuplicate      MessageCode = "REVIEWER_INVITE_DUPLICATE"
+	MsgReviewerAssignmentNotAllowed MessageCode = "REVIEWER_ASSIGNMENT_NOT_ALLOWED"
+	MsgReviewAlreadyCompleted       MessageCode = "REVIEW_ALREADY_COMPLETED"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -175,6 +179,30 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "You are not assigned as editor for this manuscript.",
 		TitleIdn: "Editor Tidak Ditugaskan",
 		DescIdn:  "Anda tidak ditugaskan sebagai editor untuk manuskrip ini.",
+	},
+	MsgNoActiveReviewRound: {
+		TitleEng: "No Active Review Round",
+		DescEng:  "There is no review round for this manuscript yet. Use POST /v1/editor/manuscripts/send-to-review first (manuscript must be ASSIGNED_TO_EDITOR or REVISED).",
+		TitleIdn: "Belum Ada Ronde Review",
+		DescIdn:  "Belum ada ronde review untuk manuskrip ini. Gunakan POST /v1/editor/manuscripts/send-to-review terlebih dahulu (status manuskrip harus ASSIGNED_TO_EDITOR atau REVISED).",
+	},
+	MsgReviewerInviteDuplicate: {
+		TitleEng: "Reviewer Already Invited",
+		DescEng:  "This email already has a pending invitation for this review round.",
+		TitleIdn: "Reviewer Sudah Diundang",
+		DescIdn:  "Email ini sudah memiliki undangan aktif untuk ronde review ini.",
+	},
+	MsgReviewerAssignmentNotAllowed: {
+		TitleEng: "Assignment Not Allowed",
+		DescEng:  "You cannot act on this review assignment in its current state.",
+		TitleIdn: "Penugasan Tidak Diizinkan",
+		DescIdn:  "Anda tidak dapat bertindak pada penugasan review ini pada status saat ini.",
+	},
+	MsgReviewAlreadyCompleted: {
+		TitleEng: "Review Already Submitted",
+		DescEng:  "This review has already been submitted.",
+		TitleIdn: "Review Sudah Dikirim",
+		DescIdn:  "Review ini sudah pernah dikirim.",
 	},
 }
 

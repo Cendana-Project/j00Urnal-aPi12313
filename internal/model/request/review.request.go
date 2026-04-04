@@ -6,9 +6,20 @@ type AssignEditorRequest struct {
 }
 
 type InviteReviewerRequest struct {
-	RoundID    string `json:"round_id" binding:"required,uuid"`
-	ReviewerID string `json:"reviewer_id" binding:"required,uuid"`
-	DueDate    string `json:"due_date" binding:"required"` // RFC3339
+	ManuscriptID string `json:"manuscript_id" binding:"required,uuid"`
+	Email        string `json:"email" binding:"required,email"`
+}
+
+// CompleteReviewerInvitationRequest sets password and optional profile fields after opening the email link.
+type CompleteReviewerInvitationRequest struct {
+	Password  string `json:"password" binding:"required,min=8"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+// DeclineReviewerInvitationRequest optional reason when declining via token.
+type DeclineReviewerInvitationRequest struct {
+	Reason string `json:"reason"`
 }
 
 type SubmitReviewRequest struct {

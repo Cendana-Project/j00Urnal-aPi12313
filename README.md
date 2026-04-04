@@ -394,6 +394,8 @@ goose -dir migration/db create migration_name sql
 go run main.go migrate create migration_name
 ```
 
+**DB lama / skema sudah ada tanpa riwayat Goose:** migrasi di `migration/db` diset **idempoten** (`IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, dll.) supaya `migrate up` tidak gagal bila tabel/kolom sudah dibuat lewat seed atau eksperimen. Alternatif lain tanpa mengubah SQL: baseline Goose (tandai versi sudah terpasang), mis. `go run main.go migrate status` lalu isi tabel `goose_db_version` sesuai dokumen [pressly/goose](https://github.com/pressly/goose), atau untuk dev paling bersih: **database kosong baru** lalu `migrate up` sekali.
+
 ## 🐳 Docker
 
 ### Build and Run with Docker

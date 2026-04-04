@@ -1,14 +1,13 @@
 -- +goose Up
 -- +goose StatementBegin
 
--- 1. Add assigned_editor_id to manuscripts
-ALTER TABLE manuscripts
-    ADD COLUMN assigned_editor_id UUID REFERENCES users(id) ON DELETE SET NULL;
+-- Idempotent: tables/columns may exist (app seed, GORM, or replay after goose reset).
 
-CREATE INDEX idx_manuscripts_assigned_editor ON manuscripts(assigned_editor_id);
+ALTER TABLE manuscripts ADD COLUMN IF NOT EXISTS assigned_editor_id UUID REFERENCES users(id) ON DELETE SET NULL;
 
--- 2. Review Rounds
-CREATE TABLE review_rounds (
+CREATE INDEX IF NOT EXISTS idx_manuscripts_assigned_editor ON manuscripts(assigned_editor_id);
+
+CREATE TABLE IF NOT EXISTS review_rounds (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     manuscript_id UUID NOT NULL REFERENCES manuscripts(id) ON DELETE CASCADE,
     round_number INT NOT NULL DEFAULT 1,
@@ -22,10 +21,9 @@ CREATE TABLE review_rounds (
     UNIQUE(manuscript_id, round_number)
 );
 
-CREATE INDEX idx_review_rounds_manuscript ON review_rounds(manuscript_id);
+CREATE INDEX IF NOT EXISTS idx_review_rounds_manuscript ON review_rounds(manuscript_id);
 
--- 3. Review Assignments
-CREATE TABLE review_assignments (
+CREATE TABLE IF NOT EXISTS review_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     review_round_id UUID NOT NULL REFERENCES review_rounds(id) ON DELETE CASCADE,
     reviewer_id UUID NOT NULL REFERENCES users(id),
@@ -42,12 +40,11 @@ CREATE TABLE review_assignments (
     updated_at TIMESTAMP
 );
 
-CREATE INDEX idx_review_assignments_round ON review_assignments(review_round_id);
-CREATE INDEX idx_review_assignments_reviewer ON review_assignments(reviewer_id);
-CREATE INDEX idx_review_assignments_token ON review_assignments(invitation_token);
+CREATE INDEX IF NOT EXISTS idx_review_assignments_round ON review_assignments(review_round_id);
+CREATE INDEX IF NOT EXISTS idx_review_assignments_reviewer ON review_assignments(reviewer_id);
+CREATE INDEX IF NOT EXISTS idx_review_assignments_token ON review_assignments(invitation_token);
 
--- 4. Review Files
-CREATE TABLE review_files (
+CREATE TABLE IF NOT EXISTS review_files (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     review_assignment_id UUID REFERENCES review_assignments(id) ON DELETE CASCADE,
     review_round_id UUID NOT NULL REFERENCES review_rounds(id) ON DELETE CASCADE,
@@ -60,8 +57,8 @@ CREATE TABLE review_files (
     uploaded_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_review_files_assignment ON review_files(review_assignment_id);
-CREATE INDEX idx_review_files_round ON review_files(review_round_id);
+CREATE INDEX IF NOT EXISTS idx_review_files_assignment ON review_files(review_assignment_id);
+CREATE INDEX IF NOT EXISTS idx_review_files_round ON review_files(review_round_id);
 
 -- +goose StatementEnd
 

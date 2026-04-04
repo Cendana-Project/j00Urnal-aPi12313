@@ -259,6 +259,30 @@ var (
 		Message:    "You are not assigned as editor for this manuscript",
 		Detail:     GetMessageDetail(MsgEditorNotAssigned),
 	}
+	ErrNoActiveReviewRound = response.CustomError{
+		Code:       "NO_ACTIVE_REVIEW_ROUND",
+		StatusCode: http.StatusBadRequest,
+		Message:    "No review round exists for this manuscript; start review first",
+		Detail:     GetMessageDetail(MsgNoActiveReviewRound),
+	}
+	ErrReviewerInviteDuplicate = response.CustomError{
+		Code:       "REVIEWER_INVITE_DUPLICATE",
+		StatusCode: http.StatusConflict,
+		Message:    "This email already has a pending invitation for this review round",
+		Detail:     GetMessageDetail(MsgReviewerInviteDuplicate),
+	}
+	ErrReviewerAssignmentNotAllowed = response.CustomError{
+		Code:       "REVIEWER_ASSIGNMENT_NOT_ALLOWED",
+		StatusCode: http.StatusForbidden,
+		Message:    "You cannot submit a review for this assignment",
+		Detail:     GetMessageDetail(MsgReviewerAssignmentNotAllowed),
+	}
+	ErrReviewAlreadyCompleted = response.CustomError{
+		Code:       "REVIEW_ALREADY_COMPLETED",
+		StatusCode: http.StatusConflict,
+		Message:    "This review has already been submitted",
+		Detail:     GetMessageDetail(MsgReviewAlreadyCompleted),
+	}
 
 	// ====== Lain-lain yang masih direferensi di util/transport lama ======
 	ErrUnauthorizedUpdate = response.CustomError{

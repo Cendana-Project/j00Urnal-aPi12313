@@ -114,6 +114,11 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		auth.POST("/password/reset", t.authController.PasswordReset)
 	}
 
+	// Reviewer invitation (public — token from email)
+	v1.GET("/reviewer/invitations/:token", t.reviewController.GetInvitationPreview)
+	v1.POST("/reviewer/invitations/:token/complete", t.reviewController.CompleteReviewerInvitation)
+	v1.POST("/reviewer/invitations/:token/decline", t.reviewController.DeclineReviewerInvitation)
+
 	protected := v1.Group("/")
 	protected.Use(transportmw.AuthRequired(rdb))
 	{
@@ -218,6 +223,14 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			editor.GET("/reviewer-candidates", t.reviewController.ListReviewerCandidates)
 			editor.POST("/invite-reviewer", t.reviewController.InviteReviewer)
 			editor.POST("/rounds/decision", t.reviewController.MakeRoundDecision)
+		}
+
+		requireReviewer := transportmw.RequireReviewer(t.roleRepo)
+		reviewer := protected.Group("/reviewer")
+		reviewer.Use(requireReviewer)
+		{
+			reviewer.GET("/history", t.reviewController.ListReviewerHistory)
+			reviewer.POST("/assignments/:id/submit", t.reviewController.SubmitReviewerReview)
 		}
 
 	}

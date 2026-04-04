@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"mime"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -13,6 +14,8 @@ import (
 type Sender interface {
 	Send(to, subject, htmlBody string) error
 	SendWithContext(ctx context.Context, to, subject, htmlBody string) error
+	// SendWithContextAndText sends HTML with an optional plain-text part (used by Brevo API; SMTP ignores text when empty).
+	SendWithContextAndText(ctx context.Context, to, subject, htmlBody, textBody string) error
 }
 
 type SMTPSender struct {
@@ -25,6 +28,10 @@ func NewSMTPSender(cfg *Config) *SMTPSender {
 
 func (s *SMTPSender) Send(to, subject, htmlBody string) error {
 	return s.SendWithContext(context.Background(), to, subject, htmlBody)
+}
+
+func (s *SMTPSender) SendWithContextAndText(ctx context.Context, to, subject, htmlBody, _ string) error {
+	return s.SendWithContext(ctx, to, subject, htmlBody)
 }
 
 func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody string) error {
@@ -63,11 +70,15 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 		headerFrom = formatAddress(fromRaw, s.cfg.FromName)
 	}
 
-	// Compose headers
+	// Compose headers (Subject: RFC 2047 when non-ASCII)
+	subjectHeader := subject
+	if subjectNeedsEncodedWord(subject) {
+		subjectHeader = mime.QEncoding.Encode("utf-8", subject)
+	}
 	headers := map[string]string{
 		"From":         headerFrom,
 		"To":           to,
-		"Subject":      subject,
+		"Subject":      subjectHeader,
 		"MIME-Version": "1.0",
 		"Content-Type": "text/html; charset=UTF-8",
 	}
@@ -189,4 +200,16 @@ func formatAddress(email, name string) string {
 	}
 	// Basic encode for special chars if needed
 	return fmt.Sprintf("%s <%s>", name, email)
+}
+
+func subjectNeedsEncodedWord(s string) bool {
+	for _, r := range s {
+		if r > 127 {
+			return true
+		}
+		if r < 32 && r != '\t' {
+			return true
+		}
+	}
+	return false
 }
