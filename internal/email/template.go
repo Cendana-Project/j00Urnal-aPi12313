@@ -18,7 +18,7 @@ var (
       <span style="display:inline-block;font-size:28px;letter-spacing:6px;font-weight:700;background:#0ea5e9;color:#fff;padding:12px 16px;border-radius:10px">{{.PIN}}</span>
     </div>
     <p style="color:#667">Jika Anda tidak meminta verifikasi ini, abaikan email ini.</p>
-    <p style="color:#999;font-size:12px;margin-top:16px;padding-top:16px;border-top:1px solid #e6ecf1">💡 Tips: Jika email ini masuk ke folder Spam, tandai sebagai "Not Spam" agar email berikutnya masuk ke Inbox.</p>
+    <p style="color:#999;font-size:12px;margin-top:16px;padding-top:16px;border-top:1px solid #e6ecf1">Jika email ini masuk folder Spam, tandai sebagai bukan spam agar pesan berikutnya masuk ke kotak masuk.</p>
   </div>
   <div style="text-align:center;color:#99a;font-size:12px;margin-top:10px">© {{.Year}} MedikaOne. Semua hak dilindungi.</div>
 </body></html>`))
@@ -30,9 +30,9 @@ var (
     <div style="text-align:center;margin:16px 0">
       <span style="display:inline-block;font-size:28px;letter-spacing:6px;font-weight:700;background:#0ea5e9;color:#fff;padding:12px 16px;border-radius:10px">{{.PIN}}</span>
     </div>
-    <p style="color:#667">Jika kamu tidak meminta reset ini, abaikan email ini.</p>
+    <p style="color:#667">Jika Anda tidak meminta reset ini, abaikan email ini.</p>
   </div>
-  <div style="text-align:center;color:#99a; font-size:12px;margin-top:10px">© {{.Year}} MedikaOne</div>
+  <div style="text-align:center;color:#99a;font-size:12px;margin-top:10px">© {{.Year}} MedikaOne. Semua hak dilindungi.</div>
 </body></html>`))
 )
 
@@ -56,7 +56,7 @@ func RenderVerifyPIN(firstName, pin string, ttlMinutes int) string {
 	}
 	var buf bytes.Buffer
 	if err := verifyPINTmpl.Execute(&buf, data); err != nil {
-		return "" // fallback empty or log error if needed
+		return ""
 	}
 	return buf.String()
 }
@@ -79,7 +79,7 @@ func RenderResetPIN(firstName, pin string, ttlMinutes int) string {
 	return buf.String()
 }
 
-// YearNow disediakan agar mudah ditest/mocking kalau perlu.
+// YearNow returns the current calendar year for email footers.
 func YearNow() int { return time.Now().Year() }
 
 // ====== Review Workflow Email Templates ======
@@ -105,7 +105,7 @@ var (
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>Undangan reviewer</title>
+<title>Undangan menjadi reviewer</title>
 </head>
 <body style="margin:0;padding:0;background:#e8eef4;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
 <span style="display:none!important;visibility:hidden;mso-hide:all;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{{.Preheader}}</span>
@@ -176,7 +176,7 @@ var (
     <p style="color:#555">Hasil review untuk manuskrip Anda telah tersedia:</p>
     <div style="background:#f0f7ff;border:1px solid #cce0ff;border-radius:8px;padding:16px;margin:16px 0">
       <p style="margin:0;font-weight:700;color:#333">{{.ManuscriptTitle}}</p>
-      <p style="margin:8px 0 0 0;color:#555;font-size:14px">Review Round: <strong>{{.RoundNumber}}</strong></p>
+      <p style="margin:8px 0 0 0;color:#555;font-size:14px">Putaran review: <strong>{{.RoundNumber}}</strong></p>
     </div>
     {{if .ReviewSummary}}<div style="background:#fafafa;border:1px solid #e6ecf1;border-radius:8px;padding:16px;margin:16px 0">
       <p style="margin:0;color:#555;font-weight:600">Ringkasan Review:</p>
