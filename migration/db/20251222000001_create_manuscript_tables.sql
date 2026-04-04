@@ -1,6 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TABLE manuscripts (
+CREATE TABLE IF NOT EXISTS manuscripts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     volume_number_id UUID NOT NULL REFERENCES issues(id),
     title TEXT NOT NULL,
@@ -13,10 +13,10 @@ CREATE TABLE manuscripts (
     deleted_at TIMESTAMP
 );
 
-CREATE INDEX idx_manuscripts_deleted_at ON manuscripts(deleted_at);
-CREATE INDEX idx_manuscripts_issue_id ON manuscripts(volume_number_id);
+CREATE INDEX IF NOT EXISTS idx_manuscripts_deleted_at ON manuscripts(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_manuscripts_issue_id ON manuscripts(volume_number_id);
 
-CREATE TABLE manuscript_authors (
+CREATE TABLE IF NOT EXISTS manuscript_authors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     manuscript_id UUID NOT NULL REFERENCES manuscripts(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id),
@@ -27,9 +27,9 @@ CREATE TABLE manuscript_authors (
     order_position INT NOT NULL
 );
 
-CREATE INDEX idx_manuscript_authors_manuscript_id ON manuscript_authors(manuscript_id);
+CREATE INDEX IF NOT EXISTS idx_manuscript_authors_manuscript_id ON manuscript_authors(manuscript_id);
 
-CREATE TABLE manuscript_files (
+CREATE TABLE IF NOT EXISTS manuscript_files (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     manuscript_id UUID NOT NULL REFERENCES manuscripts(id) ON DELETE CASCADE,
     file_type VARCHAR(20) NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE manuscript_files (
     uploaded_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_manuscript_files_manuscript_id ON manuscript_files(manuscript_id);
+CREATE INDEX IF NOT EXISTS idx_manuscript_files_manuscript_id ON manuscript_files(manuscript_id);
 -- +goose StatementEnd
 
 -- +goose Down

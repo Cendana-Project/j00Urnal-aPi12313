@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/api-monolith-template/internal/config"
+	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/email"
 	"github.com/api-monolith-template/internal/infrastructure"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
@@ -51,6 +52,15 @@ func StartServer() {
 
 	// Infra
 	gormDB := infrastructure.InitializeDBConn()
+
+	// Apply pending SQL migrations (goose) in non-production so local/staging DBs stay in sync
+	// (e.g. review_assignments.invited_email). Production should run migrations in CI/deploy.
+	if config.Env.Env != constant.ProductionEnvironment {
+		if err := infrastructure.RunMigrations(); err != nil {
+			logrus.WithError(err).Fatal("database migration failed; run `go run . migrate --action=up` or fix DATABASE_DSN / DATABASE_DIRECT_DSN")
+		}
+	}
+
 	rdb := infrastructure.NewRedisClient()
 	if !config.Env.Redis.IsCacheDisable && rdb != nil {
 		_, err := rdb.Ping(ctx).Result()
@@ -126,10 +136,16 @@ func StartServer() {
 		logrus.Info("Email service is DISABLED - users will be auto-activated")
 	} else if provider == "brevo-api" {
 		// Brevo HTTP API (recommended for cloud environments - no SMTP port blocking)
-		apiKey := config.Env.SMTP.Password // Reuse password field for API key
-		fromEmail := config.Env.SMTP.FromEmail
+		// Must be v3 "API key" from Brevo dashboard (xkeysib-...), NOT the SMTP relay password.
+		apiKey := strings.TrimSpace(config.Env.SMTP.Password)
+		fromEmail := strings.TrimSpace(config.Env.SMTP.FromEmail)
 		if fromEmail == "" {
 			fromEmail = "no-reply@medikaone.id"
+		}
+		if apiKey == "" {
+			logrus.Warn("Brevo API: SMTP_PASSWORD is empty — set it to your Brevo v3 API key (xkeysib-...) from https://app.brevo.com/settings/keys/api")
+		} else if !strings.HasPrefix(apiKey, "xkeysib-") {
+			logrus.Warn("Brevo API: key does not start with xkeysib- — use the HTTP API key from Brevo, not the SMTP-only password")
 		}
 		sender = email.NewBrevoAPISender(apiKey, fromEmail, time.Duration(timeoutSeconds)*time.Second)
 		logrus.Info("Using Brevo HTTP API for email (port 443 - no SMTP blocking)")

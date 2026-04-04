@@ -2,10 +2,10 @@ package user
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/infrastructure"
@@ -18,22 +18,33 @@ func NewRepository(db *gorm.DB) *Repository { return &Repository{} }
 
 func (r *Repository) FindByEmail(email string) (*entity.User, error) {
 	var u entity.User
-	err := infrastructure.GetDB().Where("LOWER(email)=LOWER(?)", strings.ToLower(email)).
-		First(&u).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	// Raw + Scan: avoids GORM First + soft-delete + PgBouncer "bind supplies N parameters" errors.
+	err := infrastructure.GetDB().Raw(
+		`SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND deleted_at IS NULL LIMIT 1`,
+		strings.TrimSpace(email),
+	).Scan(&u).Error
+	if err != nil {
+		return nil, err
+	}
+	if u.ID == "" {
 		return nil, nil
 	}
-	return &u, err
+	return &u, nil
 }
 
 func (r *Repository) FindByUsername(uname string) (*entity.User, error) {
 	var u entity.User
-	err := infrastructure.GetDB().Where("LOWER(username)=LOWER(?)", strings.ToLower(uname)).
-		First(&u).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	err := infrastructure.GetDB().Raw(
+		`SELECT * FROM users WHERE LOWER(username) = LOWER(?) AND deleted_at IS NULL LIMIT 1`,
+		strings.TrimSpace(uname),
+	).Scan(&u).Error
+	if err != nil {
+		return nil, err
+	}
+	if u.ID == "" {
 		return nil, nil
 	}
-	return &u, err
+	return &u, nil
 }
 
 func (r *Repository) ExistsUsername(uname string) (bool, error) {
@@ -65,20 +76,39 @@ func (r *Repository) UpdateByID(id string, fields map[string]any) error {
 }
 
 func (r *Repository) GetByID(id string) (*entity.User, error) {
+	uid, err := uuid.Parse(strings.TrimSpace(id))
+	if err != nil {
+		return nil, nil
+	}
+	// No bind parameters: avoids PgBouncer / unnamed-prepared-statement mix-ups
+	// ("bind message supplies 1 parameters, but prepared statement requires 2").
+	idLit := uid.String()
 	var u entity.User
-	if err := infrastructure.GetDB().First(&u, "id = ? AND deleted_at IS NULL", id).Error; err != nil {
+	err = infrastructure.GetDB().Raw(
+		`SELECT * FROM users WHERE id = '` + idLit + `'::uuid AND deleted_at IS NULL LIMIT 1`,
+	).Scan(&u).Error
+	if err != nil {
 		return nil, err
+	}
+	if u.ID == "" {
+		return nil, nil
 	}
 	return &u, nil
 }
 
 func (r *Repository) GetByEmail(email string) (*entity.User, error) {
 	var u entity.User
-	err := infrastructure.GetDB().First(&u, "email = ? AND deleted_at IS NULL", email).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	err := infrastructure.GetDB().Raw(
+		`SELECT * FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1`,
+		strings.TrimSpace(email),
+	).Scan(&u).Error
+	if err != nil {
+		return nil, err
+	}
+	if u.ID == "" {
 		return nil, nil
 	}
-	return &u, err
+	return &u, nil
 }
 
 func (r *Repository) Update(u *entity.User) error { return infrastructure.GetDB().Save(u).Error }

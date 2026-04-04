@@ -6,10 +6,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/email"
+	"github.com/api-monolith-template/internal/infrastructure"
 	"github.com/api-monolith-template/internal/model/entity"
+	"github.com/api-monolith-template/internal/model/response"
 	reviewRepo "github.com/api-monolith-template/internal/repository/review"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
 	userRepo "github.com/api-monolith-template/internal/repository/user"
@@ -295,10 +300,32 @@ func (s *Service) ListReviewerCandidates(ctx context.Context, search string, pg 
 // Reviewer Invitation
 // ====================================================================
 
-// InviteReviewer invites a reviewer to a review round.
-func (s *Service) InviteReviewer(ctx context.Context, roundID, reviewerID, editorID string, dueDate time.Time) (*entity.ReviewAssignment, error) {
-	// 1. Validate round
-	round, err := s.reviewRepo.GetRoundByID(ctx, roundID)
+// InviteReviewer invites a prospective reviewer by email for the manuscript's current review round
+// (latest round with status PENDING or IN_REVIEW). Invitation and review due date both default to 7 days from now.
+func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail, editorID string) (*entity.ReviewAssignment, error) {
+	m, err := s.manuscripts.GetByID(ctx, manuscriptID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, constant.ErrRecordNotFound
+	}
+	if err := s.validateEditorAssignment(m, editorID); err != nil {
+		return nil, err
+	}
+
+	latest, err := s.reviewRepo.GetLatestRoundByManuscript(ctx, manuscriptID)
+	if err != nil {
+		return nil, err
+	}
+	if latest == nil {
+		return nil, constant.ErrNoActiveReviewRound
+	}
+	if latest.Status != constant.ReviewRoundStatusPending && latest.Status != constant.ReviewRoundStatusInReview {
+		return nil, constant.ErrInvalidManuscriptStatus
+	}
+
+	round, err := s.reviewRepo.GetRoundByID(ctx, latest.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -306,29 +333,31 @@ func (s *Service) InviteReviewer(ctx context.Context, roundID, reviewerID, edito
 		return nil, constant.ErrRecordNotFound
 	}
 
-	// 2. Validate reviewer has REVIEWER role
-	hasRole, err := s.roleRepo.UserHasRole(reviewerID, constant.RoleReviewer)
+	emailNorm := strings.ToLower(strings.TrimSpace(inviteEmail))
+	if emailNorm == "" {
+		return nil, constant.ErrValidationFailed
+	}
+
+	dup, err := s.reviewRepo.CountPendingInvitationByRoundEmail(ctx, round.ID, emailNorm)
 	if err != nil {
 		return nil, err
 	}
-	if !hasRole {
-		return nil, constant.ErrRecordNotFound
+	if dup > 0 {
+		return nil, constant.ErrReviewerInviteDuplicate
 	}
 
-	// 3. Generate invitation token
 	token := util.GenerateSecureToken(32)
-
-	// 4. Create assignment
 	now := time.Now()
-	expiresAt := now.Add(invitationExpiryDays * 24 * time.Hour)
+	dueDate := now.Add(invitationExpiryDays * 24 * time.Hour)
 
 	assignment := &entity.ReviewAssignment{
-		ReviewRoundID:       roundID,
-		ReviewerID:          reviewerID,
+		ReviewRoundID:       round.ID,
+		ReviewerID:          nil,
+		InvitedEmail:        emailNorm,
 		AssignedBy:          editorID,
 		Status:              constant.ReviewAssignmentStatusInvited,
 		InvitationToken:     &token,
-		InvitationExpiresAt: expiresAt,
+		InvitationExpiresAt: dueDate,
 		DueDate:             dueDate,
 		CreatedAt:           now,
 	}
@@ -337,53 +366,368 @@ func (s *Service) InviteReviewer(ctx context.Context, roundID, reviewerID, edito
 		return nil, err
 	}
 
-	// 5. Update round status to IN_REVIEW if still PENDING
 	if round.Status == constant.ReviewRoundStatusPending {
-		_ = s.reviewRepo.UpdateRound(ctx, roundID, map[string]any{
+		_ = s.reviewRepo.UpdateRound(ctx, round.ID, map[string]any{
 			"status": constant.ReviewRoundStatusInReview,
 		})
 	}
 
-	// 6. Send invitation email
-	go func() {
-		reviewer, err := s.userRepo.GetByID(reviewerID)
-		if err != nil || reviewer == nil {
-			return
-		}
-		editor, err := s.userRepo.GetByID(editorID)
-		if err != nil || editor == nil {
-			return
-		}
+	go s.sendReviewerInviteEmail(round, editorID, emailNorm, token, dueDate)
 
-		reviewerName := formatUserName(reviewer)
-		editorName := formatUserName(editor)
-		dueDateStr := dueDate.Format("2 January 2006")
+	return s.reviewRepo.GetAssignmentByID(ctx, assignment.ID)
+}
 
-		// Get manuscript title from round
-		manuscriptTitle := ""
-		if round.Manuscript != nil {
-			manuscriptTitle = round.Manuscript.Title
+func (s *Service) sendReviewerInviteEmail(round *entity.ReviewRound, editorID, inviteEmail, token string, dueDate time.Time) {
+	ctx := context.Background()
+	editor, err := s.userRepo.GetByID(editorID)
+	if err != nil {
+		util.Errorf(ctx, "reviewer invite email: load editor %s: %v", editorID, err)
+		return
+	}
+	if editor == nil {
+		util.Errorf(ctx, "reviewer invite email: editor %s not found", editorID)
+		return
+	}
+	editorName := formatUserName(editor)
+	dueDateStr := dueDate.Format("2 January 2006")
+
+	manuscriptTitle := ""
+	if round.Manuscript != nil {
+		manuscriptTitle = round.Manuscript.Title
+	} else {
+		m, _ := s.manuscripts.GetByID(context.Background(), round.ManuscriptID)
+		if m != nil {
+			manuscriptTitle = m.Title
+		}
+	}
+
+	reviewerName := reviewerDisplayNameFromEmail(inviteEmail)
+
+	baseURL := config.Env.Server.FrontendURL
+	if baseURL == "" {
+		baseURL = config.Env.Server.BaseURL
+	}
+	acceptURL := fmt.Sprintf("%s/reviewer/invitation/%s/accept", baseURL, token)
+	declineURL := fmt.Sprintf("%s/reviewer/invitation/%s/decline", baseURL, token)
+
+	body := email.RenderReviewerInvitation(reviewerName, manuscriptTitle, editorName, dueDateStr, acceptURL, declineURL)
+	plain := email.RenderReviewerInvitationPlain(reviewerName, manuscriptTitle, editorName, dueDateStr, acceptURL, declineURL)
+	subject := email.ReviewerInviteSubject(manuscriptTitle)
+	if s.emailSender == nil {
+		util.Errorf(ctx, "reviewer invite email: sender disabled (EMAIL_ENABLED=false or not configured)")
+		return
+	}
+	if err := s.emailSender.SendWithContextAndText(ctx, inviteEmail, subject, body, plain); err != nil {
+		util.Errorf(ctx, "reviewer invite email: send to %s: %v", maskInvitationEmail(inviteEmail), err)
+	}
+}
+
+func reviewerDisplayNameFromEmail(addr string) string {
+	parts := strings.Split(addr, "@")
+	if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
+		local := strings.TrimSpace(parts[0])
+		runes := []rune(local)
+		if len(runes) > 0 && runes[0] >= 'a' && runes[0] <= 'z' {
+			runes[0] = runes[0] - 'a' + 'A'
+		}
+		return string(runes)
+	}
+	return "Reviewer"
+}
+
+func maskInvitationEmail(addr string) string {
+	addr = strings.TrimSpace(addr)
+	at := strings.LastIndex(addr, "@")
+	if at <= 1 || at >= len(addr)-1 {
+		return "***"
+	}
+	local, domain := addr[:at], addr[at+1:]
+	if len(local) < 2 {
+		return "***@" + domain
+	}
+	return local[:2] + "***@" + domain
+}
+
+func (s *Service) assertInvitationOpen(a *entity.ReviewAssignment) error {
+	if time.Now().After(a.InvitationExpiresAt) {
+		return constant.ErrInvitationExpired
+	}
+	switch a.Status {
+	case constant.ReviewAssignmentStatusInvited:
+		return nil
+	case constant.ReviewAssignmentStatusAccepted:
+		return constant.ErrInvitationAlreadyAccepted
+	default:
+		return constant.ErrInvitationNotFound
+	}
+}
+
+// GetInvitationPreview returns safe metadata for the invitation landing page.
+func (s *Service) GetInvitationPreview(ctx context.Context, token string) (*response.ReviewerInvitationPreviewResponse, error) {
+	a, err := s.reviewRepo.GetAssignmentByToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if a == nil {
+		return nil, constant.ErrInvitationNotFound
+	}
+	if err := s.assertInvitationOpen(a); err != nil {
+		return nil, err
+	}
+
+	out := &response.ReviewerInvitationPreviewResponse{
+		Valid:               true,
+		InvitationExpiresAt: a.InvitationExpiresAt,
+		DueDate:             a.DueDate,
+		InvitedEmailMasked:  maskInvitationEmail(a.InvitedEmail),
+		RequiresPassword:    true,
+		Section:             "Article Text",
+	}
+	if a.ReviewRound != nil && a.ReviewRound.Manuscript != nil {
+		out.ManuscriptTitle = a.ReviewRound.Manuscript.Title
+		if a.ReviewRound.Manuscript.Journal != nil {
+			out.JournalName = a.ReviewRound.Manuscript.Journal.Name
+		}
+	}
+	if a.ReviewRound != nil && a.ReviewRound.Creator != nil {
+		out.EditorName = formatUserName(a.ReviewRound.Creator)
+	}
+	return out, nil
+}
+
+// CompleteReviewerInvitation validates the token, sets password, assigns REVIEWER role, and marks the assignment accepted.
+func (s *Service) CompleteReviewerInvitation(ctx context.Context, token, password, firstName, lastName string) error {
+	if !util.IsValidPassword(password) {
+		return constant.ErrInvalidPassword
+	}
+
+	a, err := s.reviewRepo.GetAssignmentByToken(ctx, token)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return constant.ErrInvitationNotFound
+	}
+	if err := s.assertInvitationOpen(a); err != nil {
+		return err
+	}
+
+	invitedEmail := strings.ToLower(strings.TrimSpace(a.InvitedEmail))
+	if invitedEmail == "" {
+		return constant.ErrInvitationNotFound
+	}
+
+	if util.IsPasswordSimilarToUserInfo(password, invitedEmail, invitedEmail) {
+		return constant.ErrPasswordSimilarToUserInfo
+	}
+
+	existing, err := s.userRepo.FindByEmail(invitedEmail)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+	if existing != nil {
+		isSA, err := s.roleRepo.IsUserSuperAdmin(ctx, existing.ID)
+		if err != nil {
+			return constant.ErrInternalServerError
+		}
+		if isSA {
+			return constant.ErrForbidden
+		}
+	}
+
+	username, err := s.pickUsernameForInvitation(ctx, invitedEmail, existing)
+	if err != nil {
+		return err
+	}
+	if util.IsPasswordSimilarToUserInfo(password, username, invitedEmail) {
+		return constant.ErrPasswordSimilarToUserInfo
+	}
+
+	hash, err := util.HashPasswordScrypt(password)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+
+	roleID, err := s.roleRepo.GetRoleIDBySlug(ctx, constant.RoleReviewer)
+	if err != nil {
+		return constant.ErrInternalServerError
+	}
+
+	now := time.Now()
+	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var userID string
+
+		if existing == nil {
+			fn := strings.TrimSpace(firstName)
+			ln := strings.TrimSpace(lastName)
+			var fnPtr, lnPtr *string
+			if fn != "" {
+				fnPtr = &fn
+			}
+			if ln != "" {
+				lnPtr = &ln
+			}
+			u := entity.User{
+				ID:           uuid.New().String(),
+				Email:        invitedEmail,
+				Username:     username,
+				PasswordHash: hash,
+				FirstName:    fnPtr,
+				LastName:     lnPtr,
+				Status:       "active",
+				VerifiedAt:   &now,
+			}
+			if err := tx.Create(&u).Error; err != nil {
+				return err
+			}
+			userID = u.ID
 		} else {
-			m, _ := s.manuscripts.GetByID(context.Background(), round.ManuscriptID)
-			if m != nil {
-				manuscriptTitle = m.Title
+			userID = existing.ID
+			updates := map[string]any{
+				"password_hash": hash,
+				"updated_at":    now,
+			}
+			if strings.TrimSpace(firstName) != "" {
+				updates["first_name"] = strings.TrimSpace(firstName)
+			}
+			if strings.TrimSpace(lastName) != "" {
+				updates["last_name"] = strings.TrimSpace(lastName)
+			}
+			if strings.ToLower(existing.Status) != "active" {
+				updates["status"] = "active"
+				updates["verified_at"] = now
+			}
+			if err := tx.Model(&entity.User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
+				return err
 			}
 		}
 
-		baseURL := config.Env.Server.FrontendURL
-		if baseURL == "" {
-			baseURL = config.Env.Server.BaseURL
+		if err := tx.Exec(`
+			INSERT INTO user_roles (user_id, role_id, assigned_at)
+			VALUES (?, ?, NOW())
+			ON CONFLICT (user_id, role_id) DO NOTHING
+		`, userID, roleID).Error; err != nil {
+			return err
 		}
-		acceptURL := fmt.Sprintf("%s/reviewer/invitation/%s/accept", baseURL, token)
-		declineURL := fmt.Sprintf("%s/reviewer/invitation/%s/decline", baseURL, token)
 
-		body := email.RenderReviewerInvitation(reviewerName, manuscriptTitle, editorName, dueDateStr, acceptURL, declineURL)
-		if s.emailSender != nil {
-			_ = s.emailSender.Send(reviewer.Email, "Undangan Review Manuskrip - "+manuscriptTitle, body)
+		accepted := now
+		up := map[string]any{
+			"reviewer_id":            userID,
+			"status":                 constant.ReviewAssignmentStatusAccepted,
+			"invitation_accepted_at": accepted,
+			"invitation_token":       gorm.Expr("NULL"),
+			"updated_at":             now,
 		}
-	}()
+		if err := tx.Model(&entity.ReviewAssignment{}).Where("id = ?", a.ID).Updates(up).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
 
-	return s.reviewRepo.GetAssignmentByID(ctx, assignment.ID)
+func (s *Service) pickUsernameForInvitation(ctx context.Context, invitedEmail string, existing *entity.User) (string, error) {
+	if existing != nil {
+		return existing.Username, nil
+	}
+	local := strings.ToLower(strings.TrimSpace(strings.Split(invitedEmail, "@")[0]))
+	var b strings.Builder
+	for _, r := range local {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '.', r == '_', r == '-':
+			b.WriteRune('_')
+		default:
+			b.WriteRune('_')
+		}
+	}
+	base := strings.Trim(b.String(), "_")
+	if len(base) < 3 {
+		base = "reviewer"
+	}
+	if len(base) > 40 {
+		base = base[:40]
+	}
+	for i := 0; i < 1000; i++ {
+		candidate := base
+		if i > 0 {
+			candidate = fmt.Sprintf("%s_%d", base, i)
+		}
+		ok, err := s.userRepo.ExistsUsername(candidate)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return candidate, nil
+		}
+	}
+	return "", constant.ErrInternalServerError
+}
+
+// DeclineReviewerInvitation marks the assignment declined (token must still be valid).
+func (s *Service) DeclineReviewerInvitation(ctx context.Context, token, reason string) error {
+	a, err := s.reviewRepo.GetAssignmentByToken(ctx, token)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return constant.ErrInvitationNotFound
+	}
+	if err := s.assertInvitationOpen(a); err != nil {
+		return err
+	}
+	now := time.Now()
+	updates := map[string]any{
+		"status":           constant.ReviewAssignmentStatusDeclined,
+		"comments":         strings.TrimSpace(reason),
+		"invitation_token": gorm.Expr("NULL"),
+		"updated_at":       now,
+	}
+	return s.reviewRepo.UpdateAssignment(ctx, a.ID, updates)
+}
+
+// ListReviewerHistory returns completed assignments for the reviewer portal.
+func (s *Service) ListReviewerHistory(ctx context.Context, reviewerID, search, recommendationEq, editorDecisionEq string, pg *pagination.Pagination) ([]reviewRepo.ReviewerHistoryRow, int64, error) {
+	return s.reviewRepo.ListReviewerHistory(ctx, reviewerID, search, recommendationEq, editorDecisionEq, pg)
+}
+
+// SubmitReviewerReview records the reviewer's recommendation and marks the assignment completed (shows in History).
+func (s *Service) SubmitReviewerReview(ctx context.Context, reviewerID, assignmentID, recommendation, comments string) error {
+	a, err := s.reviewRepo.GetAssignmentByID(ctx, assignmentID)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return constant.ErrRecordNotFound
+	}
+	if a.ReviewerID == nil || *a.ReviewerID != reviewerID {
+		return constant.ErrForbidden
+	}
+	if a.Status == constant.ReviewAssignmentStatusCompleted {
+		return constant.ErrReviewAlreadyCompleted
+	}
+	if a.Status != constant.ReviewAssignmentStatusAccepted {
+		return constant.ErrReviewerAssignmentNotAllowed
+	}
+
+	rec := strings.TrimSpace(recommendation)
+	switch rec {
+	case "ACCEPT", "REJECT", "MAJOR_REVISION", "MINOR_REVISION":
+	default:
+		return constant.ErrValidationFailed
+	}
+
+	now := time.Now()
+	var cmt *string
+	if t := strings.TrimSpace(comments); t != "" {
+		cmt = &t
+	}
+	return s.reviewRepo.UpdateAssignment(ctx, a.ID, map[string]any{
+		"recommendation": rec,
+		"comments":       cmt,
+		"status":         constant.ReviewAssignmentStatusCompleted,
+		"completed_at":   now,
+	})
 }
 
 // ====================================================================
