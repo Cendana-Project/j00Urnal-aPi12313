@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/util"
@@ -23,6 +24,12 @@ func RequireReviewer(roles UserRoleChecker) gin.HandlerFunc {
 		}
 		userID := util.GetUserID(c)
 		if userID == "" {
+			logrus.WithFields(logrus.Fields{
+				"trace_id": util.GetTraceID(c),
+				"path":     c.Request.URL.Path,
+				"method":   c.Request.Method,
+				"reason":   "missing_or_invalid_jwt",
+			}).Warn("RequireReviewer: no user_id in context — send Authorization: Bearer <access_token>")
 			util.HandleError(c, constant.ErrUnauthorized)
 			c.Abort()
 			return
@@ -34,6 +41,13 @@ func RequireReviewer(roles UserRoleChecker) gin.HandlerFunc {
 			return
 		}
 		if !ok {
+			logrus.WithFields(logrus.Fields{
+				"trace_id": util.GetTraceID(c),
+				"path":     c.Request.URL.Path,
+				"method":   c.Request.Method,
+				"user_id":  userID,
+				"reason":   "user_lacks_REVIEWER_role",
+			}).Warn("RequireReviewer: user is authenticated but does not have REVIEWER role")
 			util.HandleError(c, constant.ErrForbidden)
 			c.Abort()
 			return

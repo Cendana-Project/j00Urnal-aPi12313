@@ -700,9 +700,9 @@ func (s *Service) ListReviewerHistory(ctx context.Context, reviewerID, search, r
 // When report is nil and the independent-review form is configured, the last saved draft (PATCH .../draft) is validated
 // as complete and stored as SUBMITTED in the same request—matching a single "Submit my report" control.
 // When report is nil and no form schema is loaded, only recommendation and comments are persisted (legacy).
-// When report is non-nil, its answers merge with any existing draft and must pass full validation (optional one-shot submit).
-func (s *Service) SubmitReviewerReview(ctx context.Context, reviewerID, assignmentID, recommendation, comments string, report *request.ReviewerReportPayload) error {
-	return s.submitReviewerReviewWithOptionalReport(ctx, reviewerID, assignmentID, recommendation, comments, report)
+// When report is non-nil, its answers/flags merge after optional top-level answers/flags (optional one-shot submit).
+func (s *Service) SubmitReviewerReview(ctx context.Context, reviewerID, assignmentID string, body request.SubmitReviewRequest) error {
+	return s.submitReviewerReviewWithOptionalReport(ctx, reviewerID, assignmentID, &body)
 }
 
 // ====================================================================

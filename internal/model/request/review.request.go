@@ -34,9 +34,13 @@ type ReviewerReportPayload struct {
 
 // SubmitReviewRequest is POST .../assignments/:id/submit. Body may be empty: the server finalizes the saved draft
 // and may leave recommendation/comments null. When recommendation is sent it must be a valid enum.
+// Answers/Flags merge into the stored draft before validation (same as PATCH .../draft) so clients can fix missing
+// fields and resubmit without an extra save request.
 type SubmitReviewRequest struct {
 	Recommendation string                 `json:"recommendation,omitempty" binding:"omitempty,oneof=ACCEPT REJECT MAJOR_REVISION MINOR_REVISION"`
 	Comments       string                 `json:"comments,omitempty"`
+	Answers        map[string]any         `json:"answers,omitempty"`
+	Flags          map[string]any         `json:"flags,omitempty"`
 	Report         *ReviewerReportPayload `json:"report,omitempty"`
 }
 

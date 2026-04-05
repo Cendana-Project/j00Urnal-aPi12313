@@ -182,7 +182,10 @@ func (s *Service) PatchReviewerReportDraft(ctx context.Context, reviewerID, assi
 }
 
 // submitReviewerReviewWithOptionalReport completes the assignment and persists the structured report when applicable.
-func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, reviewerID, assignmentID, recommendation, comments string, report *request.ReviewerReportPayload) error {
+func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, reviewerID, assignmentID string, body *request.SubmitReviewRequest) error {
+	if body == nil {
+		body = &request.SubmitReviewRequest{}
+	}
 	a, err := s.reviewRepo.GetAssignmentByID(ctx, assignmentID)
 	if err != nil {
 		return err
@@ -203,7 +206,7 @@ func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, re
 		return constant.ErrReviewerAssignmentNotAllowed
 	}
 
-	recTrim := strings.TrimSpace(recommendation)
+	recTrim := strings.TrimSpace(body.Recommendation)
 	var recPtr *string
 	switch recTrim {
 	case "":
@@ -216,7 +219,7 @@ func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, re
 	}
 
 	var cmt *string
-	if t := strings.TrimSpace(comments); t != "" {
+	if t := strings.TrimSpace(body.Comments); t != "" {
 		cmt = &t
 	}
 	now := time.Now()
@@ -238,21 +241,25 @@ func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, re
 	var repEntity *entity.ReviewAssignmentReport
 
 	switch {
-	case report != nil:
-		if s.reviewerForm == nil {
-			return constant.ErrInternalServerError
-		}
-		if report.Answers == nil {
-			return constant.ErrInvalidReviewerReport
-		}
+	case s.reviewerForm != nil:
 		defaultSV := s.reviewerForm.SchemaVersion
 		var basePayload []byte
 		if existing != nil {
 			basePayload = existing.Payload
 		}
-		merged, mErr := mergeReviewerPayload(basePayload, report.SchemaVersion, report.Answers, report.Flags, defaultSV)
+		merged, mErr := mergeReviewerPayload(basePayload, 0, body.Answers, body.Flags, defaultSV)
 		if mErr != nil {
 			return constant.ErrInvalidReviewerReport
+		}
+		if body.Report != nil {
+			raw, mErr := marshalReviewerPayload(merged)
+			if mErr != nil {
+				return constant.ErrInvalidReviewerReport
+			}
+			merged, mErr = mergeReviewerPayload(raw, body.Report.SchemaVersion, body.Report.Answers, body.Report.Flags, defaultSV)
+			if mErr != nil {
+				return constant.ErrInvalidReviewerReport
+			}
 		}
 		if err := validateReviewerAnswerSizes(merged.Answers); err != nil {
 			return constant.ErrInvalidReviewerReport
@@ -265,26 +272,8 @@ func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, re
 			return constant.ErrInvalidReviewerReport
 		}
 
-	case s.reviewerForm != nil:
-		defaultSV := s.reviewerForm.SchemaVersion
-		var basePayload []byte
-		if existing != nil {
-			basePayload = existing.Payload
-		}
-		merged, mErr := mergeReviewerPayload(basePayload, 0, nil, nil, defaultSV)
-		if mErr != nil {
-			return constant.ErrInvalidReviewerReport
-		}
-		if err := validateReviewerAnswerSizes(merged.Answers); err != nil {
-			return constant.ErrInvalidReviewerReport
-		}
-		if issues := s.reviewerForm.CollectAnswerValidationIssues(merged.SchemaVersion, merged.Answers, true); len(issues) > 0 {
-			return invalidReviewerReportWithIssues(issues)
-		}
-		repEntity, err = reviewerSubmittedReportEntity(assignmentID, existing, merged)
-		if err != nil {
-			return constant.ErrInvalidReviewerReport
-		}
+	case body.Report != nil:
+		return constant.ErrInternalServerError
 
 	default:
 		// Legacy: no embedded form — recommendation + comments only.

@@ -215,6 +215,25 @@ func (s *Service) rotateRefresh(oldJTI string) {
 	// Tidak tahu userID di sini; SREM dilakukan saat Refresh ketika kita tahu sub. // <=== added (note)
 }
 
+// assignDefaultAuthorRole grants the global AUTHOR role (idempotent via ON CONFLICT DO NOTHING).
+func (s *Service) assignDefaultAuthorRole(ctx context.Context, userID string) error {
+	if userID == "" {
+		return constant.ErrInternalServerError
+	}
+	role, err := s.roles.FindBySlug(constant.RoleAuthor)
+	if err != nil {
+		return err
+	}
+	if role == nil || role.ID == "" {
+		ulog.Errorf(ctx, "role AUTHOR not found in database")
+		return constant.ErrInternalServerError
+	}
+	if err := s.roles.Assign(userID, role.ID); err != nil {
+		return err
+	}
+	return nil
+}
+
 /* ==================== Core Flows ==================== */
 
 func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*entity.User, error) {
@@ -239,6 +258,9 @@ func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*
 				}
 				u.Status = "active"
 				ulog.Infof(ctx, "Email service disabled - auto-activated existing pending user: %s", emailAddr)
+				if err := s.assignDefaultAuthorRole(ctx, u.ID); err != nil {
+					return nil, err
+				}
 				return u, nil
 			}
 
@@ -296,6 +318,10 @@ func (s *Service) Register(ctx context.Context, req *request.RegisterRequest) (*
 			return nil, constant.ErrEmailAlreadyActive
 		}
 		return nil, constant.ErrInternalServerError
+	}
+
+	if err := s.assignDefaultAuthorRole(ctx, u.ID); err != nil {
+		return nil, err
 	}
 
 	// Only send verification email if email service is available
@@ -370,6 +396,10 @@ func (s *Service) VerifyPIN(ctx context.Context, emailAddr, pin string) (TokenPa
 		return TokenPair{}, time.Time{}, time.Time{}, constant.ErrInternalServerError
 	}
 	_ = s.redis.Del(ctx, "verify:pin:"+emailAddr).Err()
+
+	if err := s.assignDefaultAuthorRole(ctx, u.ID); err != nil {
+		return TokenPair{}, time.Time{}, time.Time{}, err
+	}
 
 	pair, _, aexp, rexp, err := s.issueJWT(u.ID)
 	if err != nil {
