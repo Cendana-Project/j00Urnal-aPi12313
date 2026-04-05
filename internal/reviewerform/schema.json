@@ -7,9 +7,7 @@
   },
   "sections": [
     {
-      "id": "questions",
-      "title": "Questions",
-      "expandable": false,
+      "id": "evaluation",
       "fields": [
         {
           "id": "q1_revision_request",
@@ -47,44 +45,38 @@
           ]
         },
         {
-          "id": "q3_rigor",
-          "type": "scale",
-          "label": "Rigor",
-          "required": false,
-          "min": 1,
-          "max": 5,
-          "low_label": "Low",
-          "high_label": "High"
-        },
-        {
-          "id": "q4_writing",
-          "type": "scale",
-          "label": "Quality of the writing",
-          "required": false,
-          "min": 1,
-          "max": 5,
-          "low_label": "Low",
-          "high_label": "High"
-        },
-        {
-          "id": "q5_overall_content",
-          "type": "scale",
-          "label": "Overall quality of the content",
-          "required": false,
-          "min": 1,
-          "max": 5,
-          "low_label": "Low",
-          "high_label": "High"
-        },
-        {
-          "id": "q6_general_interest",
-          "type": "scale",
-          "label": "Interest to a general audience",
-          "required": false,
-          "min": 1,
-          "max": 5,
-          "low_label": "Low",
-          "high_label": "High"
+          "id": "quality_assessment",
+          "type": "quality_assessment",
+          "fields": [
+            {
+              "id": "q3_rigor",
+              "type": "scale",
+              "label": "Rigor",
+              "min": 1,
+              "max": 5
+            },
+            {
+              "id": "q4_writing",
+              "type": "scale",
+              "label": "Quality of the writing",
+              "min": 1,
+              "max": 5
+            },
+            {
+              "id": "q5_overall_content",
+              "type": "scale",
+              "label": "Overall quality of the content",
+              "min": 1,
+              "max": 5
+            },
+            {
+              "id": "q6_general_interest",
+              "type": "scale",
+              "label": "Interest to a general audience",
+              "min": 1,
+              "max": 5
+            }
+          ]
         }
       ]
     }

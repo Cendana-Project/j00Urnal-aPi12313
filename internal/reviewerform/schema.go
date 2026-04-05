@@ -69,6 +69,8 @@ type FieldDef struct {
 	LowLabel           string      `json:"low_label,omitempty"`
 	HighLabel          string      `json:"high_label,omitempty"`
 	Items              []RadioItem `json:"items,omitempty"`
+	// Fields holds nested answer keys for composite types (e.g. quality_assessment → scale rows).
+	Fields []FieldDef `json:"fields,omitempty"`
 }
 
 type RadioItem struct {
@@ -123,6 +125,14 @@ func (s *Schema) ToPublic() PublicSchema {
 			case "scale":
 				opts := scaleOptionStrings(f.Min, f.Max)
 				ps.Fields = append(ps.Fields, PublicField{ID: f.ID, Label: f.Label, Options: opts})
+			case "quality_assessment":
+				for _, sub := range f.Fields {
+					if sub.Type != "scale" {
+						continue
+					}
+					opts := scaleOptionStrings(sub.Min, sub.Max)
+					ps.Fields = append(ps.Fields, PublicField{ID: sub.ID, Label: sub.Label, Options: opts})
+				}
 			}
 		}
 		out.Sections = append(out.Sections, ps)
@@ -158,6 +168,13 @@ func (s *Schema) buildIndex() {
 						optSet[strings.TrimSpace(o)] = struct{}{}
 					}
 					s.fieldIndex[it.ID] = fieldMeta{typ: "radio", options: optSet, label: it.Label}
+				}
+			case "quality_assessment":
+				for _, sub := range f.Fields {
+					if sub.Type != "scale" {
+						continue
+					}
+					s.fieldIndex[sub.ID] = fieldMeta{typ: "scale", min: sub.Min, max: sub.Max, label: sub.Label}
 				}
 			}
 		}
@@ -195,6 +212,14 @@ func (s *Schema) CollectAnswerValidationIssues(schemaVersion int, answers map[st
 			case "scale":
 				meta := s.fieldIndex[f.ID]
 				issues = append(issues, s.validateScaleField(f.ID, meta.label, meta.min, meta.max, answers[f.ID], complete)...)
+			case "quality_assessment":
+				for _, sub := range f.Fields {
+					if sub.Type != "scale" {
+						continue
+					}
+					meta := s.fieldIndex[sub.ID]
+					issues = append(issues, s.validateScaleField(sub.ID, meta.label, meta.min, meta.max, answers[sub.ID], complete)...)
+				}
 			}
 		}
 	}

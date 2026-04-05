@@ -435,8 +435,8 @@ func (c *Controller) ListReviewerHistory(ctx *gin.Context) {
 	util.HandleResponse(ctx, res, nil)
 }
 
-// SubmitReviewerReview completes the assignment. Body may be empty; the server finalizes the saved draft as SUBMITTED
-// when the form is enabled. Optional JSON: recommendation, comments, report (schema_version not required).
+// SubmitReviewerReview completes the assignment. Body may be empty; optional fields: recommendation, comments,
+// answers, flags (merged into draft like PATCH .../draft), report (second merge). No extra save call needed to fix missing fields.
 func (c *Controller) SubmitReviewerReview(ctx *gin.Context) {
 	userID := util.GetUserID(ctx)
 	if userID == "" {
@@ -453,7 +453,7 @@ func (c *Controller) SubmitReviewerReview(ctx *gin.Context) {
 		util.HandleError(ctx, err)
 		return
 	}
-	if err := c.svc.SubmitReviewerReview(ctx.Request.Context(), userID, assignmentID, req.Recommendation, req.Comments, req.Report); err != nil {
+	if err := c.svc.SubmitReviewerReview(ctx.Request.Context(), userID, assignmentID, req); err != nil {
 		util.HandleError(ctx, err)
 		return
 	}
