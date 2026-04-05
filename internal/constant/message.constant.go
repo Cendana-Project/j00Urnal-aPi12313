@@ -66,6 +66,9 @@ const (
 	MsgReviewerInviteDuplicate      MessageCode = "REVIEWER_INVITE_DUPLICATE"
 	MsgReviewerAssignmentNotAllowed MessageCode = "REVIEWER_ASSIGNMENT_NOT_ALLOWED"
 	MsgReviewAlreadyCompleted       MessageCode = "REVIEW_ALREADY_COMPLETED"
+	MsgReviewerWithdrawn            MessageCode = "REVIEWER_WITHDRAWN"
+	MsgInvalidReviewerReport        MessageCode = "INVALID_REVIEWER_REPORT"
+	MsgExtensionRequestPending      MessageCode = "EXTENSION_REQUEST_PENDING"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -203,6 +206,24 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "This review has already been submitted.",
 		TitleIdn: "Review Sudah Dikirim",
 		DescIdn:  "Review ini sudah pernah dikirim.",
+	},
+	MsgReviewerWithdrawn: {
+		TitleEng: "Review Withdrawn",
+		DescEng:  "This reviewer assignment has been withdrawn.",
+		TitleIdn: "Review Ditarik",
+		DescIdn:  "Penugasan reviewer ini telah ditarik.",
+	},
+	MsgInvalidReviewerReport: {
+		TitleEng: "Invalid Review Report",
+		DescEng:  "The structured review payload does not match the form schema. See data.issues for each missing or invalid field.",
+		TitleIdn: "Laporan Review Tidak Valid",
+		DescIdn:  "Data laporan terstruktur tidak sesuai skema form. Lihat data.issues untuk field yang belum lengkap atau tidak valid.",
+	},
+	MsgExtensionRequestPending: {
+		TitleEng: "Extension Request Pending",
+		DescEng:  "A deadline extension request is already pending for this assignment.",
+		TitleIdn: "Permintaan Perpanjangan Tertunda",
+		DescIdn:  "Permintaan perpanjangan tenggat untuk penugasan ini masih menunggu keputusan.",
 	},
 }
 

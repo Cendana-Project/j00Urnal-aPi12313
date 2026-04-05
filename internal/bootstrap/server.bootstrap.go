@@ -12,6 +12,7 @@ import (
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/email"
+	"github.com/api-monolith-template/internal/reviewerform"
 	"github.com/api-monolith-template/internal/infrastructure"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
 	userRepo "github.com/api-monolith-template/internal/repository/user"
@@ -189,7 +190,11 @@ func StartServer() {
 	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, jRepo, tRepo, storageService)
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender, manuscriptService)
 	termService := termSvc.NewService(tRepo)
-	reviewService := reviewSvc.NewService(rvRepo, manuscriptService, storageService, sender, uRepo, rRepo)
+	reviewerForm, err := reviewerform.Load()
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to load reviewer independent review form schema")
+	}
+	reviewService := reviewSvc.NewService(rvRepo, manuscriptService, storageService, sender, uRepo, rRepo, reviewerForm)
 
 	issueService := issueSvc.NewService(iRepo, vRepo, fRepo, storageService, manuscriptService)
 	volumeService := volumeSvc.NewService(vRepo, jRepo, issueService)

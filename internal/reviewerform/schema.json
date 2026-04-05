@@ -1,0 +1,92 @@
+{
+  "schema_version": 2,
+  "page": {
+    "title": "Independent review questionnaire",
+    "submit_label": "Submit my report",
+    "save_draft_label": "Save and resume later"
+  },
+  "sections": [
+    {
+      "id": "questions",
+      "title": "Questions",
+      "expandable": false,
+      "fields": [
+        {
+          "id": "q1_revision_request",
+          "type": "long_text",
+          "label": "Please list your revision request for the authors and provide your detailed comments, including highlighting limitations and strengths of the review. If you have additional comments based on Q2 and Q3 you can add them as well.",
+          "required": false,
+          "allow_pdf_attachment": true
+        },
+        {
+          "id": "q2_checklist",
+          "type": "radio_group",
+          "label": "Checklist",
+          "required": false,
+          "items": [
+            {
+              "id": "q2a",
+              "label": "a. Is the quality of the figures and tables satisfactory?",
+              "options": ["Yes", "No", "Not Applicable"]
+            },
+            {
+              "id": "q2b",
+              "label": "b. Does the reference list cover the relevant literature adequately and in an unbiased manner?",
+              "options": ["Yes", "No"]
+            },
+            {
+              "id": "q2c",
+              "label": "c. Does this manuscript refer only to published data? (unpublished or original data is not allowed for this article type)",
+              "options": ["Yes", "No"]
+            },
+            {
+              "id": "q2d",
+              "label": "d. Does the review include a balanced, comprehensive, and critical view of the research area?",
+              "options": ["Yes", "No"]
+            }
+          ]
+        },
+        {
+          "id": "q3_rigor",
+          "type": "scale",
+          "label": "Rigor",
+          "required": false,
+          "min": 1,
+          "max": 5,
+          "low_label": "Low",
+          "high_label": "High"
+        },
+        {
+          "id": "q4_writing",
+          "type": "scale",
+          "label": "Quality of the writing",
+          "required": false,
+          "min": 1,
+          "max": 5,
+          "low_label": "Low",
+          "high_label": "High"
+        },
+        {
+          "id": "q5_overall_content",
+          "type": "scale",
+          "label": "Overall quality of the content",
+          "required": false,
+          "min": 1,
+          "max": 5,
+          "low_label": "Low",
+          "high_label": "High"
+        },
+        {
+          "id": "q6_general_interest",
+          "type": "scale",
+          "label": "Interest to a general audience",
+          "required": false,
+          "min": 1,
+          "max": 5,
+          "low_label": "Low",
+          "high_label": "High"
+        }
+      ]
+    }
+  ]
+}

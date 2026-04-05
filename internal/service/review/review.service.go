@@ -14,7 +14,9 @@ import (
 	"github.com/api-monolith-template/internal/email"
 	"github.com/api-monolith-template/internal/infrastructure"
 	"github.com/api-monolith-template/internal/model/entity"
+	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
+	"github.com/api-monolith-template/internal/reviewerform"
 	reviewRepo "github.com/api-monolith-template/internal/repository/review"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
 	userRepo "github.com/api-monolith-template/internal/repository/user"
@@ -27,12 +29,13 @@ import (
 const invitationExpiryDays = 7
 
 type Service struct {
-	reviewRepo  *reviewRepo.Repository
-	manuscripts *manuscriptSvc.Service
-	storage     *storageSvc.Service
-	emailSender email.Sender
-	userRepo    *userRepo.Repository
-	roleRepo    *roleRepo.Repository
+	reviewRepo   *reviewRepo.Repository
+	manuscripts  *manuscriptSvc.Service
+	storage      *storageSvc.Service
+	emailSender  email.Sender
+	userRepo     *userRepo.Repository
+	roleRepo     *roleRepo.Repository
+	reviewerForm *reviewerform.Schema
 }
 
 func NewService(
@@ -42,14 +45,16 @@ func NewService(
 	es email.Sender,
 	ur *userRepo.Repository,
 	rlr *roleRepo.Repository,
+	rf *reviewerform.Schema,
 ) *Service {
 	return &Service{
-		reviewRepo:  rr,
-		manuscripts: ms,
-		storage:     ss,
-		emailSender: es,
-		userRepo:    ur,
-		roleRepo:    rlr,
+		reviewRepo:   rr,
+		manuscripts:  ms,
+		storage:      ss,
+		emailSender:  es,
+		userRepo:     ur,
+		roleRepo:     rlr,
+		reviewerForm: rf,
 	}
 }
 
@@ -692,42 +697,12 @@ func (s *Service) ListReviewerHistory(ctx context.Context, reviewerID, search, r
 }
 
 // SubmitReviewerReview records the reviewer's recommendation and marks the assignment completed (shows in History).
-func (s *Service) SubmitReviewerReview(ctx context.Context, reviewerID, assignmentID, recommendation, comments string) error {
-	a, err := s.reviewRepo.GetAssignmentByID(ctx, assignmentID)
-	if err != nil {
-		return err
-	}
-	if a == nil {
-		return constant.ErrRecordNotFound
-	}
-	if a.ReviewerID == nil || *a.ReviewerID != reviewerID {
-		return constant.ErrForbidden
-	}
-	if a.Status == constant.ReviewAssignmentStatusCompleted {
-		return constant.ErrReviewAlreadyCompleted
-	}
-	if a.Status != constant.ReviewAssignmentStatusAccepted {
-		return constant.ErrReviewerAssignmentNotAllowed
-	}
-
-	rec := strings.TrimSpace(recommendation)
-	switch rec {
-	case "ACCEPT", "REJECT", "MAJOR_REVISION", "MINOR_REVISION":
-	default:
-		return constant.ErrValidationFailed
-	}
-
-	now := time.Now()
-	var cmt *string
-	if t := strings.TrimSpace(comments); t != "" {
-		cmt = &t
-	}
-	return s.reviewRepo.UpdateAssignment(ctx, a.ID, map[string]any{
-		"recommendation": rec,
-		"comments":       cmt,
-		"status":         constant.ReviewAssignmentStatusCompleted,
-		"completed_at":   now,
-	})
+// When report is nil and the independent-review form is configured, the last saved draft (PATCH .../draft) is validated
+// as complete and stored as SUBMITTED in the same request—matching a single "Submit my report" control.
+// When report is nil and no form schema is loaded, only recommendation and comments are persisted (legacy).
+// When report is non-nil, its answers merge with any existing draft and must pass full validation (optional one-shot submit).
+func (s *Service) SubmitReviewerReview(ctx context.Context, reviewerID, assignmentID, recommendation, comments string, report *request.ReviewerReportPayload) error {
+	return s.submitReviewerReviewWithOptionalReport(ctx, reviewerID, assignmentID, recommendation, comments, report)
 }
 
 // ====================================================================

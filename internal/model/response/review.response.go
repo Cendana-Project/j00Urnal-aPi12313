@@ -83,6 +83,105 @@ type ReviewerInvitationPreviewResponse struct {
 	Section             string    `json:"section"`
 }
 
+// ReviewerWorkflowStep matches the reviewer portal progress stepper (initial validation through final decision).
+type ReviewerWorkflowStep struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Done    bool   `json:"done"`
+	Current bool   `json:"current"`
+}
+
+// ReviewerAssignmentListItemResponse is one row in GET /v1/reviewer/assignments.
+type ReviewerAssignmentListItemResponse struct {
+	AssignmentID      string     `json:"assignment_id"`
+	ReviewRoundID     string     `json:"review_round_id"`
+	ManuscriptID      string     `json:"manuscript_id"`
+	ManuscriptTitle   string     `json:"manuscript_title"`
+	ManuscriptSection string     `json:"manuscript_section"`
+	ReferenceNumber   *int64     `json:"reference_number,omitempty"`
+	RoundNumber       int        `json:"round_number"`
+	RoundStatus       string     `json:"round_status"`
+	AssignmentStatus  string     `json:"assignment_status"`
+	DueDate           time.Time  `json:"due_date"`
+	IsDelayed         bool       `json:"is_delayed"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+// ReviewerAuthorBrief is a co-author line on the reviewer workspace.
+type ReviewerAuthorBrief struct {
+	Name              string `json:"name"`
+	Email             string `json:"email"`
+	IsCorresponding   bool   `json:"is_corresponding"`
+	OrderPosition     int    `json:"order_position"`
+}
+
+// ReviewerAssignmentFileResponse is metadata for a file linked to the assignment.
+type ReviewerAssignmentFileResponse struct {
+	ID          string    `json:"id"`
+	FileType    string    `json:"file_type"`
+	Filename    string    `json:"filename"`
+	MimeType    string    `json:"mime_type"`
+	SizeBytes   int64     `json:"size_bytes"`
+	UploadedAt  time.Time `json:"uploaded_at"`
+	UploadedBy  string    `json:"uploaded_by"`
+	UploaderName string   `json:"uploader_name,omitempty"`
+}
+
+// ReviewerSavedReportResponse is structured answers loaded from review_assignment_reports.
+type ReviewerSavedReportResponse struct {
+	Status         string         `json:"status"`
+	SchemaVersion  int            `json:"schema_version"`
+	Answers        map[string]any `json:"answers"`
+	Flags          map[string]any `json:"flags,omitempty"`
+}
+
+// ReviewerWorkspaceAssignment is the logged-in reviewer's task on this round (no invitation token noise).
+type ReviewerWorkspaceAssignment struct {
+	ID                   string     `json:"id"`
+	Status               string     `json:"status"`
+	DueDate              time.Time  `json:"due_date"`
+	IsDelayed            bool       `json:"is_delayed"`
+	InvitationAcceptedAt *time.Time `json:"invitation_accepted_at,omitempty"`
+	CompletedAt          *time.Time `json:"completed_at,omitempty"`
+	Recommendation       *string    `json:"recommendation,omitempty"`
+	Comments             *string    `json:"comments,omitempty"`
+}
+
+// ReviewerWorkspaceRound is the review round that owns this assignment.
+type ReviewerWorkspaceRound struct {
+	ID             string     `json:"id"`
+	RoundNumber    int        `json:"round_number"`
+	Status         string     `json:"status"`
+	EditorDecision *string    `json:"editor_decision,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// ReviewerWorkspaceManuscript is manuscript + journal + handling editor context for the workspace page.
+type ReviewerWorkspaceManuscript struct {
+	ID              string               `json:"id"`
+	Title           string               `json:"title"`
+	Status          string               `json:"status"`
+	Section         string               `json:"section"`
+	Abstract        string               `json:"abstract"`
+	ReferenceNumber *int64               `json:"reference_number,omitempty"`
+	JournalName     string               `json:"journal_name,omitempty"`
+	ReceivedAt      time.Time            `json:"received_at"`
+	HandlingEditor  string               `json:"handling_editor_name,omitempty"`
+	Authors         []ReviewerAuthorBrief `json:"authors"`
+}
+
+// ReviewerWorkspaceResponse is GET /v1/reviewer/assignments/:id.
+// Form copy + field definitions: GET /v1/reviewer/review-form-schema (hindari duplikasi payload besar).
+type ReviewerWorkspaceResponse struct {
+	Assignment          ReviewerWorkspaceAssignment      `json:"assignment"`
+	Round               ReviewerWorkspaceRound           `json:"round"`
+	Manuscript          ReviewerWorkspaceManuscript      `json:"manuscript"`
+	Report              *ReviewerSavedReportResponse     `json:"report,omitempty"`
+	Files               []ReviewerAssignmentFileResponse `json:"files"`
+	Workflow            []ReviewerWorkflowStep           `json:"workflow"`
+	CurrentWorkflowStep int                              `json:"current_workflow_step"`
+}
+
 // ReviewerHistoryItemResponse matches reviewer History table columns:
 // ID, MM-DD ASSIGNED, SEC, TITLE, REVIEW, EDITOR DECISION (+ ids for navigation).
 type ReviewerHistoryItemResponse struct {

@@ -1,10 +1,12 @@
 package mapper
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/response"
 	"github.com/api-monolith-template/internal/repository/review"
@@ -228,6 +230,171 @@ func ToReviewerHistoryListResponse(rows []review.ReviewerHistoryRow, page, pageS
 	out := make([]response.ReviewerHistoryItemResponse, len(rows))
 	for i := range rows {
 		out[i] = ToReviewerHistoryItemResponse(rows[i], offset+i+1)
+	}
+	return out
+}
+
+// ====== Reviewer workspace ======
+
+func ToReviewerAssignmentListResponse(rows []review.ReviewerAssignmentSummaryRow) []response.ReviewerAssignmentListItemResponse {
+	now := time.Now().UTC()
+	out := make([]response.ReviewerAssignmentListItemResponse, len(rows))
+	for i, row := range rows {
+		sec := strings.TrimSpace(row.ManuscriptSection)
+		if sec == "" {
+			sec = defaultManuscriptSection
+		}
+		delayed := row.AssignmentStatus == string(constant.ReviewAssignmentStatusAccepted) && now.After(row.DueDate.UTC())
+		out[i] = response.ReviewerAssignmentListItemResponse{
+			AssignmentID:      row.AssignmentID,
+			ReviewRoundID:     row.ReviewRoundID,
+			ManuscriptID:      row.ManuscriptID,
+			ManuscriptTitle:   row.ManuscriptTitle,
+			ManuscriptSection: sec,
+			ReferenceNumber:   row.ReferenceNumber,
+			RoundNumber:       row.RoundNumber,
+			RoundStatus:       row.RoundStatus,
+			AssignmentStatus:  row.AssignmentStatus,
+			DueDate:           row.DueDate,
+			IsDelayed:         delayed,
+			CreatedAt:         row.CreatedAt,
+		}
+	}
+	return out
+}
+
+func ToReviewerSavedReportResponse(rep *entity.ReviewAssignmentReport) *response.ReviewerSavedReportResponse {
+	if rep == nil {
+		return nil
+	}
+	var inner struct {
+		SchemaVersion int            `json:"schema_version"`
+		Answers       map[string]any `json:"answers"`
+		Flags         map[string]any `json:"flags"`
+	}
+	_ = json.Unmarshal(rep.Payload, &inner)
+	sv := rep.SchemaVersion
+	if inner.SchemaVersion != 0 {
+		sv = inner.SchemaVersion
+	}
+	ans := inner.Answers
+	if ans == nil {
+		ans = map[string]any{}
+	}
+	fl := inner.Flags
+	if fl == nil {
+		fl = map[string]any{}
+	}
+	return &response.ReviewerSavedReportResponse{
+		Status:        string(rep.Status),
+		SchemaVersion: sv,
+		Answers:       ans,
+		Flags:         fl,
+	}
+}
+
+func ToReviewerAuthorBriefs(authors []entity.ManuscriptAuthor) []response.ReviewerAuthorBrief {
+	out := make([]response.ReviewerAuthorBrief, 0, len(authors))
+	for _, a := range authors {
+		out = append(out, response.ReviewerAuthorBrief{
+			Name:            strings.TrimSpace(a.AuthorName),
+			Email:           strings.TrimSpace(a.AuthorEmail),
+			IsCorresponding: a.IsCorresponding,
+			OrderPosition:   a.OrderPosition,
+		})
+	}
+	return out
+}
+
+func ToReviewerAssignmentFileResponses(files []entity.ReviewFile) []response.ReviewerAssignmentFileResponse {
+	out := make([]response.ReviewerAssignmentFileResponse, 0, len(files))
+	for _, f := range files {
+		uploaderName := ""
+		if f.Uploader != nil {
+			uploaderName = formatUserName(f.Uploader)
+		}
+		out = append(out, response.ReviewerAssignmentFileResponse{
+			ID:           f.ID,
+			FileType:     f.FileType,
+			Filename:     f.Filename,
+			MimeType:     f.MimeType,
+			SizeBytes:    f.SizeBytes,
+			UploadedAt:   f.UploadedAt,
+			UploadedBy:   f.UploadedBy,
+			UploaderName: uploaderName,
+		})
+	}
+	return out
+}
+
+func ToReviewerWorkspaceResponse(
+	a *entity.ReviewAssignment,
+	m *entity.Manuscript,
+	authors []entity.ManuscriptAuthor,
+	files []entity.ReviewFile,
+	rep *entity.ReviewAssignmentReport,
+	isDelayed bool,
+	workflow []response.ReviewerWorkflowStep,
+	currentWorkflowStep int,
+) response.ReviewerWorkspaceResponse {
+	out := response.ReviewerWorkspaceResponse{
+		Workflow:            workflow,
+		CurrentWorkflowStep: currentWorkflowStep,
+		Files:               ToReviewerAssignmentFileResponses(files),
+		Report:              ToReviewerSavedReportResponse(rep),
+	}
+	if a == nil {
+		return out
+	}
+	out.Assignment = response.ReviewerWorkspaceAssignment{
+		ID:                   a.ID,
+		Status:               string(a.Status),
+		DueDate:              a.DueDate,
+		IsDelayed:            isDelayed,
+		InvitationAcceptedAt: a.InvitationAcceptedAt,
+		CompletedAt:          a.CompletedAt,
+		Recommendation:       a.Recommendation,
+		Comments:             a.Comments,
+	}
+	if a.ReviewRound != nil {
+		r := a.ReviewRound
+		out.Round = response.ReviewerWorkspaceRound{
+			ID:             r.ID,
+			RoundNumber:    r.RoundNumber,
+			Status:         string(r.Status),
+			EditorDecision: r.EditorDecision,
+			CreatedAt:      r.CreatedAt,
+		}
+	}
+	if m != nil {
+		sec := strings.TrimSpace(m.Section)
+		if sec == "" {
+			sec = defaultManuscriptSection
+		}
+		jn := ""
+		if m.Journal != nil {
+			jn = m.Journal.Name
+		}
+		editorName := ""
+		if m.AssignedEditor != nil {
+			editorName = formatUserName(m.AssignedEditor)
+		}
+		out.Manuscript = response.ReviewerWorkspaceManuscript{
+			ID:              m.ID,
+			Title:           m.Title,
+			Status:          string(m.Status),
+			Section:         sec,
+			Abstract:        m.Abstract,
+			ReferenceNumber: m.ReferenceNumber,
+			JournalName:     jn,
+			ReceivedAt:      m.CreatedAt,
+			HandlingEditor:  editorName,
+			Authors:         ToReviewerAuthorBriefs(authors),
+		}
+	} else {
+		out.Manuscript = response.ReviewerWorkspaceManuscript{
+			Authors: ToReviewerAuthorBriefs(authors),
+		}
 	}
 	return out
 }

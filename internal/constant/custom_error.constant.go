@@ -283,6 +283,24 @@ var (
 		Message:    "This review has already been submitted",
 		Detail:     GetMessageDetail(MsgReviewAlreadyCompleted),
 	}
+	ErrReviewerWithdrawn = response.CustomError{
+		Code:       "REVIEWER_WITHDRAWN",
+		StatusCode: http.StatusConflict,
+		Message:    "This reviewer assignment has been withdrawn",
+		Detail:     GetMessageDetail(MsgReviewerWithdrawn),
+	}
+	ErrInvalidReviewerReport = response.CustomError{
+		Code:       "INVALID_REVIEWER_REPORT",
+		StatusCode: http.StatusBadRequest,
+		Message:    "Invalid structured review report",
+		Detail:     GetMessageDetail(MsgInvalidReviewerReport),
+	}
+	ErrExtensionRequestPending = response.CustomError{
+		Code:       "EXTENSION_REQUEST_PENDING",
+		StatusCode: http.StatusConflict,
+		Message:    "An extension request is already pending",
+		Detail:     GetMessageDetail(MsgExtensionRequestPending),
+	}
 
 	// ====== Lain-lain yang masih direferensi di util/transport lama ======
 	ErrUnauthorizedUpdate = response.CustomError{

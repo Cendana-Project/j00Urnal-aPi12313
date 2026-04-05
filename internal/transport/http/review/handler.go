@@ -11,6 +11,7 @@ import (
 	"github.com/api-monolith-template/internal/mapper"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
+	"github.com/api-monolith-template/internal/reviewerform"
 	reviewSvc "github.com/api-monolith-template/internal/service/review"
 	"github.com/api-monolith-template/internal/util"
 	"github.com/api-monolith-template/pkg/pagination"
@@ -434,7 +435,8 @@ func (c *Controller) ListReviewerHistory(ctx *gin.Context) {
 	util.HandleResponse(ctx, res, nil)
 }
 
-// SubmitReviewerReview completes the reviewer's assignment (recommendation + optional comments).
+// SubmitReviewerReview completes the assignment. Body may be empty; the server finalizes the saved draft as SUBMITTED
+// when the form is enabled. Optional JSON: recommendation, comments, report (schema_version not required).
 func (c *Controller) SubmitReviewerReview(ctx *gin.Context) {
 	userID := util.GetUserID(ctx)
 	if userID == "" {
@@ -447,15 +449,195 @@ func (c *Controller) SubmitReviewerReview(ctx *gin.Context) {
 		return
 	}
 	var req request.SubmitReviewRequest
-	if err := util.BindAndValidate(ctx, &req); err != nil {
+	if err := util.BindJSONOrEmpty(ctx, &req); err != nil {
 		util.HandleError(ctx, err)
 		return
 	}
-	if err := c.svc.SubmitReviewerReview(ctx.Request.Context(), userID, assignmentID, req.Recommendation, req.Comments); err != nil {
+	if err := c.svc.SubmitReviewerReview(ctx.Request.Context(), userID, assignmentID, req.Recommendation, req.Comments, req.Report); err != nil {
 		util.HandleError(ctx, err)
 		return
 	}
 	res := response.NewResponseOK()
 	res.Message = "Review submitted"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// ListReviewerAssignments lists pending or completed assignments for the logged-in reviewer.
+func (c *Controller) ListReviewerAssignments(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+	page, pageSize = pagination.NormalizeQuery(page, pageSize)
+	pg := pagination.New(page, pageSize)
+
+	statusStr := strings.ToUpper(strings.TrimSpace(ctx.DefaultQuery("status", "ACCEPTED")))
+	var st constant.ReviewAssignmentStatus
+	switch statusStr {
+	case "ACCEPTED":
+		st = constant.ReviewAssignmentStatusAccepted
+	case "COMPLETED":
+		st = constant.ReviewAssignmentStatusCompleted
+	default:
+		util.HandleError(ctx, constant.ErrValidationFailed)
+		return
+	}
+
+	items, total, err := c.svc.ListReviewerAssignments(ctx.Request.Context(), userID, st, pg)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = gin.H{
+		"items":     items,
+		"total":     total,
+		"page":      pg.Page,
+		"page_size": pg.PageSize,
+	}
+	util.HandleResponse(ctx, res, nil)
+}
+
+// GetReviewerAssignmentWorkspace returns nested assignment, round, manuscript, report, files, and workflow stepper.
+// Form schema: GET /v1/reviewer/review-form-schema.
+func (c *Controller) GetReviewerAssignmentWorkspace(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	assignmentID := strings.TrimSpace(ctx.Param("id"))
+	if assignmentID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+	data, err := c.svc.GetReviewerAssignmentWorkspace(ctx.Request.Context(), userID, assignmentID)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = data
+	util.HandleResponse(ctx, res, nil)
+}
+
+// GetReviewerFormSchema returns schema_version and sections whose fields only expose id, label, and options (checklist flattened).
+func (c *Controller) GetReviewerFormSchema(ctx *gin.Context) {
+	s, err := reviewerform.Load()
+	if err != nil {
+		util.HandleError(ctx, constant.ErrInternalServerError)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = s.ToPublic()
+	util.HandleResponse(ctx, res, nil)
+}
+
+// PatchReviewerReportDraft saves or merges a structured draft for an assignment.
+func (c *Controller) PatchReviewerReportDraft(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	assignmentID := strings.TrimSpace(ctx.Param("id"))
+	if assignmentID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+	var reqBody request.PatchReviewerReportDraftRequest
+	if err := util.BindAndValidate(ctx, &reqBody); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	if err := c.svc.PatchReviewerReportDraft(ctx.Request.Context(), userID, assignmentID, reqBody); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Draft saved"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// UploadReviewerPDF accepts a PDF file for the assignment (multipart field "file").
+func (c *Controller) UploadReviewerPDF(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	assignmentID := strings.TrimSpace(ctx.Param("id"))
+	if assignmentID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+	fh, err := ctx.FormFile("file")
+	if err != nil {
+		util.HandleError(ctx, constant.ErrValidationError)
+		return
+	}
+	rf, err := c.svc.UploadReviewerAssignmentPDF(ctx.Request.Context(), userID, assignmentID, fh)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = gin.H{
+		"id":          rf.ID,
+		"file_type":   rf.FileType,
+		"filename":    rf.Filename,
+		"size_bytes":  rf.SizeBytes,
+		"uploaded_at": rf.UploadedAt,
+	}
+	util.HandleResponse(ctx, res, nil)
+}
+
+// WithdrawReviewerAssignment withdraws an accepted assignment before completion.
+func (c *Controller) WithdrawReviewerAssignment(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	assignmentID := strings.TrimSpace(ctx.Param("id"))
+	if assignmentID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+	if err := c.svc.WithdrawReviewerAssignment(ctx.Request.Context(), userID, assignmentID); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Assignment withdrawn"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// RequestReviewerExtension creates a pending due-date extension request.
+func (c *Controller) RequestReviewerExtension(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	assignmentID := strings.TrimSpace(ctx.Param("id"))
+	if assignmentID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+	var reqBody request.ReviewerExtensionRequestBody
+	if err := util.BindAndValidate(ctx, &reqBody); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	if err := c.svc.RequestReviewerExtension(ctx.Request.Context(), userID, assignmentID, reqBody); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Extension request submitted"
 	util.HandleResponse(ctx, res, nil)
 }
