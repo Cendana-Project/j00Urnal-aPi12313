@@ -87,6 +87,7 @@ const (
 	ReviewAssignmentStatusDeclined  ReviewAssignmentStatus = "DECLINED"
 	ReviewAssignmentStatusCompleted ReviewAssignmentStatus = "COMPLETED"
 	ReviewAssignmentStatusExpired   ReviewAssignmentStatus = "EXPIRED"
+	ReviewAssignmentStatusWithdrawn ReviewAssignmentStatus = "WITHDRAWN"
 )
 
 // ====== Review Recommendation ======
@@ -108,4 +109,22 @@ const (
 	ReviewFileTypeComment    ReviewFileType = "REVIEW_COMMENT"
 	ReviewFileTypeRevision   ReviewFileType = "REVISION"
 	ReviewFileTypeAttachment ReviewFileType = "REVIEW_ATTACHMENT"
+	ReviewFileTypeReviewerPDF ReviewFileType = "REVIEWER_PDF"
+)
+
+// Review assignment report row status (review_assignment_reports.status)
+type ReviewReportStatus string
+
+const (
+	ReviewReportStatusDraft     ReviewReportStatus = "DRAFT"
+	ReviewReportStatusSubmitted ReviewReportStatus = "SUBMITTED"
+)
+
+// Review extension request workflow
+type ReviewExtensionRequestStatus string
+
+const (
+	ReviewExtensionStatusPending   ReviewExtensionRequestStatus = "PENDING"
+	ReviewExtensionStatusApproved  ReviewExtensionRequestStatus = "APPROVED"
+	ReviewExtensionStatusRejected  ReviewExtensionRequestStatus = "REJECTED"
 )

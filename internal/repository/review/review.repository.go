@@ -137,7 +137,7 @@ func (r *Repository) GetAssignmentByToken(ctx context.Context, token string) (*e
 		if assignment.ID == "" {
 			continue
 		}
-		if err := r.hydrateAssignmentInvitationGraph(ctx, &assignment); err != nil {
+		if err := r.HydrateAssignmentInvitationGraph(ctx, &assignment); err != nil {
 			return nil, err
 		}
 		return &assignment, nil
@@ -145,9 +145,9 @@ func (r *Repository) GetAssignmentByToken(ctx context.Context, token string) (*e
 	return nil, nil
 }
 
-// hydrateAssignmentInvitationGraph loads round, manuscript, journal, and round creator using literal UUID
+// HydrateAssignmentInvitationGraph loads round, manuscript, journal, and round creator using literal UUID
 // queries only (PgBouncer-safe). Matches prior Preload scope for invitation preview / complete / decline.
-func (r *Repository) hydrateAssignmentInvitationGraph(ctx context.Context, a *entity.ReviewAssignment) error {
+func (r *Repository) HydrateAssignmentInvitationGraph(ctx context.Context, a *entity.ReviewAssignment) error {
 	if a == nil || strings.TrimSpace(a.ReviewRoundID) == "" {
 		return nil
 	}
@@ -185,6 +185,19 @@ func (r *Repository) hydrateAssignmentInvitationGraph(ctx context.Context, a *en
 				}
 				if j.ID != "" {
 					ms.Journal = &j
+				}
+			}
+			if ms.AssignedEditorID != nil && strings.TrimSpace(*ms.AssignedEditorID) != "" {
+				if eid, err := uuid.Parse(strings.TrimSpace(*ms.AssignedEditorID)); err == nil {
+					var ed entity.User
+					if err := db.Raw(
+						`SELECT * FROM users WHERE id = '` + eid.String() + `'::uuid AND deleted_at IS NULL LIMIT 1`,
+					).Scan(&ed).Error; err != nil {
+						return err
+					}
+					if ed.ID != "" {
+						ms.AssignedEditor = &ed
+					}
 				}
 			}
 		}
@@ -238,13 +251,48 @@ func (r *Repository) ListFilesByRound(ctx context.Context, roundID string) ([]en
 }
 
 func (r *Repository) ListFilesByAssignment(ctx context.Context, assignmentID string) ([]entity.ReviewFile, error) {
+	aid, err := uuid.Parse(strings.TrimSpace(assignmentID))
+	if err != nil {
+		return nil, nil
+	}
+	lit := aid.String()
+	db := infrastructure.GetDB().WithContext(ctx)
 	var files []entity.ReviewFile
-	err := infrastructure.GetDB().WithContext(ctx).
-		Where("review_assignment_id = ?", assignmentID).
-		Preload("Uploader").
-		Order("uploaded_at ASC").
-		Find(&files).Error
-	return files, err
+	if err := db.Raw(
+		`SELECT * FROM review_files WHERE review_assignment_id = '` + lit + `'::uuid ORDER BY uploaded_at ASC`,
+	).Scan(&files).Error; err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return files, nil
+	}
+	seen := make(map[string]struct{})
+	for _, f := range files {
+		if f.UploadedBy != "" {
+			seen[f.UploadedBy] = struct{}{}
+		}
+	}
+	usersByID := make(map[string]entity.User)
+	for uid := range seen {
+		if uu, perr := uuid.Parse(uid); perr == nil {
+			var u entity.User
+			if err := db.Raw(
+				`SELECT * FROM users WHERE id = '` + uu.String() + `'::uuid AND deleted_at IS NULL LIMIT 1`,
+			).Scan(&u).Error; err != nil {
+				return nil, err
+			}
+			if u.ID != "" {
+				usersByID[uid] = u
+			}
+		}
+	}
+	for i := range files {
+		if u, ok := usersByID[files[i].UploadedBy]; ok {
+			uu := u
+			files[i].Uploader = &uu
+		}
+	}
+	return files, nil
 }
 
 // ====== Candidate Queries ======

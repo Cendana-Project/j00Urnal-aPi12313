@@ -18,6 +18,8 @@ type CustomError struct {
 	Message    string
 	StatusCode int
 	Detail     MessageDetail
+	// Data is optional JSON payload (e.g. validation issue list). Omitted in JSON when nil.
+	Data any
 }
 
 func (m CustomError) Error() string {
@@ -44,6 +46,7 @@ func (m CustomError) ToResponse() BaseResponse {
 		StatusCode:    m.StatusCode,
 		Message:       msg,
 		MessageDetail: detail,
+		Data:          m.Data,
 	}
 }
 

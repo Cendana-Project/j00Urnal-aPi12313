@@ -1,5 +1,7 @@
 package request
 
+import "time"
+
 type AssignEditorRequest struct {
 	ManuscriptID string `json:"manuscript_id" binding:"required,uuid"`
 	EditorID     string `json:"editor_id" binding:"required,uuid"`
@@ -22,9 +24,34 @@ type DeclineReviewerInvitationRequest struct {
 	Reason string `json:"reason"`
 }
 
+// ReviewerReportPayload is optional structured answers for independent review (keys match form schema field ids).
+// SchemaVersion is optional; when omitted or 0 the server uses the embedded form schema version.
+type ReviewerReportPayload struct {
+	SchemaVersion int            `json:"schema_version,omitempty"`
+	Answers       map[string]any `json:"answers"`
+	Flags         map[string]any `json:"flags,omitempty"`
+}
+
+// SubmitReviewRequest is POST .../assignments/:id/submit. Body may be empty: the server finalizes the saved draft
+// and may leave recommendation/comments null. When recommendation is sent it must be a valid enum.
 type SubmitReviewRequest struct {
-	Recommendation string `json:"recommendation" binding:"required,oneof=ACCEPT REJECT MAJOR_REVISION MINOR_REVISION"`
-	Comments       string `json:"comments"`
+	Recommendation string                 `json:"recommendation,omitempty" binding:"omitempty,oneof=ACCEPT REJECT MAJOR_REVISION MINOR_REVISION"`
+	Comments       string                 `json:"comments,omitempty"`
+	Report         *ReviewerReportPayload `json:"report,omitempty"`
+}
+
+// PatchReviewerReportDraftRequest merges answers/flags into the saved draft for an assignment.
+// SchemaVersion is optional; when omitted or 0 the server uses the embedded form schema version.
+type PatchReviewerReportDraftRequest struct {
+	SchemaVersion int            `json:"schema_version,omitempty"`
+	Answers       map[string]any `json:"answers"`
+	Flags         map[string]any `json:"flags,omitempty"`
+}
+
+// ReviewerExtensionRequestBody creates a pending extension request for editors to approve later.
+type ReviewerExtensionRequestBody struct {
+	RequestedDue time.Time `json:"requested_due" binding:"required"`
+	Reason       string    `json:"reason"`
 }
 
 type RoundDecisionRequest struct {

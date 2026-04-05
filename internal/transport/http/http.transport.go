@@ -230,7 +230,14 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		reviewer.Use(requireReviewer)
 		{
 			reviewer.GET("/history", t.reviewController.ListReviewerHistory)
+			reviewer.GET("/assignments", t.reviewController.ListReviewerAssignments)
+			reviewer.GET("/assignments/:id", t.reviewController.GetReviewerAssignmentWorkspace)
+			reviewer.GET("/review-form-schema", t.reviewController.GetReviewerFormSchema)
+			reviewer.PATCH("/assignments/:id/draft", t.reviewController.PatchReviewerReportDraft)
+			reviewer.POST("/assignments/:id/files", t.reviewController.UploadReviewerPDF)
 			reviewer.POST("/assignments/:id/submit", t.reviewController.SubmitReviewerReview)
+			reviewer.POST("/assignments/:id/withdraw", t.reviewController.WithdrawReviewerAssignment)
+			reviewer.POST("/assignments/:id/extension-requests", t.reviewController.RequestReviewerExtension)
 		}
 
 	}

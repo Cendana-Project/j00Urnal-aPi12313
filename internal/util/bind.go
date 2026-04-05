@@ -1,7 +1,9 @@
 package util
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 
 	"github.com/gin-gonic/gin"
 
@@ -21,6 +23,25 @@ func BindAndValidate(c *gin.Context, dst any) error {
 		return constant.ErrValidationError
 	}
 	// Gunakan ValidateStruct yang sudah didefinisikan di util/validation.go
+	return ValidateStruct(dst)
+}
+
+// BindJSONOrEmpty parses JSON like BindAndValidate, but an empty or whitespace-only body leaves dst unchanged (zero value).
+func BindJSONOrEmpty(c *gin.Context, dst any) error {
+	raw, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		Infof(c.Request.Context(), "BindJSONOrEmpty read body: %v", err)
+		return constant.ErrValidationError
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return ValidateStruct(dst)
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		Infof(c.Request.Context(), "BindJSONOrEmpty decode: %v", err)
+		return constant.ErrValidationError
+	}
 	return ValidateStruct(dst)
 }
 
