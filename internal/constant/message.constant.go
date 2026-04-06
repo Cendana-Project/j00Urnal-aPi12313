@@ -69,6 +69,9 @@ const (
 	MsgReviewerWithdrawn            MessageCode = "REVIEWER_WITHDRAWN"
 	MsgInvalidReviewerReport        MessageCode = "INVALID_REVIEWER_REPORT"
 	MsgExtensionRequestPending      MessageCode = "EXTENSION_REQUEST_PENDING"
+	MsgExtensionRequestNotFound     MessageCode = "EXTENSION_REQUEST_NOT_FOUND"
+	MsgExtensionRequestAlreadyDecided MessageCode = "EXTENSION_REQUEST_ALREADY_DECIDED"
+	MsgExtensionRequestForbidden    MessageCode = "EXTENSION_REQUEST_FORBIDDEN"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -224,6 +227,24 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "A deadline extension request is already pending for this assignment.",
 		TitleIdn: "Permintaan Perpanjangan Tertunda",
 		DescIdn:  "Permintaan perpanjangan tenggat untuk penugasan ini masih menunggu keputusan.",
+	},
+	MsgExtensionRequestNotFound: {
+		TitleEng: "Extension Request Not Found",
+		DescEng:  "The requested extension request was not found.",
+		TitleIdn: "Permintaan Perpanjangan Tidak Ditemukan",
+		DescIdn:  "Permintaan perpanjangan yang diminta tidak ditemukan.",
+	},
+	MsgExtensionRequestAlreadyDecided: {
+		TitleEng: "Extension Request Already Decided",
+		DescEng:  "This extension request has already been approved or rejected.",
+		TitleIdn: "Permintaan Perpanjangan Sudah Diputuskan",
+		DescIdn:  "Permintaan perpanjangan ini sudah disetujui atau ditolak.",
+	},
+	MsgExtensionRequestForbidden: {
+		TitleEng: "Forbidden",
+		DescEng:  "You do not have permission to decide this extension request.",
+		TitleIdn: "Tidak Diizinkan",
+		DescIdn:  "Anda tidak memiliki izin untuk memutuskan permintaan perpanjangan ini.",
 	},
 }
 

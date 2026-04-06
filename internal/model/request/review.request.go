@@ -58,6 +58,13 @@ type ReviewerExtensionRequestBody struct {
 	Reason       string    `json:"reason"`
 }
 
+// EditorDecideExtensionRequestBody is POST /v1/editor/extension-requests/:id/decision.
+// Reason is optional and may be stored for audit purposes.
+type EditorDecideExtensionRequestBody struct {
+	Decision string `json:"decision" binding:"required,oneof=APPROVE REJECT"`
+	Reason   string `json:"reason"`
+}
+
 type RoundDecisionRequest struct {
 	RoundID  string `json:"round_id" binding:"required,uuid"`
 	Decision string `json:"decision" binding:"required,oneof=ACCEPT REJECT REVISION_REQUIRED"`

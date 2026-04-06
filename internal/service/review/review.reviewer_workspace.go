@@ -367,6 +367,85 @@ func (s *Service) RequestReviewerExtension(ctx context.Context, reviewerID, assi
 	return s.reviewRepo.CreateExtensionRequest(ctx, row)
 }
 
+// ListEditorExtensionRequests lists extension requests for manuscripts owned by the editor.
+func (s *Service) ListEditorExtensionRequests(ctx context.Context, editorID, status string, pg *pagination.Pagination) ([]response.EditorExtensionRequestListItemResponse, int64, error) {
+	rows, total, err := s.reviewRepo.ListExtensionRequestsForEditor(ctx, editorID, status, pg)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]response.EditorExtensionRequestListItemResponse, 0, len(rows))
+	for _, r := range rows {
+		reviewerName := strings.TrimSpace(strings.Join([]string{
+			derefString(r.ReviewerFirstName),
+			derefString(r.ReviewerLastName),
+		}, " "))
+		out = append(out, response.EditorExtensionRequestListItemResponse{
+			ID:                r.RequestID,
+			ReviewAssignmentID: r.ReviewAssignmentID,
+			RequestedDue:       r.RequestedDue,
+			Reason:            derefStringPtr(r.RequestReason),
+			Status:            r.RequestStatus,
+			CreatedAt:         r.RequestCreatedAt,
+
+			AssignmentDueDate: r.AssignmentDueDate,
+			AssignmentStatus:  r.AssignmentStatus,
+			ReviewRoundID:     r.ReviewRoundID,
+
+			ManuscriptID:    r.ManuscriptID,
+			ManuscriptTitle: r.ManuscriptTitle,
+			ReferenceNumber: r.ReferenceNumber,
+
+			ReviewerID:    derefStringPtr(r.ReviewerID),
+			ReviewerEmail: derefStringPtr(r.ReviewerEmail),
+			ReviewerName:  reviewerName,
+		})
+	}
+	return out, total, nil
+}
+
+// DecideExtensionRequest approves/rejects an extension request for manuscripts owned by the editor.
+// Approve updates assignment due_date to requested_due (per product decision).
+func (s *Service) DecideExtensionRequest(ctx context.Context, editorID, requestID string, decision request.EditorDecideExtensionRequestBody) error {
+	row, err := s.reviewRepo.GetExtensionRequestForEditorByID(ctx, editorID, requestID)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		// default: do not leak existence of non-owned requests
+		return constant.ErrExtensionRequestNotFound
+	}
+	if row.RequestStatus != string(constant.ReviewExtensionStatusPending) {
+		return constant.ErrExtensionRequestAlreadyDecided
+	}
+
+	newStatus := constant.ReviewExtensionStatusRejected
+	if strings.EqualFold(strings.TrimSpace(decision.Decision), "APPROVE") {
+		newStatus = constant.ReviewExtensionStatusApproved
+	}
+
+	now := time.Now()
+	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		extUpdates := map[string]any{
+			"status":     newStatus,
+			"decided_by": editorID,
+			"decided_at": now,
+			"updated_at": now,
+		}
+		if err := tx.WithContext(ctx).Model(&entity.ReviewExtensionRequest{}).
+			Where("id = ?", row.RequestID).Updates(extUpdates).Error; err != nil {
+			return err
+		}
+		if newStatus == constant.ReviewExtensionStatusApproved {
+			if err := tx.WithContext(ctx).Model(&entity.ReviewAssignment{}).
+				Where("id = ?", row.ReviewAssignmentID).
+				Updates(map[string]any{"due_date": row.RequestedDue, "updated_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // UploadReviewerAssignmentPDF stores a reviewer PDF attachment for the assignment.
 func (s *Service) UploadReviewerAssignmentPDF(ctx context.Context, reviewerID, assignmentID string, fh *multipart.FileHeader) (*entity.ReviewFile, error) {
 	if fh == nil {
@@ -436,4 +515,22 @@ func assertReviewerOwnsAssignment(a *entity.ReviewAssignment, reviewerID string)
 		return constant.ErrForbidden
 	}
 	return nil
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(*s)
+}
+
+func derefStringPtr(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*s)
+	if v == "" {
+		return nil
+	}
+	return &v
 }
