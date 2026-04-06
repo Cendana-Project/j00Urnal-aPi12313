@@ -301,6 +301,24 @@ var (
 		Message:    "An extension request is already pending",
 		Detail:     GetMessageDetail(MsgExtensionRequestPending),
 	}
+	ErrExtensionRequestNotFound = response.CustomError{
+		Code:       "EXTENSION_REQUEST_NOT_FOUND",
+		StatusCode: http.StatusNotFound,
+		Message:    "Extension request not found",
+		Detail:     GetMessageDetail(MsgExtensionRequestNotFound),
+	}
+	ErrExtensionRequestAlreadyDecided = response.CustomError{
+		Code:       "EXTENSION_REQUEST_ALREADY_DECIDED",
+		StatusCode: http.StatusConflict,
+		Message:    "Extension request already decided",
+		Detail:     GetMessageDetail(MsgExtensionRequestAlreadyDecided),
+	}
+	ErrExtensionRequestForbidden = response.CustomError{
+		Code:       "EXTENSION_REQUEST_FORBIDDEN",
+		StatusCode: http.StatusForbidden,
+		Message:    "You cannot decide this extension request",
+		Detail:     GetMessageDetail(MsgExtensionRequestForbidden),
+	}
 
 	// ====== Lain-lain yang masih direferensi di util/transport lama ======
 	ErrUnauthorizedUpdate = response.CustomError{

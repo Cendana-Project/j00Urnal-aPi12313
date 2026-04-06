@@ -134,6 +134,59 @@ func (c *Controller) ListEditorSubmissions(ctx *gin.Context) {
 	util.HandleResponse(ctx, res, nil)
 }
 
+// ListEditorExtensionRequests lists extension requests for manuscripts owned by the current editor.
+func (c *Controller) ListEditorExtensionRequests(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	status := strings.TrimSpace(ctx.DefaultQuery("status", string(constant.ReviewExtensionStatusPending)))
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+	pg := pagination.New(page, pageSize)
+
+	items, total, err := c.svc.ListEditorExtensionRequests(ctx.Request.Context(), userID, status, pg)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = gin.H{
+		"items":     items,
+		"total":     total,
+		"page":      pg.Page,
+		"page_size": pg.PageSize,
+	}
+	util.HandleResponse(ctx, res, nil)
+}
+
+// DecideExtensionRequest approves/rejects a pending extension request.
+func (c *Controller) DecideExtensionRequest(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	reqID := strings.TrimSpace(ctx.Param("id"))
+	if reqID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+	var body request.EditorDecideExtensionRequestBody
+	if err := util.BindAndValidate(ctx, &body); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	if err := c.svc.DecideExtensionRequest(ctx.Request.Context(), userID, reqID, body); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Extension request decided"
+	util.HandleResponse(ctx, res, nil)
+}
+
 // SendToReview creates a review round and transitions manuscript to UNDER_REVIEW.
 func (c *Controller) SendToReview(ctx *gin.Context) {
 	userID := util.GetUserID(ctx)

@@ -30,6 +30,29 @@ type ReviewerAssignmentSummaryRow struct {
 	CreatedAt        time.Time
 }
 
+// EditorExtensionRequestRow is a flat row for editor extension request list/decision (joined to assignment + manuscript).
+type EditorExtensionRequestRow struct {
+	RequestID        string
+	ReviewAssignmentID string
+	RequestedDue     time.Time
+	RequestReason    *string
+	RequestStatus    string
+	RequestCreatedAt time.Time
+
+	AssignmentDueDate  time.Time
+	AssignmentStatus   string
+	ReviewRoundID      string
+
+	ManuscriptID      string
+	ManuscriptTitle   string
+	ReferenceNumber   *int64
+
+	ReviewerID        *string
+	ReviewerEmail     *string
+	ReviewerFirstName *string
+	ReviewerLastName  *string
+}
+
 // ListReviewerAssignments lists assignments for a reviewer with manuscript summary (PgBouncer-safe literals).
 func (r *Repository) ListReviewerAssignments(ctx context.Context, reviewerID string, assignmentStatus constant.ReviewAssignmentStatus, pg *pagination.Pagination) ([]ReviewerAssignmentSummaryRow, int64, error) {
 	rid, err := uuid.Parse(strings.TrimSpace(reviewerID))
@@ -176,4 +199,103 @@ func (r *Repository) CountPendingExtensionRequestsByAssignment(ctx context.Conte
 		WHERE review_assignment_id = '`+lit+`'::uuid AND status = 'PENDING'`,
 	).Scan(&n).Error
 	return n, err
+}
+
+// ListExtensionRequestsForEditor lists extension requests for manuscripts owned by editor (PgBouncer-safe UUID literals).
+func (r *Repository) ListExtensionRequestsForEditor(ctx context.Context, editorID string, status string, pg *pagination.Pagination) ([]EditorExtensionRequestRow, int64, error) {
+	eid, err := uuid.Parse(strings.TrimSpace(editorID))
+	if err != nil {
+		return nil, 0, nil
+	}
+	eidLit := eid.String()
+	st := strings.TrimSpace(status)
+	if st == "" {
+		st = string(constant.ReviewExtensionStatusPending)
+	}
+	st = strings.ReplaceAll(st, "'", "''")
+
+	limit := pagination.DefaultPageSize
+	page := 1
+	if pg != nil {
+		if pg.PageSize > 0 {
+			limit = pg.PageSize
+			if limit > pagination.MaxPageSize {
+				limit = pagination.MaxPageSize
+			}
+		}
+		if pg.Page > 0 {
+			page = pg.Page
+		}
+	}
+	offset := (page - 1) * limit
+
+	baseFrom := `
+FROM review_extension_requests rer
+JOIN review_assignments ra ON ra.id = rer.review_assignment_id
+JOIN review_rounds rr ON rr.id = ra.review_round_id
+JOIN manuscripts m ON m.id = rr.manuscript_id
+LEFT JOIN users u ON u.id = ra.reviewer_id
+WHERE m.assigned_editor_id = '` + eidLit + `'::uuid
+  AND m.deleted_at IS NULL
+  AND rer.status = '` + st + `'
+`
+	var total int64
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(`SELECT COUNT(1) ` + baseFrom).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	selectSQL := `
+SELECT rer.id AS request_id, rer.review_assignment_id AS review_assignment_id,
+       rer.requested_due AS requested_due, rer.reason AS request_reason, rer.status AS request_status, rer.created_at AS request_created_at,
+       ra.due_date AS assignment_due_date, ra.status AS assignment_status, ra.review_round_id AS review_round_id,
+       m.id AS manuscript_id, m.title AS manuscript_title, m.reference_number AS reference_number,
+       ra.reviewer_id AS reviewer_id, u.email AS reviewer_email, u.first_name AS reviewer_first_name, u.last_name AS reviewer_last_name
+` + baseFrom + `
+ORDER BY rer.created_at ASC
+LIMIT ? OFFSET ?
+`
+	var rows []EditorExtensionRequestRow
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(selectSQL, limit, offset).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// GetExtensionRequestForEditorByID loads one request row only if it belongs to a manuscript owned by editor.
+func (r *Repository) GetExtensionRequestForEditorByID(ctx context.Context, editorID, requestID string) (*EditorExtensionRequestRow, error) {
+	eid, err := uuid.Parse(strings.TrimSpace(editorID))
+	if err != nil {
+		return nil, nil
+	}
+	rid, err := uuid.Parse(strings.TrimSpace(requestID))
+	if err != nil {
+		return nil, nil
+	}
+	eidLit := eid.String()
+	ridLit := rid.String()
+
+	sql := `
+SELECT rer.id AS request_id, rer.review_assignment_id AS review_assignment_id,
+       rer.requested_due AS requested_due, rer.reason AS request_reason, rer.status AS request_status, rer.created_at AS request_created_at,
+       ra.due_date AS assignment_due_date, ra.status AS assignment_status, ra.review_round_id AS review_round_id,
+       m.id AS manuscript_id, m.title AS manuscript_title, m.reference_number AS reference_number,
+       ra.reviewer_id AS reviewer_id, u.email AS reviewer_email, u.first_name AS reviewer_first_name, u.last_name AS reviewer_last_name
+FROM review_extension_requests rer
+JOIN review_assignments ra ON ra.id = rer.review_assignment_id
+JOIN review_rounds rr ON rr.id = ra.review_round_id
+JOIN manuscripts m ON m.id = rr.manuscript_id
+LEFT JOIN users u ON u.id = ra.reviewer_id
+WHERE rer.id = '` + ridLit + `'::uuid
+  AND m.assigned_editor_id = '` + eidLit + `'::uuid
+  AND m.deleted_at IS NULL
+LIMIT 1
+`
+	var row EditorExtensionRequestRow
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(sql).Scan(&row).Error; err != nil {
+		return nil, err
+	}
+	if row.RequestID == "" {
+		return nil, nil
+	}
+	return &row, nil
 }

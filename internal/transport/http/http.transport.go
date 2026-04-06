@@ -216,6 +216,8 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 		{
 			editor.GET("/submissions", t.reviewController.ListEditorSubmissions)
 			editor.GET("/manuscripts/:id/reviews", t.reviewController.GetReviewDetails)
+			editor.GET("/extension-requests", t.reviewController.ListEditorExtensionRequests)
+			editor.POST("/extension-requests/:id/decision", t.reviewController.DecideExtensionRequest)
 			editor.POST("/manuscripts/send-to-review", t.reviewController.SendToReview)
 			editor.POST("/manuscripts/accept", t.reviewController.AcceptManuscript)
 			editor.POST("/manuscripts/decline", t.reviewController.DeclineManuscript)

@@ -182,6 +182,28 @@ type ReviewerWorkspaceResponse struct {
 	CurrentWorkflowStep int                              `json:"current_workflow_step"`
 }
 
+// EditorExtensionRequestListItemResponse is one row in GET /v1/editor/extension-requests.
+type EditorExtensionRequestListItemResponse struct {
+	ID                string     `json:"id"`
+	ReviewAssignmentID string    `json:"review_assignment_id"`
+	RequestedDue       time.Time `json:"requested_due"`
+	Reason            *string    `json:"reason,omitempty"`
+	Status            string     `json:"status"`
+	CreatedAt         time.Time  `json:"created_at"`
+
+	AssignmentDueDate time.Time `json:"assignment_due_date"`
+	AssignmentStatus  string    `json:"assignment_status"`
+	ReviewRoundID     string    `json:"review_round_id"`
+
+	ManuscriptID    string `json:"manuscript_id"`
+	ManuscriptTitle string `json:"manuscript_title"`
+	ReferenceNumber *int64 `json:"reference_number,omitempty"`
+
+	ReviewerID    *string `json:"reviewer_id,omitempty"`
+	ReviewerName  string  `json:"reviewer_name,omitempty"`
+	ReviewerEmail *string `json:"reviewer_email,omitempty"`
+}
+
 // ReviewerHistoryItemResponse matches reviewer History table columns:
 // ID, MM-DD ASSIGNED, SEC, TITLE, REVIEW, EDITOR DECISION (+ ids for navigation).
 type ReviewerHistoryItemResponse struct {
