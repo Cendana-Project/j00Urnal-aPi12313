@@ -132,10 +132,20 @@ var (
               </tr>
             </table>
             <p style="margin:0 0 14px 0;font-size:15px;line-height:1.65;color:#475569;">Undangan berlaku <strong>7 hari</strong>. Gunakan tautan langsung dari sistem berikut (salin ke peramban jika perlu):</p>
-            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:#334155;">Terima undangan</p>
-            <p style="margin:0 0 16px 0;font-size:13px;line-height:1.55;word-break:break-all;"><a href="{{.AcceptURL}}" style="color:#0369a1">{{.AcceptURL}}</a></p>
-            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:#334155;">Tolak undangan</p>
-            <p style="margin:0 0 0 0;font-size:13px;line-height:1.55;word-break:break-all;"><a href="{{.DeclineURL}}" style="color:#b91c1c">{{.DeclineURL}}</a></p>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="margin:18px 0 18px 0;">
+              <tr>
+                <td align="center" style="border-radius:10px;" bgcolor="#0369a1">
+                  <a href="{{.AcceptURL}}" style="display:inline-block;padding:12px 18px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;background:#0369a1;">Terima undangan</a>
+                </td>
+                <td style="width:10px"></td>
+                <td align="center" style="border-radius:10px;" bgcolor="#b91c1c">
+                  <a href="{{.DeclineURL}}" style="display:inline-block;padding:12px 18px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;background:#b91c1c;">Tolak undangan</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 6px 0;font-size:12px;font-weight:600;color:#334155;">Tautan (salin ke peramban jika tombol tidak berfungsi)</p>
+            <p style="margin:0 0 10px 0;font-size:13px;line-height:1.55;word-break:break-all;"><a href="{{.AcceptURL}}" style="color:#0369a1">{{.AcceptURL}} (Accept)</a></p>
+            <p style="margin:0 0 0 0;font-size:13px;line-height:1.55;word-break:break-all;"><a href="{{.DeclineURL}}" style="color:#b91c1c">{{.DeclineURL}} (Decline)</a></p>
             <p style="margin:22px 0 0 0;padding-top:18px;border-top:1px solid #e2e8f0;font-size:12px;line-height:1.55;color:#94a3b8;">Jika Anda tidak merespons dalam 7 hari, undangan akan kedaluwarsa. Jangan bagikan tautan ini kepada orang lain.</p>
           </td>
         </tr>
