@@ -3,6 +3,8 @@ package infrastructure
 import (
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"runtime"
 	"time"
 
@@ -159,7 +161,8 @@ func accessLogMiddleware() gin.HandlerFunc {
 func buildCORSConfig() cors.Config {
 	corsCfg := cors.Config{
 		AllowMethods:           []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
-		AllowHeaders:           []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Hospital-ID", "X-Hospital-Code"},
+		AllowHeaders:           []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Request-Id", "X-Requested-With", "X-Hospital-ID", "X-Hospital-Code"},
+		ExposeHeaders:          []string{"Content-Length", "X-Request-Id"},
 		AllowCredentials:       true,
 		AllowWildcard:          false,
 		AllowBrowserExtensions: false,
@@ -183,9 +186,32 @@ func buildCORSConfig() cors.Config {
 			}
 		}
 	} else {
-		// Development: allow all origins
+		// Development: allow common local frontend origins.
+		//
+		// Note: when AllowCredentials=true, we should not use wildcard origins.
+		// Using AllowOriginFunc lets the middleware reflect the request Origin safely.
+		frontendURL := strings.TrimSpace(config.Env.Server.FrontendURL)
 		corsCfg.AllowOriginFunc = func(origin string) bool {
-			return true
+			// Non-browser clients may not send Origin.
+			if origin == "" {
+				return true
+			}
+			if frontendURL != "" && origin == frontendURL {
+				return true
+			}
+
+			u, err := url.Parse(origin)
+			if err != nil {
+				return false
+			}
+
+			host := strings.ToLower(u.Hostname())
+			switch host {
+			case "localhost", "127.0.0.1", "::1":
+				return true
+			default:
+				return false
+			}
 		}
 	}
 
