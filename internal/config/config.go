@@ -180,7 +180,7 @@ func bindEnvVariables() {
 	// Server
 	viper.BindEnv("server.port", "SERVER_PORT")
 	viper.BindEnv("server.base_url", "SERVER_BASE_URL")
-	viper.BindEnv("server.frontend_url", "SERVER_FRONTEND_URL")
+	viper.BindEnv("server.frontend_url", "SERVER_FRONTEND_URL", "FRONTEND_URL")
 
 	// Database
 	viper.BindEnv("database.dsn", "DATABASE_DSN")

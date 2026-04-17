@@ -171,13 +171,24 @@ func buildCORSConfig() cors.Config {
 		MaxAge:                 12 * time.Hour,
 	}
 
-	// In production, restrict origins based on environment variable
+	// Parse allowed origins from FRONTEND_URL / SERVER_FRONTEND_URL.
+	// Supports comma-separated values, e.g.:
+	//   FRONTEND_URL=https://staging-journal.medikaone.com,http://localhost:3000
+	allowedOrigins := parseAllowedOrigins(config.Env.Server.FrontendURL)
+
 	if config.Env.Env == constant.ProductionEnvironment {
-		frontendURL := config.Env.Server.FrontendURL
-		if frontendURL != "" {
-			// Allow specific frontend URL
-			corsCfg.AllowOrigins = []string{frontendURL}
-			corsCfg.AllowOriginFunc = nil
+		if len(allowedOrigins) > 0 {
+			corsCfg.AllowOriginFunc = func(origin string) bool {
+				if origin == "" {
+					return true
+				}
+				for _, allowed := range allowedOrigins {
+					if strings.EqualFold(origin, allowed) {
+						return true
+					}
+				}
+				return false
+			}
 		} else {
 			// Fallback: allow all origins but log warning
 			logrus.Warn("CORS: FrontendURL not set, allowing all origins (not recommended for production)")
@@ -186,18 +197,18 @@ func buildCORSConfig() cors.Config {
 			}
 		}
 	} else {
-		// Development: allow common local frontend origins.
+		// Non-production: always allow localhost in addition to any configured origins.
 		//
 		// Note: when AllowCredentials=true, we should not use wildcard origins.
 		// Using AllowOriginFunc lets the middleware reflect the request Origin safely.
-		frontendURL := strings.TrimSpace(config.Env.Server.FrontendURL)
 		corsCfg.AllowOriginFunc = func(origin string) bool {
-			// Non-browser clients may not send Origin.
 			if origin == "" {
 				return true
 			}
-			if frontendURL != "" && origin == frontendURL {
-				return true
+			for _, allowed := range allowedOrigins {
+				if strings.EqualFold(origin, allowed) {
+					return true
+				}
 			}
 
 			u, err := url.Parse(origin)
@@ -216,4 +227,20 @@ func buildCORSConfig() cors.Config {
 	}
 
 	return corsCfg
+}
+
+// parseAllowedOrigins splits a comma-separated origin list and trims whitespace.
+func parseAllowedOrigins(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if o := strings.TrimSpace(p); o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
 }
