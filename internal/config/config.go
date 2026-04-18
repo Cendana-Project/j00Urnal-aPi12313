@@ -66,6 +66,17 @@ type Server struct {
 	FrontendURL string `mapstructure:"frontend_url"`
 }
 
+// PrimaryFrontendURL returns the first configured frontend origin.
+// FrontendURL supports comma-separated values for CORS (e.g. "https://app.com,http://localhost:3000").
+// For use cases that need a single URL (e.g. email links), only the first entry is returned.
+func (s *Server) PrimaryFrontendURL() string {
+	raw := strings.TrimSpace(s.FrontendURL)
+	if idx := strings.Index(raw, ","); idx != -1 {
+		return strings.TrimSpace(raw[:idx])
+	}
+	return raw
+}
+
 type Database struct {
 	DSN             string        `mapstructure:"dsn"`
 	DirectDSN       string        `mapstructure:"direct_dsn"` // Direct connection for migrations (bypasses PgBouncer)

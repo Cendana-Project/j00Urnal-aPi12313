@@ -408,7 +408,7 @@ func (s *Service) sendReviewerInviteEmail(round *entity.ReviewRound, editorID, i
 
 	reviewerName := reviewerDisplayNameFromEmail(inviteEmail)
 
-	baseURL := config.Env.Server.FrontendURL
+	baseURL := config.Env.Server.PrimaryFrontendURL()
 	if baseURL == "" {
 		baseURL = config.Env.Server.BaseURL
 	}
