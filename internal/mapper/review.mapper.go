@@ -114,14 +114,18 @@ func ToEditorCandidateListResponse(candidates []review.EditorCandidate) []respon
 // ====== Submission List Item ======
 
 func ToSubmissionListItemResponse(m *entity.Manuscript) response.SubmissionListItemResponse {
+	mainAuthorID := ""
+	if m.MainAuthorID != nil {
+		mainAuthorID = *m.MainAuthorID
+	}
 	resp := response.SubmissionListItemResponse{
-		ID:           m.ID,
-		Title:        m.Title,
-		Abstract:     m.Abstract,
-		Status:       string(m.Status),
-		MainAuthorID: m.MainAuthorID,
-		CreatedAt:    m.CreatedAt,
-		UpdatedAt:    m.UpdatedAt,
+		ID:             m.ID,
+		Title:          m.Title,
+		Abstract:       m.Abstract,
+		Status:         string(m.Status),
+		MainAuthorID:   mainAuthorID,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
 	}
 
 	if m.MainAuthor != nil {
@@ -300,6 +304,7 @@ func ToReviewerAuthorBriefs(authors []entity.ManuscriptAuthor) []response.Review
 			Name:            strings.TrimSpace(a.AuthorName),
 			Email:           strings.TrimSpace(a.AuthorEmail),
 			IsCorresponding: a.IsCorresponding,
+			IsPrimaryAuthor: a.IsPrimaryAuthor,
 			OrderPosition:   a.OrderPosition,
 		})
 	}

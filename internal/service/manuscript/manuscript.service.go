@@ -19,6 +19,7 @@ import (
 	"github.com/api-monolith-template/internal/repository/journal"
 	"github.com/api-monolith-template/internal/repository/manuscript"
 	"github.com/api-monolith-template/internal/repository/term"
+	userrepo "github.com/api-monolith-template/internal/repository/user"
 	"github.com/api-monolith-template/internal/service/storage"
 	"github.com/api-monolith-template/pkg/pagination"
 )
@@ -41,40 +42,35 @@ type Service struct {
 	issueRepo      *issue.Repository
 	journalRepo    *journal.Repository
 	termRepo       *term.Repository
+	userRepo       *userrepo.Repository
 	storage        *storage.Service
 }
 
-func NewService(mr *manuscript.Repository, ir *issue.Repository, jr *journal.Repository, tr *term.Repository, s *storage.Service) *Service {
+func NewService(mr *manuscript.Repository, ir *issue.Repository, jr *journal.Repository, tr *term.Repository, ur *userrepo.Repository, s *storage.Service) *Service {
 	return &Service{
 		manuscriptRepo: mr,
 		issueRepo:      ir,
 		journalRepo:    jr,
 		termRepo:       tr,
+		userRepo:       ur,
 		storage:        s,
 	}
 }
 
 // Submit allows an author to submit a manuscript to a journal (Draft)
 func (s *Service) Submit(ctx context.Context, userID string, req request.CreateManuscriptRequest) (*entity.Manuscript, error) {
-	// 1. Validate T&C
 	if !req.IsTncAccepted {
 		return nil, ErrTncNotAccepted
 	}
 
-	// 1b. Fetch Active Term
 	activeTerm, err := s.termRepo.GetActive(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if activeTerm == nil {
-		// If no term exists, technically we can proceed or fail.
-		// Ideally system should have T&C. If user says "universal", let's assume it exists.
-		// Fail safe: If no term, maybe just ignore or return error.
-		// "Terms and conditions not configured".
 		return nil, fmt.Errorf("system terms and conditions not configured")
 	}
 
-	// 2. Validate Journal
 	j, err := s.journalRepo.GetByID(ctx, req.JournalID)
 	if err != nil {
 		return nil, err
@@ -83,31 +79,68 @@ func (s *Service) Submit(ctx context.Context, userID string, req request.CreateM
 		return nil, constant.ErrRecordNotFound
 	}
 
-	// 3. Prepare Manuscript Object
-	now := time.Now()
-	mainAuthorID := userID
-	if strings.TrimSpace(req.MainAuthorID) != "" {
-		mainAuthorID = strings.TrimSpace(req.MainAuthorID)
+	sid := strings.TrimSpace(userID)
+	submitterRow, err := s.userRepo.GetByID(sid)
+	if err != nil {
+		return nil, err
 	}
-	manuscript := &entity.Manuscript{
-		JournalID:     req.JournalID,
-		Title:         req.Title,
-		Abstract:      req.Abstract,
-		Status:        constant.ManuscriptStatusSubmitted, // Start as Submitted
-		MainAuthorID:  mainAuthorID,
-		IsTncAccepted: true,
-		TncAcceptedAt: &now,
-		TermID:        &activeTerm.ID,
-		CreatedAt:     now,
+	if submitterRow == nil {
+		return nil, constant.ErrRecordNotFound
 	}
 
-	// 4. Create in DB (to get ID)
-	// 3. Save to DB
-	if err := s.manuscriptRepo.Create(ctx, manuscript); err != nil {
+	now := time.Now()
+	submittedBy := &sid
+	mainAuthorIDPtr := &sid
+
+	var authorRows []entity.ManuscriptAuthor
+	seenOrder := make(map[int]struct{}, len(req.Authors))
+	for _, a := range req.Authors {
+		name := strings.TrimSpace(a.Name)
+		email := strings.ToLower(strings.TrimSpace(a.Email))
+		if name == "" || email == "" {
+			return nil, constant.ErrValidationFailed
+		}
+		if _, ok := seenOrder[a.OrderPosition]; ok {
+			return nil, constant.ErrValidationFailed
+		}
+		seenOrder[a.OrderPosition] = struct{}{}
+		authorRows = append(authorRows, entity.ManuscriptAuthor{
+			UserID:          nil,
+			AuthorName:      strings.TrimSpace(a.Name),
+			AuthorEmail:     email,
+			Affiliation:     strings.TrimSpace(a.Affiliation),
+			IsCorresponding: false,
+			IsPrimaryAuthor: a.IsPrimaryAuthor,
+			OrderPosition:   a.OrderPosition,
+		})
+	}
+	if err := applySubmitterPrimaryContact(submitterRow, &authorRows); err != nil {
+		return nil, err
+	}
+	if err := validateExactlyOnePrimaryAuthor(authorRows); err != nil {
 		return nil, err
 	}
 
-	// 4. Return
+	manuscript := &entity.Manuscript{
+		JournalID:                     req.JournalID,
+		Title:                         req.Title,
+		Abstract:                      req.Abstract,
+		Status:                        constant.ManuscriptStatusSubmitted,
+		MainAuthorID:                  mainAuthorIDPtr,
+		SubmittedByUserID:             submittedBy,
+		ExternalMainAuthorName:        "",
+		ExternalMainAuthorEmail:       "",
+		ExternalMainAuthorAffiliation: "",
+		IsTncAccepted:                 true,
+		TncAcceptedAt:                 &now,
+		TermID:                        &activeTerm.ID,
+		CreatedAt:                     now,
+	}
+
+	if err := s.manuscriptRepo.CreateWithAuthors(ctx, manuscript, authorRows); err != nil {
+		return nil, err
+	}
+
 	return s.manuscriptRepo.GetByID(ctx, manuscript.ID)
 }
 
@@ -146,13 +179,15 @@ func (s *Service) Create(ctx context.Context, mainAuthorID string, issueID strin
 		return nil, fmt.Errorf("could not determine journal_id from issue")
 	}
 
+	aid := strings.TrimSpace(mainAuthorID)
+
 	manuscript := &entity.Manuscript{
 		IssueID:      &issueID,
 		JournalID:    journalID,
 		Title:        title,
 		Abstract:     abstract,
 		Status:       constant.ManuscriptStatusPublished,
-		MainAuthorID: mainAuthorID,
+		MainAuthorID: &aid,
 		PublishedAt:  time.Now(),
 	}
 
@@ -325,13 +360,31 @@ func (s *Service) ListByAssignedEditor(ctx context.Context, editorID string, sta
 }
 
 func (s *Service) UpdateAuthors(ctx context.Context, manuscriptID string, authors []entity.ManuscriptAuthor) error {
-	// Check if manuscript exists
 	m, err := s.manuscriptRepo.GetByID(ctx, manuscriptID)
 	if err != nil {
 		return err
 	}
 	if m == nil {
 		return constant.ErrRecordNotFound
+	}
+
+	seen := make(map[int]struct{}, len(authors))
+	for _, a := range authors {
+		if _, ok := seen[a.OrderPosition]; ok {
+			return constant.ErrValidationFailed
+		}
+		seen[a.OrderPosition] = struct{}{}
+	}
+
+	submitterUser, err := s.submitterUserForManuscript(ctx, m)
+	if err != nil {
+		return err
+	}
+	if err := applySubmitterPrimaryContact(submitterUser, &authors); err != nil {
+		return err
+	}
+	if err := validateExactlyOnePrimaryAuthor(authors); err != nil {
+		return err
 	}
 
 	return s.manuscriptRepo.UpdateAuthors(ctx, manuscriptID, authors)
@@ -411,4 +464,84 @@ func (s *Service) UploadFile(ctx context.Context, manuscriptID string, fileType 
 	}
 
 	return file, nil
+}
+
+func (s *Service) submitterUserForManuscript(_ context.Context, m *entity.Manuscript) (*entity.User, error) {
+	var uid string
+	if m.SubmittedByUserID != nil && strings.TrimSpace(*m.SubmittedByUserID) != "" {
+		uid = strings.TrimSpace(*m.SubmittedByUserID)
+	} else if m.MainAuthorID != nil && strings.TrimSpace(*m.MainAuthorID) != "" {
+		uid = strings.TrimSpace(*m.MainAuthorID)
+	}
+	if uid == "" {
+		return nil, response.CustomError{
+			Code:       "INVALID_MANUSCRIPT_AUTHORS",
+			StatusCode: http.StatusBadRequest,
+			Message:    "Manuscript has no submitter reference; cannot set primary contact.",
+		}
+	}
+	u, err := s.userRepo.GetByID(uid)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, constant.ErrRecordNotFound
+	}
+	if strings.TrimSpace(u.Email) == "" {
+		return nil, constant.ErrValidationFailed
+	}
+	return u, nil
+}
+
+// applySubmitterPrimaryContact: jika ada baris author dengan email sama submitter, tandai satu baris jadi correspondence (position terkecil jika duplikat). Submitter tidak wajib ada di authors — kalau tidak ada, semua is_corresponding false; kontak admin tetap lewat field submitter di manuskrip/response.
+func applySubmitterPrimaryContact(submitter *entity.User, authors *[]entity.ManuscriptAuthor) error {
+	if submitter == nil {
+		return constant.ErrRecordNotFound
+	}
+	se := strings.ToLower(strings.TrimSpace(submitter.Email))
+	if se == "" {
+		return constant.ErrValidationFailed
+	}
+
+	var matches []int
+	for i := range *authors {
+		if strings.ToLower(strings.TrimSpace((*authors)[i].AuthorEmail)) == se {
+			matches = append(matches, i)
+		}
+	}
+
+	if len(matches) == 0 {
+		for i := range *authors {
+			(*authors)[i].IsCorresponding = false
+		}
+		return nil
+	}
+
+	best := matches[0]
+	for _, idx := range matches[1:] {
+		if (*authors)[idx].OrderPosition < (*authors)[best].OrderPosition {
+			best = idx
+		}
+	}
+	for i := range *authors {
+		(*authors)[i].IsCorresponding = (i == best)
+	}
+	return nil
+}
+
+func validateExactlyOnePrimaryAuthor(authors []entity.ManuscriptAuthor) error {
+	var n int
+	for _, a := range authors {
+		if a.IsPrimaryAuthor {
+			n++
+		}
+	}
+	if n != 1 {
+		return response.CustomError{
+			Code:       "INVALID_MANUSCRIPT_AUTHORS",
+			StatusCode: http.StatusBadRequest,
+			Message:    "Exactly one author must have is_primary_author true.",
+		}
+	}
+	return nil
 }

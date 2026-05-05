@@ -8,6 +8,7 @@ type ManuscriptAuthor struct {
 	AuthorEmail     string  `json:"author_email" gorm:"type:varchar;not null"`
 	Affiliation     string  `json:"affiliation" gorm:"type:text"`
 	IsCorresponding bool    `json:"is_corresponding" gorm:"type:boolean;default:false"`
+	IsPrimaryAuthor bool    `json:"is_primary_author" gorm:"column:is_primary_author;type:boolean;default:false"`
 	OrderPosition   int     `json:"order_position" gorm:"type:int;not null"`
 
 	// Relationships

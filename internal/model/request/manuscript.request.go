@@ -2,12 +2,21 @@ package request
 
 import "github.com/api-monolith-template/internal/constant"
 
+// SubmitManuscriptAuthorInput: daftar bibliografi saja. Submitter tidak wajib termasuk; jika email submitter ada di salah satu baris, baris itu ditandai is_primary_contact di response. Wajib tepat satu is_primary_author.
+type SubmitManuscriptAuthorInput struct {
+	Name             string `json:"name" binding:"required"`
+	Email            string `json:"email" binding:"required,email"`
+	Affiliation      string `json:"affiliation"`
+	OrderPosition    int    `json:"order_position" binding:"required,gte=1"`
+	IsPrimaryAuthor  bool   `json:"is_primary_author"`
+}
+
 type CreateManuscriptRequest struct {
-	Title         string `json:"title" binding:"required"`
-	Abstract      string `json:"abstract" binding:"required"`
-	JournalID     string `json:"journal_id" binding:"required,uuid"`
-	MainAuthorID string `json:"main_author_id" binding:"omitempty,uuid"`
-	IsTncAccepted bool   `json:"is_tnc_accepted" binding:"required,eq=true"` // Must be true
+	Title         string                        `json:"title" binding:"required"`
+	Abstract      string                        `json:"abstract" binding:"required"`
+	JournalID     string                        `json:"journal_id" binding:"required,uuid"`
+	Authors       []SubmitManuscriptAuthorInput `json:"authors" binding:"required,min=1,dive"`
+	IsTncAccepted bool                          `json:"is_tnc_accepted" binding:"required,eq=true"`
 }
 
 type UpdateManuscriptRequest struct {
@@ -16,7 +25,7 @@ type UpdateManuscriptRequest struct {
 }
 
 type UpdateManuscriptAuthorsRequest struct {
-	Authors []ManuscriptAuthorRequest `json:"authors" binding:"required,dive"`
+	Authors []ManuscriptAuthorRequest `json:"authors" binding:"required,min=1,dive"`
 }
 
 type ManuscriptAuthorRequest struct {
@@ -24,8 +33,8 @@ type ManuscriptAuthorRequest struct {
 	AuthorName      string  `json:"author_name" binding:"required"`
 	AuthorEmail     string  `json:"author_email" binding:"required,email"`
 	Affiliation     string  `json:"affiliation"`
-	IsCorresponding bool    `json:"is_corresponding"`
-	OrderPosition   int     `json:"order_position"`
+	OrderPosition   int     `json:"order_position" binding:"required,gte=1"`
+	IsPrimaryAuthor bool    `json:"is_primary_author"`
 }
 
 type PublishManuscriptRequest struct {

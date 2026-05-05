@@ -10,7 +10,9 @@ type ManuscriptResponse struct {
 	Title              string                     `json:"title"`
 	Abstract           string                     `json:"abstract"`
 	Status             string                     `json:"status"`
-	MainAuthorID       string                     `json:"main_author_id"`
+	MainAuthorID       *string                    `json:"main_author_id,omitempty"`
+	SubmittedByUserID  *string                    `json:"submitted_by_user_id,omitempty"`
+	Submitter          *ManuscriptSubmitterBrief  `json:"submitter,omitempty"`
 	AssignedEditorID   *string                    `json:"assigned_editor_id,omitempty"`
 	AssignedEditorName *string                    `json:"assigned_editor_name,omitempty"`
 	PublishedAt        time.Time                  `json:"published_at"`
@@ -21,14 +23,23 @@ type ManuscriptResponse struct {
 	Files              []ManuscriptFileResponse   `json:"files,omitempty"`
 }
 
+// ManuscriptSubmitterBrief is the account that submitted the manuscript (notifikasi & ownership).
+type ManuscriptSubmitterBrief struct {
+	UserID      string  `json:"user_id"`
+	Email       string  `json:"email"`
+	Name        string  `json:"name"`
+	Affiliation *string `json:"affiliation,omitempty"`
+}
+
 type ManuscriptAuthorResponse struct {
-	ID              string  `json:"id"`
-	UserID          *string `json:"user_id,omitempty"`
-	AuthorName      string  `json:"author_name"`
-	AuthorEmail     string  `json:"author_email"`
-	Affiliation     string  `json:"affiliation"`
-	IsCorresponding bool    `json:"is_corresponding"`
-	OrderPosition   int     `json:"order_position"`
+	ID               string  `json:"id"`
+	UserID           *string `json:"user_id,omitempty"`
+	AuthorName       string  `json:"author_name"`
+	AuthorEmail      string  `json:"author_email"`
+	Affiliation      string  `json:"affiliation"`
+	OrderPosition    int     `json:"order_position"`
+	IsPrimaryContact bool    `json:"is_primary_contact"`
+	IsPrimaryAuthor  bool    `json:"is_primary_author"`
 }
 
 type ManuscriptFileResponse struct {

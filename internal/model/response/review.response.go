@@ -109,10 +109,11 @@ type ReviewerAssignmentListItemResponse struct {
 
 // ReviewerAuthorBrief is a co-author line on the reviewer workspace.
 type ReviewerAuthorBrief struct {
-	Name              string `json:"name"`
-	Email             string `json:"email"`
-	IsCorresponding   bool   `json:"is_corresponding"`
-	OrderPosition     int    `json:"order_position"`
+	Name             string `json:"name"`
+	Email            string `json:"email"`
+	IsCorresponding  bool   `json:"is_corresponding"`
+	IsPrimaryAuthor  bool   `json:"is_primary_author"`
+	OrderPosition    int    `json:"order_position"`
 }
 
 // ReviewerAssignmentFileResponse is metadata for a file linked to the assignment.
