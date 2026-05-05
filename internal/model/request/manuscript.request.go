@@ -6,6 +6,7 @@ type CreateManuscriptRequest struct {
 	Title         string `json:"title" binding:"required"`
 	Abstract      string `json:"abstract" binding:"required"`
 	JournalID     string `json:"journal_id" binding:"required,uuid"`
+	MainAuthorID string `json:"main_author_id" binding:"omitempty,uuid"`
 	IsTncAccepted bool   `json:"is_tnc_accepted" binding:"required,eq=true"` // Must be true
 }
 
