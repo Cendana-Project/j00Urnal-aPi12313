@@ -16,7 +16,12 @@ type Manuscript struct {
 	Section          string `json:"section,omitempty" gorm:"type:varchar(150)"`
 	Abstract      string                    `json:"abstract" gorm:"type:text;not null"`
 	Status        constant.ManuscriptStatus `json:"status" gorm:"type:varchar(20);not null;default:'DRAFT'"`
-	MainAuthorID     string                    `json:"main_author_id" gorm:"type:uuid;not null"`
+	// MainAuthorID references users(id) when the primary contact is a registered user; NULL when external_only.
+	MainAuthorID       *string `json:"main_author_id" gorm:"type:uuid"`
+	SubmittedByUserID *string `json:"submitted_by_user_id" gorm:"type:uuid;column:submitted_by_user_id"`
+	ExternalMainAuthorName       string `json:"external_main_author_name,omitempty" gorm:"column:external_main_author_name;type:varchar(255)"`
+	ExternalMainAuthorEmail      string `json:"external_main_author_email,omitempty" gorm:"column:external_main_author_email;type:varchar(255)"`
+	ExternalMainAuthorAffiliation string `json:"external_main_author_affiliation,omitempty" gorm:"column:external_main_author_affiliation;type:text"`
 	AssignedEditorID *string                   `json:"assigned_editor_id" gorm:"type:uuid"`
 	IsTncAccepted    bool                      `json:"is_tnc_accepted" gorm:"type:boolean;default:false"`
 	TncAcceptedAt *time.Time                `json:"tnc_accepted_at" gorm:"type:timestamp"`
@@ -31,6 +36,7 @@ type Manuscript struct {
 	Journal        *Journal           `json:"journal,omitempty" gorm:"foreignKey:JournalID;references:ID"`
 	Issue          *Issue             `json:"issue,omitempty" gorm:"foreignKey:IssueID;references:ID"`
 	MainAuthor     *User              `json:"main_author,omitempty" gorm:"foreignKey:MainAuthorID;references:ID"`
+	SubmittedBy    *User              `json:"submitted_by,omitempty" gorm:"foreignKey:SubmittedByUserID;references:ID"`
 	AssignedEditor *User              `json:"assigned_editor,omitempty" gorm:"foreignKey:AssignedEditorID;references:ID"`
 	Term           *PublicationTerm   `json:"term,omitempty" gorm:"foreignKey:TermID;references:ID"`
 	Authors        []ManuscriptAuthor `json:"authors,omitempty" gorm:"foreignKey:ManuscriptID;references:ID"`

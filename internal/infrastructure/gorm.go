@@ -32,7 +32,12 @@ var (
 func InitializeDBConn() *gorm.DB {
 	conn, err := openDBConn(config.Env.Database.DSN)
 	if err != nil {
-		logrus.WithField("error", err).Fatal("failed to connect to database")
+		fields := logrus.Fields{"error": err}
+		errStr := err.Error()
+		if strings.Contains(errStr, "no such host") || strings.Contains(strings.ToUpper(errStr), "NXDOMAIN") {
+			fields["hint"] = "Database hostname could not be resolved — check DATABASE_DSN matches Supabase Dashboard → Project Settings → Database (use current pooler host). Verify network/VPN/firewall."
+		}
+		logrus.WithFields(fields).Fatal("failed to connect to database")
 	}
 
 	DB = conn

@@ -187,7 +187,7 @@ func StartServer() {
 
 	// Services
 	storageService := storageSvc.NewService()
-	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, jRepo, tRepo, storageService)
+	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, jRepo, tRepo, uRepo, storageService)
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender, manuscriptService)
 	termService := termSvc.NewService(tRepo)
 	reviewerForm, err := reviewerform.Load()

@@ -2,6 +2,7 @@ package manuscript
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -52,8 +53,11 @@ func (c *Controller) checkAccess(ctx *gin.Context, manuscriptID string) error {
 	if m == nil {
 		return constant.ErrRecordNotFound
 	}
-	if m.MainAuthorID == userID {
+	if m.MainAuthorID != nil && *m.MainAuthorID == userID {
 		return nil // Allowed by Ownership
+	}
+	if m.SubmittedByUserID != nil && *m.SubmittedByUserID == userID {
+		return nil // Submitter acting on behalf of external primary contact
 	}
 
 	return constant.ErrForbidden
@@ -251,10 +255,11 @@ func (c *Controller) UpdateAuthors(ctx *gin.Context) {
 		authors[i] = entity.ManuscriptAuthor{
 			UserID:          a.UserID,
 			AuthorName:      a.AuthorName,
-			AuthorEmail:     a.AuthorEmail,
+			AuthorEmail:     strings.ToLower(strings.TrimSpace(a.AuthorEmail)),
 			Affiliation:     a.Affiliation,
-			IsCorresponding: a.IsCorresponding,
 			OrderPosition:   a.OrderPosition,
+			IsCorresponding: false,
+			IsPrimaryAuthor: a.IsPrimaryAuthor,
 		}
 	}
 

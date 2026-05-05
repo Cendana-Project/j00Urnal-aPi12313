@@ -67,7 +67,6 @@ func SeedSampleManuscripts(db *gorm.DB) error {
 			Title:         "The Future of Artificial Intelligence",
 			Abstract:      "This paper discusses the future impact of AI on various industries.",
 			Status:        constant.ManuscriptStatusSubmitted,
-			MainAuthorID:  authorID,
 			IsTncAccepted: true,
 			CreatedAt:     time.Now(),
 			PublishedAt:   time.Now(), // Need non-null default
@@ -78,7 +77,6 @@ func SeedSampleManuscripts(db *gorm.DB) error {
 			Title:            "Quantum Computing Revisited",
 			Abstract:         "An overview of recent advancements in quantum computing hardware.",
 			Status:           constant.ManuscriptStatusUnderReview,
-			MainAuthorID:     authorID,
 			AssignedEditorID: &editorID,
 			IsTncAccepted:    true,
 			CreatedAt:        time.Now(),
@@ -91,7 +89,6 @@ func SeedSampleManuscripts(db *gorm.DB) error {
 			Title:            "Machine Learning in Healthcare",
 			Abstract:         "A study on predictive models for patient readmission.",
 			Status:           constant.ManuscriptStatusPublished,
-			MainAuthorID:     authorID,
 			AssignedEditorID: &editorID,
 			IsTncAccepted:    true,
 			CreatedAt:        time.Now(),
@@ -100,6 +97,9 @@ func SeedSampleManuscripts(db *gorm.DB) error {
 	}
 
 	for i, m := range manuscripts {
+		aid := authorID
+		m.MainAuthorID = &aid
+		m.SubmittedByUserID = &aid
 		if err := db.FirstOrCreate(&m, entity.Manuscript{ID: m.ID}).Error; err != nil {
 			return fmt.Errorf("seed manuscript idx %d: %w", i, err)
 		}

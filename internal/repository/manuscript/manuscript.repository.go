@@ -35,6 +35,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Manuscript
 		Preload("Authors").
 		Preload("Files").
 		Preload("MainAuthor").
+		Preload("SubmittedBy").
 		Preload("AssignedEditor").
 		Preload("Issue.Volume.Journal").
 		First(&manuscript, "id = ?", id).Error
@@ -50,6 +51,7 @@ func (r *Repository) ListByIssue(ctx context.Context, issueID string) ([]entity.
 		Where("volume_number_id = ?", issueID).
 		Preload("Authors").
 		Preload("MainAuthor").
+		Preload("SubmittedBy").
 		Preload("Files").
 		Order("created_at DESC").
 		Find(&manuscripts).Error
@@ -67,7 +69,7 @@ func (r *Repository) ListByMainAuthor(
 
 	base := infrastructure.GetDB().WithContext(ctx).
 		Model(&entity.Manuscript{}).
-		Where("main_author_id = ?", authorID).
+		Where("(main_author_id = ? OR submitted_by_user_id = ?)", authorID, authorID).
 		Where("deleted_at IS NULL")
 
 	if len(req.Statuses) > 0 {
@@ -96,6 +98,7 @@ func (r *Repository) ListByMainAuthor(
 		Scopes(pg.Paginate()).
 		Preload("Files").
 		Preload("Authors").
+		Preload("SubmittedBy").
 		Order("created_at DESC").
 		Find(&manuscripts).Error
 
@@ -113,19 +116,31 @@ func (r *Repository) AddAuthor(ctx context.Context, author *entity.ManuscriptAut
 
 func (r *Repository) UpdateAuthors(ctx context.Context, manuscriptID string, authors []entity.ManuscriptAuthor) error {
 	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Delete existing authors
-		if err := tx.Where("manuscript_id = ?", manuscriptID).Delete(&entity.ManuscriptAuthor{}).Error; err != nil {
+		return r.replaceAuthorsTx(tx, manuscriptID, authors)
+	})
+}
+
+// CreateWithAuthors creates a manuscript and optional co-author rows in one transaction.
+func (r *Repository) CreateWithAuthors(ctx context.Context, manuscript *entity.Manuscript, coAuthors []entity.ManuscriptAuthor) error {
+	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(manuscript).Error; err != nil {
 			return err
 		}
-		// Insert new authors
-		for i := range authors {
-			authors[i].ManuscriptID = manuscriptID
-		}
-		if len(authors) > 0 {
-			return tx.Create(&authors).Error
-		}
-		return nil
+		return r.replaceAuthorsTx(tx, manuscript.ID, coAuthors)
 	})
+}
+
+func (r *Repository) replaceAuthorsTx(tx *gorm.DB, manuscriptID string, authors []entity.ManuscriptAuthor) error {
+	if err := tx.Where("manuscript_id = ?", manuscriptID).Delete(&entity.ManuscriptAuthor{}).Error; err != nil {
+		return err
+	}
+	for i := range authors {
+		authors[i].ManuscriptID = manuscriptID
+	}
+	if len(authors) > 0 {
+		return tx.Create(&authors).Error
+	}
+	return nil
 }
 
 // File Methods
@@ -180,6 +195,7 @@ func (r *Repository) ListByStatuses(ctx context.Context, statuses []constant.Man
 	err := base.
 		Scopes(pg.Paginate()).
 		Preload("MainAuthor").
+		Preload("SubmittedBy").
 		Preload("AssignedEditor").
 		Preload("Journal").
 		Order("created_at DESC").
@@ -207,6 +223,7 @@ func (r *Repository) ListByAssignedEditor(ctx context.Context, editorID string, 
 	err := base.
 		Scopes(pg.Paginate()).
 		Preload("MainAuthor").
+		Preload("SubmittedBy").
 		Preload("AssignedEditor").
 		Preload("Authors").
 		Preload("Journal").
