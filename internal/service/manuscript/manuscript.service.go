@@ -85,12 +85,16 @@ func (s *Service) Submit(ctx context.Context, userID string, req request.CreateM
 
 	// 3. Prepare Manuscript Object
 	now := time.Now()
+	mainAuthorID := userID
+	if strings.TrimSpace(req.MainAuthorID) != "" {
+		mainAuthorID = strings.TrimSpace(req.MainAuthorID)
+	}
 	manuscript := &entity.Manuscript{
 		JournalID:     req.JournalID,
 		Title:         req.Title,
 		Abstract:      req.Abstract,
 		Status:        constant.ManuscriptStatusSubmitted, // Start as Submitted
-		MainAuthorID:  userID,
+		MainAuthorID:  mainAuthorID,
 		IsTncAccepted: true,
 		TncAcceptedAt: &now,
 		TermID:        &activeTerm.ID,
