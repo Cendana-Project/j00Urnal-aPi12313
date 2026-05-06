@@ -357,6 +357,35 @@ func (c *Controller) InviteReviewer(ctx *gin.Context) {
 	util.HandleResponse(ctx, res, nil)
 }
 
+// InviteRegisteredReviewer assigns an existing REVIEWER user to a round and emails them.
+func (c *Controller) InviteRegisteredReviewer(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+
+	var req request.InviteRegisteredReviewerRequest
+	if err := util.BindAndValidate(ctx, &req); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	assignment, err := c.svc.InviteRegisteredReviewer(ctx.Request.Context(), req.RoundID, req.ReviewerID, userID, req.DueDate)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.StatusCode = http.StatusCreated
+	res.Message = "Reviewer assigned and notified"
+	if assignment != nil {
+		res.Data = mapper.ToReviewAssignmentResponse(assignment)
+	}
+	util.HandleResponse(ctx, res, nil)
+}
+
 // MakeRoundDecision makes a decision for a review round.
 func (c *Controller) MakeRoundDecision(ctx *gin.Context) {
 	userID := util.GetUserID(ctx)

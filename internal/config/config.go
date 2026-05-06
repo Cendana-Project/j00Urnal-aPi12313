@@ -96,6 +96,7 @@ type SMTP struct {
 	Username  string `mapstructure:"username"`
 	Password  string `mapstructure:"password"`
 	FromEmail string `mapstructure:"from_email"`
+	FromName  string `mapstructure:"from_name"`
 }
 
 // LoadConfig loads configuration from .env file and environment variables
@@ -230,6 +231,7 @@ func bindEnvVariables() {
 	viper.BindEnv("smtp.username", "SMTP_USERNAME")
 	viper.BindEnv("smtp.password", "SMTP_PASSWORD")
 	viper.BindEnv("smtp.from_email", "SMTP_FROM_EMAIL")
+	viper.BindEnv("smtp.from_name", "SMTP_FROM_NAME")
 
 	// Supabase
 	viper.BindEnv("supabase.url", "SUPABASE_URL")

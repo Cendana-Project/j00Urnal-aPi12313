@@ -40,3 +40,18 @@ func ReviewerInviteSubject(manuscriptTitle string) string {
 	}
 	return "Undangan review: " + title + " - " + brand
 }
+
+// ReviewerAssignmentNotifySubject is used when an existing reviewer user is assigned (portal login, no token).
+func ReviewerAssignmentNotifySubject(manuscriptTitle string) string {
+	title := NormalizeSubject(manuscriptTitle)
+	const brand = "MedikaOne Journal"
+	if title == "" {
+		return "Penugasan review manuskrip - " + brand
+	}
+	const maxRunes = 55
+	if utf8.RuneCountInString(title) > maxRunes {
+		r := []rune(title)
+		title = string(r[:maxRunes-1]) + "…"
+	}
+	return "Penugasan review: " + title + " - " + brand
+}
