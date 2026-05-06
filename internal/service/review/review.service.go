@@ -16,10 +16,10 @@ import (
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
-	"github.com/api-monolith-template/internal/reviewerform"
 	reviewRepo "github.com/api-monolith-template/internal/repository/review"
 	roleRepo "github.com/api-monolith-template/internal/repository/role"
 	userRepo "github.com/api-monolith-template/internal/repository/user"
+	"github.com/api-monolith-template/internal/reviewerform"
 	manuscriptSvc "github.com/api-monolith-template/internal/service/manuscript"
 	storageSvc "github.com/api-monolith-template/internal/service/storage"
 	"github.com/api-monolith-template/internal/util"
@@ -101,7 +101,7 @@ func (s *Service) AssignEditor(ctx context.Context, manuscriptID, editorID, chie
 	}
 
 	// 4. Send notification email to editor (async, don't fail on email error)
-	go func() {
+	util.SafeGo(func() {
 		editor, err := s.userRepo.GetByID(editorID)
 		if err != nil || editor == nil {
 			return
@@ -116,7 +116,7 @@ func (s *Service) AssignEditor(ctx context.Context, manuscriptID, editorID, chie
 		if s.emailSender != nil {
 			_ = s.emailSender.Send(editor.Email, "Anda Ditugaskan sebagai Editor - "+m.Title, body)
 		}
-	}()
+	})
 
 	return nil
 }
@@ -227,7 +227,7 @@ func (s *Service) AcceptManuscript(ctx context.Context, manuscriptID, editorID s
 	}
 
 	// Notify author
-	go s.notifyAuthorDecision(m, "ACCEPTED", "")
+	util.SafeGo(func() { s.notifyAuthorDecision(m, "ACCEPTED", "") })
 
 	return nil
 }
@@ -250,7 +250,7 @@ func (s *Service) DeclineManuscript(ctx context.Context, manuscriptID, editorID,
 	}
 
 	// Notify author
-	go s.notifyAuthorDecision(m, "REJECTED", reason)
+	util.SafeGo(func() { s.notifyAuthorDecision(m, "REJECTED", reason) })
 
 	return nil
 }
@@ -273,7 +273,7 @@ func (s *Service) RequestRevision(ctx context.Context, manuscriptID, editorID, c
 	}
 
 	// Notify author
-	go s.notifyAuthorDecision(m, "REVISION_REQUIRED", comments)
+	util.SafeGo(func() { s.notifyAuthorDecision(m, "REVISION_REQUIRED", comments) })
 
 	return nil
 }
@@ -377,9 +377,157 @@ func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail,
 		})
 	}
 
-	go s.sendReviewerInviteEmail(round, editorID, emailNorm, token, dueDate)
+	util.SafeGo(func() { s.sendReviewerInviteEmail(round, editorID, emailNorm, token, dueDate) })
 
 	return s.reviewRepo.GetAssignmentByID(ctx, assignment.ID)
+}
+
+// InviteRegisteredReviewer assigns an active user with REVIEWER role to a specific round,
+// marks the assignment ACCEPTED so they can work in the reviewer portal immediately, and sends email.
+func (s *Service) InviteRegisteredReviewer(ctx context.Context, roundID, reviewerUserID, editorID string, dueDate time.Time) (*entity.ReviewAssignment, error) {
+	round, err := s.reviewRepo.GetRoundByID(ctx, roundID)
+	if err != nil {
+		return nil, err
+	}
+	if round == nil {
+		return nil, constant.ErrRecordNotFound
+	}
+	if round.Status != constant.ReviewRoundStatusPending && round.Status != constant.ReviewRoundStatusInReview {
+		return nil, constant.ErrInvalidManuscriptStatus
+	}
+
+	var m *entity.Manuscript
+	if round.Manuscript != nil {
+		m = round.Manuscript
+	} else {
+		m, err = s.manuscripts.GetByID(ctx, round.ManuscriptID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if m == nil {
+		return nil, constant.ErrRecordNotFound
+	}
+	if err := s.validateEditorAssignment(m, editorID); err != nil {
+		return nil, err
+	}
+
+	dueUTC := dueDate.UTC()
+	if !dueUTC.After(time.Now().UTC()) {
+		return nil, constant.ErrValidationFailed
+	}
+
+	reviewer, err := s.userRepo.GetByID(reviewerUserID)
+	if err != nil {
+		return nil, err
+	}
+	if reviewer == nil || !strings.EqualFold(strings.TrimSpace(reviewer.Status), "active") {
+		return nil, constant.ErrInvalidReviewerUser
+	}
+	hasRole, err := s.roleRepo.UserHasRole(reviewerUserID, constant.RoleReviewer)
+	if err != nil {
+		return nil, err
+	}
+	if !hasRole {
+		return nil, constant.ErrInvalidReviewerUser
+	}
+
+	emailNorm := strings.ToLower(strings.TrimSpace(reviewer.Email))
+	if emailNorm == "" {
+		return nil, constant.ErrInvalidReviewerUser
+	}
+
+	dupRev, err := s.reviewRepo.CountActiveAssignmentByRoundReviewer(ctx, roundID, reviewerUserID)
+	if err != nil {
+		return nil, err
+	}
+	if dupRev > 0 {
+		return nil, constant.ErrReviewerRoundAssignmentDuplicate
+	}
+	dupEmail, err := s.reviewRepo.CountPendingInvitationByRoundEmail(ctx, roundID, emailNorm)
+	if err != nil {
+		return nil, err
+	}
+	if dupEmail > 0 {
+		return nil, constant.ErrReviewerInviteDuplicate
+	}
+
+	now := time.Now().UTC()
+	acceptedAt := now
+	rvID := reviewerUserID
+	assignment := &entity.ReviewAssignment{
+		ReviewRoundID:        roundID,
+		ReviewerID:           &rvID,
+		InvitedEmail:         emailNorm,
+		AssignedBy:           editorID,
+		Status:               constant.ReviewAssignmentStatusAccepted,
+		InvitationToken:      nil,
+		InvitationExpiresAt:  dueUTC,
+		InvitationAcceptedAt: &acceptedAt,
+		DueDate:              dueUTC,
+		CreatedAt:            now,
+	}
+
+	if err := s.reviewRepo.CreateAssignment(ctx, assignment); err != nil {
+		return nil, err
+	}
+
+	if round.Status == constant.ReviewRoundStatusPending {
+		_ = s.reviewRepo.UpdateRound(ctx, round.ID, map[string]any{
+			"status": constant.ReviewRoundStatusInReview,
+		})
+	}
+
+	util.SafeGo(func() { s.sendRegisteredReviewerAssignmentEmail(round, editorID, reviewer, dueUTC) })
+
+	return s.reviewRepo.GetAssignmentByID(ctx, assignment.ID)
+}
+
+func (s *Service) sendRegisteredReviewerAssignmentEmail(round *entity.ReviewRound, editorID string, reviewer *entity.User, dueDate time.Time) {
+	ctx := context.Background()
+	if round == nil || reviewer == nil {
+		util.Errorf(ctx, "registered reviewer assignment email: missing round or reviewer")
+		return
+	}
+	editor, err := s.userRepo.GetByID(editorID)
+	if err != nil {
+		util.Errorf(ctx, "registered reviewer assignment email: load editor %s: %v", editorID, err)
+		return
+	}
+	if editor == nil {
+		util.Errorf(ctx, "registered reviewer assignment email: editor %s not found", editorID)
+		return
+	}
+	editorName := formatUserName(editor)
+	reviewerName := formatUserName(reviewer)
+	dueDateStr := dueDate.Format("2 January 2006")
+
+	manuscriptTitle := ""
+	if round.Manuscript != nil {
+		manuscriptTitle = round.Manuscript.Title
+	} else {
+		m, _ := s.manuscripts.GetByID(context.Background(), round.ManuscriptID)
+		if m != nil {
+			manuscriptTitle = m.Title
+		}
+	}
+
+	baseURL := config.Env.Server.PrimaryFrontendURL()
+	if baseURL == "" {
+		baseURL = config.Env.Server.BaseURL
+	}
+	portalURL := strings.TrimRight(baseURL, "/") + "/reviewer/assignments"
+
+	body := email.RenderRegisteredReviewerAssignment(reviewerName, manuscriptTitle, editorName, dueDateStr, portalURL)
+	plain := email.RenderRegisteredReviewerAssignmentPlain(reviewerName, manuscriptTitle, editorName, dueDateStr, portalURL)
+	subject := email.ReviewerAssignmentNotifySubject(manuscriptTitle)
+	if s.emailSender == nil {
+		util.Errorf(ctx, "registered reviewer assignment email: sender disabled (EMAIL_ENABLED=false or not configured)")
+		return
+	}
+	if err := s.emailSender.SendWithContextAndText(ctx, reviewer.Email, subject, body, plain); err != nil {
+		util.Errorf(ctx, "registered reviewer assignment email: send to %s: %v", maskInvitationEmail(reviewer.Email), err)
+	}
 }
 
 func (s *Service) sendReviewerInviteEmail(round *entity.ReviewRound, editorID, inviteEmail, token string, dueDate time.Time) {
@@ -760,7 +908,7 @@ func (s *Service) MakeRoundDecision(ctx context.Context, roundID, editorID, deci
 	}
 
 	// Notify author
-	go s.notifyAuthorDecision(m, decision, comments)
+	util.SafeGo(func() { s.notifyAuthorDecision(m, decision, comments) })
 
 	return nil
 }

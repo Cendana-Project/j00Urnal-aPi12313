@@ -271,6 +271,18 @@ var (
 		Message:    "This email already has a pending invitation for this review round",
 		Detail:     GetMessageDetail(MsgReviewerInviteDuplicate),
 	}
+	ErrReviewerRoundAssignmentDuplicate = response.CustomError{
+		Code:       "REVIEWER_ROUND_ASSIGNMENT_DUPLICATE",
+		StatusCode: http.StatusConflict,
+		Message:    "This reviewer already has an active assignment for this review round",
+		Detail:     GetMessageDetail(MsgReviewerRoundAssignmentDuplicate),
+	}
+	ErrInvalidReviewerUser = response.CustomError{
+		Code:       "INVALID_REVIEWER_USER",
+		StatusCode: http.StatusBadRequest,
+		Message:    "The user is not eligible as a reviewer for this assignment",
+		Detail:     GetMessageDetail(MsgInvalidReviewerUser),
+	}
 	ErrReviewerAssignmentNotAllowed = response.CustomError{
 		Code:       "REVIEWER_ASSIGNMENT_NOT_ALLOWED",
 		StatusCode: http.StatusForbidden,

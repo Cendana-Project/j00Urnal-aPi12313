@@ -161,6 +161,59 @@ var (
 </body>
 </html>`))
 
+	registeredReviewerAssignmentTmpl = template.Must(template.New("registeredReviewerAssignment").Parse(`<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Penugasan review baru</title>
+</head>
+<body style="margin:0;padding:0;background:#e8eef4;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#e8eef4;padding:28px 12px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(15,23,42,0.08);border:1px solid #dbe4ee;">
+        <tr>
+          <td style="background:#0369a1;padding:22px 26px;">
+            <p style="margin:0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.88);font-weight:600;">MedikaOne Journal</p>
+            <h1 style="margin:10px 0 0 0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.35;">Penugasan review baru</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:26px 26px 8px 26px;">
+            <p style="margin:0 0 14px 0;font-size:16px;line-height:1.65;color:#334155;">Halo <strong style="color:#0f172a;">{{.ReviewerName}}</strong>,</p>
+            <p style="margin:0 0 20px 0;font-size:15px;line-height:1.65;color:#475569;"><strong style="color:#0f172a;">{{.EditorName}}</strong> menugaskan Anda sebagai reviewer untuk manuskrip berikut. Silakan login ke portal reviewer untuk memulai.</p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:12px;margin:0 0 22px 0;">
+              <tr>
+                <td style="padding:18px 20px;">
+                  <p style="margin:0;font-size:17px;font-weight:700;color:#0f172a;line-height:1.45;">{{.ManuscriptTitle}}</p>
+                  <p style="margin:10px 0 0 0;font-size:14px;color:#475569;">Batas waktu review: <strong style="color:#0369a1;">{{.DueDate}}</strong></p>
+                </td>
+              </tr>
+            </table>
+            <table role="presentation" cellspacing="0" cellpadding="0" style="margin:18px 0 18px 0;">
+              <tr>
+                <td align="center" style="border-radius:10px;" bgcolor="#0369a1">
+                  <a href="{{.PortalURL}}" style="display:inline-block;padding:12px 18px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;background:#0369a1;">Buka portal reviewer</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 6px 0;font-size:12px;font-weight:600;color:#334155;">Tautan</p>
+            <p style="margin:0;font-size:13px;line-height:1.55;word-break:break-all;"><a href="{{.PortalURL}}" style="color:#0369a1">{{.PortalURL}}</a></p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:14px 26px;text-align:center;border-top:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:11px;color:#94a3b8;">© {{.Year}} MedikaOne. Semua hak dilindungi.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`))
+
 	submissionDecisionTmpl = template.Must(template.New("submissionDecision").Parse(`<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f6f9fc;padding:24px">
   <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;border-radius:12px;padding:24px">
     <h2 style="margin:0 0 8px 0;color:#111">MedikaOne Journal</h2>
@@ -237,6 +290,47 @@ func RenderReviewerInvitation(reviewerName, manuscriptTitle, editorName, dueDate
 		return ""
 	}
 	return buf.String()
+}
+
+// RenderRegisteredReviewerAssignment notifies an existing reviewer account (no token flow).
+func RenderRegisteredReviewerAssignment(reviewerName, manuscriptTitle, editorName, dueDate, portalURL string) string {
+	data := struct {
+		ReviewerName    string
+		ManuscriptTitle string
+		EditorName      string
+		DueDate         string
+		PortalURL       string
+		Year            int
+	}{reviewerName, manuscriptTitle, editorName, dueDate, portalURL, YearNow()}
+	var buf bytes.Buffer
+	if err := registeredReviewerAssignmentTmpl.Execute(&buf, data); err != nil {
+		return ""
+	}
+	return buf.String()
+}
+
+// RenderRegisteredReviewerAssignmentPlain is the plain-text part for transactional email APIs.
+func RenderRegisteredReviewerAssignmentPlain(reviewerName, manuscriptTitle, editorName, dueDate, portalURL string) string {
+	var b strings.Builder
+	b.WriteString("MedikaOne Journal - Penugasan review\n\n")
+	b.WriteString("Halo ")
+	b.WriteString(reviewerName)
+	b.WriteString(",\n\n")
+	b.WriteString(editorName)
+	b.WriteString(" menugaskan Anda sebagai reviewer untuk manuskrip:\n\n")
+	if strings.TrimSpace(manuscriptTitle) != "" {
+		b.WriteString(manuscriptTitle)
+	} else {
+		b.WriteString("(lihat portal)")
+	}
+	b.WriteString("\nBatas waktu review: ")
+	b.WriteString(dueDate)
+	b.WriteString("\n\nBuka portal reviewer:\n")
+	b.WriteString(portalURL)
+	b.WriteString("\n\n---\n© ")
+	b.WriteString(fmt.Sprintf("%d", YearNow()))
+	b.WriteString(" MedikaOne.\n")
+	return b.String()
 }
 
 // RenderReviewerInvitationPlain is the plain-text alternative for transactional APIs and accessibility.

@@ -224,6 +224,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			editor.POST("/manuscripts/request-revision", t.reviewController.RequestRevision)
 			editor.GET("/reviewer-candidates", t.reviewController.ListReviewerCandidates)
 			editor.POST("/invite-reviewer", t.reviewController.InviteReviewer)
+			editor.POST("/invite-registered-reviewer", t.reviewController.InviteRegisteredReviewer)
 			editor.POST("/rounds/decision", t.reviewController.MakeRoundDecision)
 		}
 

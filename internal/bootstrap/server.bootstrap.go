@@ -140,6 +140,7 @@ func StartServer() {
 		// Must be v3 "API key" from Brevo dashboard (xkeysib-...), NOT the SMTP relay password.
 		apiKey := strings.TrimSpace(config.Env.SMTP.Password)
 		fromEmail := strings.TrimSpace(config.Env.SMTP.FromEmail)
+		fromName := strings.TrimSpace(config.Env.SMTP.FromName)
 		if fromEmail == "" {
 			fromEmail = "no-reply@medikaone.id"
 		}
@@ -148,7 +149,7 @@ func StartServer() {
 		} else if !strings.HasPrefix(apiKey, "xkeysib-") {
 			logrus.Warn("Brevo API: key does not start with xkeysib- — use the HTTP API key from Brevo, not the SMTP-only password")
 		}
-		sender = email.NewBrevoAPISender(apiKey, fromEmail, time.Duration(timeoutSeconds)*time.Second)
+		sender = email.NewBrevoAPISender(apiKey, fromEmail, fromName, time.Duration(timeoutSeconds)*time.Second)
 		logrus.Info("Using Brevo HTTP API for email (port 443 - no SMTP blocking)")
 	} else {
 		// Traditional SMTP sender (may be blocked in cloud environments)
@@ -163,6 +164,7 @@ func StartServer() {
 		username := config.Env.SMTP.Username
 		password := config.Env.SMTP.Password
 		fromEmail := config.Env.SMTP.FromEmail
+		fromName := strings.TrimSpace(config.Env.SMTP.FromName)
 		if fromEmail == "" {
 			fromEmail = "no-reply@medikaone.id"
 		}
@@ -178,7 +180,7 @@ func StartServer() {
 			Username:    username,
 			Password:    password,
 			FromEmail:   fromEmail,
-			FromName:    "",
+			FromName:    fromName,
 			UseSTARTTLS: useSTARTTLS,
 			Timeout:     time.Duration(timeoutSeconds) * time.Second,
 		})

@@ -12,6 +12,13 @@ type InviteReviewerRequest struct {
 	Email        string `json:"email" binding:"required,email"`
 }
 
+// InviteRegisteredReviewerRequest assigns an existing user (REVIEWER role) to a review round with a due date.
+type InviteRegisteredReviewerRequest struct {
+	RoundID    string    `json:"round_id" binding:"required,uuid"`
+	ReviewerID string    `json:"reviewer_id" binding:"required,uuid"`
+	DueDate    time.Time `json:"due_date" binding:"required"`
+}
+
 // CompleteReviewerInvitationRequest sets password and optional profile fields after opening the email link.
 type CompleteReviewerInvitationRequest struct {
 	Password  string `json:"password" binding:"required,min=8"`

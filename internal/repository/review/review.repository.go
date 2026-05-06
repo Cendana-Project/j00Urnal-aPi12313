@@ -426,6 +426,22 @@ func (r *Repository) CountPendingInvitationByRoundEmail(ctx context.Context, rou
 	return n, err
 }
 
+// CountActiveAssignmentByRoundReviewer counts INVITED or ACCEPTED rows for the same round and reviewer user.
+func (r *Repository) CountActiveAssignmentByRoundReviewer(ctx context.Context, roundID, reviewerUserID string) (int64, error) {
+	var n int64
+	err := infrastructure.GetDB().WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM review_assignments
+		WHERE review_round_id = ?
+		  AND reviewer_id = ?
+		  AND status IN (?, ?)`,
+		roundID,
+		reviewerUserID,
+		constant.ReviewAssignmentStatusInvited,
+		constant.ReviewAssignmentStatusAccepted,
+	).Scan(&n).Error
+	return n, err
+}
+
 // ReviewerHistoryRow is a flat row for the reviewer History tab.
 type ReviewerHistoryRow struct {
 	AssignmentID   string

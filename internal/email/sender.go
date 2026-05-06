@@ -9,6 +9,8 @@ import (
 	"net/mail"
 	"net/smtp"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Sender interface {
@@ -39,9 +41,17 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 		return nil // no-op jika dimatikan
 	}
 
-	// Debug logging
-	fmt.Printf("[SMTP] Attempting to send email to %s via %s:%d (timeout: %v)\n",
-		to, s.cfg.Host, s.cfg.Port, s.cfg.Timeout)
+	to = strings.TrimSpace(to)
+	if to == "" {
+		return fmt.Errorf("smtp: recipient address is empty")
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"component": "smtp",
+		"host":      s.cfg.Host,
+		"port":      s.cfg.Port,
+		"to":        smtpMaskRecipient(to),
+	}).Debug("smtp send start")
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 
@@ -99,12 +109,12 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 	var client *smtp.Client
 	if useSSL {
 		// Port 465: Use TLS connection directly (SSL)
-		fmt.Printf("[SMTP] Using SSL/TLS (port 465)\n")
+		logrus.Debug("[smtp] using SSL/TLS (port 465)")
 		tlsCfg := &tls.Config{
 			ServerName: s.cfg.Host,
 			MinVersion: tls.VersionTLS12,
 		}
-		fmt.Printf("[SMTP] Dialing TLS connection to %s...\n", addr)
+		logrus.WithField("addr", addr).Debug("[smtp] dialing TLS")
 		tlsConn, err := tls.DialWithDialer(&net.Dialer{Timeout: s.cfg.Timeout}, "tcp", addr, tlsCfg)
 		if err != nil {
 			return fmt.Errorf("TLS dial failed: %w", err)
@@ -118,26 +128,26 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 		defer client.Quit()
 	} else {
 		// Port 587: Use STARTTLS
-		fmt.Printf("[SMTP] Using STARTTLS (port 587)\n")
+		logrus.Debug("[smtp] using STARTTLS path (typically port 587)")
 		dialer := &net.Dialer{Timeout: s.cfg.Timeout}
-		fmt.Printf("[SMTP] Dialing TCP connection to %s...\n", addr)
+		logrus.WithField("addr", addr).Debug("[smtp] dialing TCP")
 		conn, err := dialer.DialContext(ctx, "tcp", addr)
 		if err != nil {
 			return fmt.Errorf("TCP dial failed: %w", err)
 		}
 		defer conn.Close()
-		fmt.Printf("[SMTP] TCP connection established\n")
+		logrus.Debug("[smtp] TCP connected")
 
 		client, err = smtp.NewClient(conn, s.cfg.Host)
 		if err != nil {
 			return fmt.Errorf("SMTP client creation failed: %w", err)
 		}
 		defer client.Quit()
-		fmt.Printf("[SMTP] SMTP client created\n")
+		logrus.Debug("[smtp] SMTP client created")
 
 		// STARTTLS (for port 587)
 		if s.cfg.UseSTARTTLS {
-			fmt.Printf("[SMTP] Initiating STARTTLS...\n")
+			logrus.Debug("[smtp] initiating STARTTLS")
 			tlsCfg := &tls.Config{
 				ServerName: s.cfg.Host,
 				MinVersion: tls.VersionTLS12,
@@ -146,38 +156,38 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 				if err := client.StartTLS(tlsCfg); err != nil {
 					return fmt.Errorf("STARTTLS failed: %w", err)
 				}
-				fmt.Printf("[SMTP] STARTTLS successful\n")
+				logrus.Debug("[smtp] STARTTLS ok")
 			} else {
-				fmt.Printf("[SMTP] STARTTLS not supported by server\n")
+				logrus.Debug("[smtp] STARTTLS not advertised by server")
 			}
 		}
 	}
 
 	// Auth
-	fmt.Printf("[SMTP] Authenticating as %s...\n", s.cfg.Username)
+	logrus.WithField("user", s.cfg.Username).Debug("[smtp] authenticating")
 	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
 	if ok, _ := client.Extension("AUTH"); ok {
 		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
-		fmt.Printf("[SMTP] Authentication successful\n")
+		logrus.Debug("[smtp] authentication ok")
 	} else {
-		fmt.Printf("[SMTP] No AUTH extension, skipping authentication\n")
+		logrus.Debug("[smtp] no AUTH extension, skipping")
 	}
 
 	// From / To / Data
 	// NOTE: Use envelopeFrom (pure email) for SMTP commands
-	fmt.Printf("[SMTP] Setting envelope FROM: %s\n", envelopeFrom)
+	logrus.WithField("envelope_from", envelopeFrom).Debug("[smtp] MAIL FROM")
 	if err := client.Mail(envelopeFrom); err != nil {
 		return fmt.Errorf("MAIL FROM failed: %w", err)
 	}
 
-	fmt.Printf("[SMTP] Setting envelope TO: %s\n", to)
+	logrus.WithField("to", smtpMaskRecipient(to)).Debug("[smtp] RCPT TO")
 	if err := client.Rcpt(to); err != nil {
 		return fmt.Errorf("RCPT TO failed: %w", err)
 	}
 
-	fmt.Printf("[SMTP] Sending email data...\n")
+	logrus.Debug("[smtp] DATA")
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("DATA command failed: %w", err)
@@ -190,16 +200,33 @@ func (s *SMTPSender) SendWithContext(ctx context.Context, to, subject, htmlBody 
 		return fmt.Errorf("close data writer failed: %w", err)
 	}
 
-	fmt.Printf("[SMTP] Email sent successfully to %s\n", to)
+	logrus.WithFields(logrus.Fields{
+		"component": "smtp",
+		"host":      s.cfg.Host,
+		"to":        smtpMaskRecipient(to),
+	}).Info("transactional email sent via SMTP")
 	return nil
 }
 
-func formatAddress(email, name string) string {
-	if name == "" {
-		return email
+func smtpMaskRecipient(addr string) string {
+	addr = strings.TrimSpace(addr)
+	at := strings.LastIndex(addr, "@")
+	if at <= 1 || at >= len(addr)-1 {
+		return "***"
 	}
-	// Basic encode for special chars if needed
-	return fmt.Sprintf("%s <%s>", name, email)
+	local, domain := addr[:at], addr[at+1:]
+	if len(local) < 2 {
+		return "***@" + domain
+	}
+	return local[:2] + "***@" + domain
+}
+
+func formatAddress(emailAddr, name string) string {
+	if strings.TrimSpace(name) == "" {
+		return emailAddr
+	}
+	// RFC 5322 formatting (avoids odd quoting in clients when special chars appear).
+	return (&mail.Address{Name: name, Address: emailAddr}).String()
 }
 
 func subjectNeedsEncodedWord(s string) bool {

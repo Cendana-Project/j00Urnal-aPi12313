@@ -35,43 +35,45 @@ const (
 	MsgDateRequired              MessageCode = "DATE_REQUIRED"
 	MsgInvalidDateFormatYYYYMMDD MessageCode = "INVALID_DATE_FORMAT_YYYYMMDD"
 	// Domain-specific additions
-	MsgReviewAlreadyExists          MessageCode = "REVIEW_ALREADY_EXISTS"
-	MsgReviewNotEligible            MessageCode = "REVIEW_NOT_ELIGIBLE"
-	MsgPhotoURLRequired             MessageCode = "PHOTO_URL_REQUIRED"
-	MsgFieldHourAlreadyExists       MessageCode = "FIELD_HOUR_ALREADY_EXISTS"
-	MsgSlotAlreadyExists            MessageCode = "SLOT_ALREADY_EXISTS"
-	MsgNoSlotsCreated               MessageCode = "NO_SLOTS_CREATED"
-	MsgInvalidFacility              MessageCode = "INVALID_FACILITY"
-	MsgUserNotAuthenticated         MessageCode = "USER_NOT_AUTHENTICATED"
-	MsgValidationFailed             MessageCode = "VALIDATION_FAILED"
-	MsgUserUpdatedSuccess           MessageCode = "USER_UPDATED_SUCCESS"
-	MsgMatchEventNotFound           MessageCode = "MATCH_EVENT_NOT_FOUND"
-	MsgOnlySuperAdmin               MessageCode = "ONLY_SUPER_ADMIN"
-	MsgMatchEventNotCancellable     MessageCode = "MATCH_EVENT_NOT_CANCELLABLE"
-	MsgUserNotFound                 MessageCode = "USER_NOT_FOUND"
-	MsgEmailNotVerified             MessageCode = "EMAIL_NOT_VERIFIED"
-	MsgPasswordNotMatch             MessageCode = "PASSWORD_NOT_MATCH"
-	MsgForbidden                    MessageCode = "FORBIDDEN"
-	MsgConflict                     MessageCode = "CONFLICT"
-	MsgNotFound                     MessageCode = "NOT_FOUND"
-	MsgEmailSendFailed              MessageCode = "EMAIL_SEND_FAILED"
-	MsgVolumeNotActive              MessageCode = "VOLUME_NOT_ACTIVE"
-	MsgJournalNotActive             MessageCode = "JOURNAL_NOT_ACTIVE"
-	MsgInvitationExpired            MessageCode = "INVITATION_EXPIRED"
-	MsgInvitationAlreadyAccepted    MessageCode = "INVITATION_ALREADY_ACCEPTED"
-	MsgReviewNotCompleted           MessageCode = "REVIEW_NOT_COMPLETED"
-	MsgInvalidManuscriptStatus      MessageCode = "INVALID_MANUSCRIPT_STATUS"
-	MsgEditorNotAssigned            MessageCode = "EDITOR_NOT_ASSIGNED"
-	MsgNoActiveReviewRound          MessageCode = "NO_ACTIVE_REVIEW_ROUND"
-	MsgReviewerInviteDuplicate      MessageCode = "REVIEWER_INVITE_DUPLICATE"
-	MsgReviewerAssignmentNotAllowed MessageCode = "REVIEWER_ASSIGNMENT_NOT_ALLOWED"
-	MsgReviewAlreadyCompleted       MessageCode = "REVIEW_ALREADY_COMPLETED"
-	MsgReviewerWithdrawn            MessageCode = "REVIEWER_WITHDRAWN"
-	MsgInvalidReviewerReport        MessageCode = "INVALID_REVIEWER_REPORT"
-	MsgExtensionRequestPending      MessageCode = "EXTENSION_REQUEST_PENDING"
-	MsgExtensionRequestNotFound     MessageCode = "EXTENSION_REQUEST_NOT_FOUND"
-	MsgExtensionRequestAlreadyDecided MessageCode = "EXTENSION_REQUEST_ALREADY_DECIDED"
-	MsgExtensionRequestForbidden    MessageCode = "EXTENSION_REQUEST_FORBIDDEN"
+	MsgReviewAlreadyExists              MessageCode = "REVIEW_ALREADY_EXISTS"
+	MsgReviewNotEligible                MessageCode = "REVIEW_NOT_ELIGIBLE"
+	MsgPhotoURLRequired                 MessageCode = "PHOTO_URL_REQUIRED"
+	MsgFieldHourAlreadyExists           MessageCode = "FIELD_HOUR_ALREADY_EXISTS"
+	MsgSlotAlreadyExists                MessageCode = "SLOT_ALREADY_EXISTS"
+	MsgNoSlotsCreated                   MessageCode = "NO_SLOTS_CREATED"
+	MsgInvalidFacility                  MessageCode = "INVALID_FACILITY"
+	MsgUserNotAuthenticated             MessageCode = "USER_NOT_AUTHENTICATED"
+	MsgValidationFailed                 MessageCode = "VALIDATION_FAILED"
+	MsgUserUpdatedSuccess               MessageCode = "USER_UPDATED_SUCCESS"
+	MsgMatchEventNotFound               MessageCode = "MATCH_EVENT_NOT_FOUND"
+	MsgOnlySuperAdmin                   MessageCode = "ONLY_SUPER_ADMIN"
+	MsgMatchEventNotCancellable         MessageCode = "MATCH_EVENT_NOT_CANCELLABLE"
+	MsgUserNotFound                     MessageCode = "USER_NOT_FOUND"
+	MsgEmailNotVerified                 MessageCode = "EMAIL_NOT_VERIFIED"
+	MsgPasswordNotMatch                 MessageCode = "PASSWORD_NOT_MATCH"
+	MsgForbidden                        MessageCode = "FORBIDDEN"
+	MsgConflict                         MessageCode = "CONFLICT"
+	MsgNotFound                         MessageCode = "NOT_FOUND"
+	MsgEmailSendFailed                  MessageCode = "EMAIL_SEND_FAILED"
+	MsgVolumeNotActive                  MessageCode = "VOLUME_NOT_ACTIVE"
+	MsgJournalNotActive                 MessageCode = "JOURNAL_NOT_ACTIVE"
+	MsgInvitationExpired                MessageCode = "INVITATION_EXPIRED"
+	MsgInvitationAlreadyAccepted        MessageCode = "INVITATION_ALREADY_ACCEPTED"
+	MsgReviewNotCompleted               MessageCode = "REVIEW_NOT_COMPLETED"
+	MsgInvalidManuscriptStatus          MessageCode = "INVALID_MANUSCRIPT_STATUS"
+	MsgEditorNotAssigned                MessageCode = "EDITOR_NOT_ASSIGNED"
+	MsgNoActiveReviewRound              MessageCode = "NO_ACTIVE_REVIEW_ROUND"
+	MsgReviewerInviteDuplicate          MessageCode = "REVIEWER_INVITE_DUPLICATE"
+	MsgReviewerRoundAssignmentDuplicate MessageCode = "REVIEWER_ROUND_ASSIGNMENT_DUPLICATE"
+	MsgInvalidReviewerUser              MessageCode = "INVALID_REVIEWER_USER"
+	MsgReviewerAssignmentNotAllowed     MessageCode = "REVIEWER_ASSIGNMENT_NOT_ALLOWED"
+	MsgReviewAlreadyCompleted           MessageCode = "REVIEW_ALREADY_COMPLETED"
+	MsgReviewerWithdrawn                MessageCode = "REVIEWER_WITHDRAWN"
+	MsgInvalidReviewerReport            MessageCode = "INVALID_REVIEWER_REPORT"
+	MsgExtensionRequestPending          MessageCode = "EXTENSION_REQUEST_PENDING"
+	MsgExtensionRequestNotFound         MessageCode = "EXTENSION_REQUEST_NOT_FOUND"
+	MsgExtensionRequestAlreadyDecided   MessageCode = "EXTENSION_REQUEST_ALREADY_DECIDED"
+	MsgExtensionRequestForbidden        MessageCode = "EXTENSION_REQUEST_FORBIDDEN"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -197,6 +199,18 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "This email already has a pending invitation for this review round.",
 		TitleIdn: "Reviewer Sudah Diundang",
 		DescIdn:  "Email ini sudah memiliki undangan aktif untuk ronde review ini.",
+	},
+	MsgReviewerRoundAssignmentDuplicate: {
+		TitleEng: "Reviewer Already Assigned",
+		DescEng:  "This reviewer already has an active assignment for this review round.",
+		TitleIdn: "Reviewer Sudah Ditugaskan",
+		DescIdn:  "Reviewer ini sudah memiliki penugasan aktif untuk ronde review ini.",
+	},
+	MsgInvalidReviewerUser: {
+		TitleEng: "Invalid Reviewer",
+		DescEng:  "The user was not found, is not active, or does not have the reviewer role.",
+		TitleIdn: "Reviewer Tidak Valid",
+		DescIdn:  "Pengguna tidak ditemukan, tidak aktif, atau tidak memiliki peran reviewer.",
 	},
 	MsgReviewerAssignmentNotAllowed: {
 		TitleEng: "Assignment Not Allowed",
