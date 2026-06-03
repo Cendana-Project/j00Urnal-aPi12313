@@ -384,6 +384,19 @@ func ToReviewerWorkspaceResponse(
 		if m.AssignedEditor != nil {
 			editorName = formatUserName(m.AssignedEditor)
 		}
+		mFiles := make([]response.ManuscriptFileResponse, len(m.Files))
+		for i, f := range m.Files {
+			mFiles[i] = response.ManuscriptFileResponse{
+				ID:         f.ID,
+				FileType:   string(f.FileType),
+				FilePath:   f.FilePath,
+				Filename:   f.Filename,
+				MimeType:   f.MimeType,
+				SizeBytes:  f.SizeBytes,
+				Version:    f.Version,
+				UploadedAt: f.UploadedAt,
+			}
+		}
 		out.Manuscript = response.ReviewerWorkspaceManuscript{
 			ID:              m.ID,
 			Title:           m.Title,
@@ -395,6 +408,7 @@ func ToReviewerWorkspaceResponse(
 			ReceivedAt:      m.CreatedAt,
 			HandlingEditor:  editorName,
 			Authors:         ToReviewerAuthorBriefs(authors),
+			Files:           mFiles,
 		}
 	} else {
 		out.Manuscript = response.ReviewerWorkspaceManuscript{

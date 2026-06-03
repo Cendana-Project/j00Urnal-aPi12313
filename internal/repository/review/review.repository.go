@@ -175,6 +175,14 @@ func (r *Repository) HydrateAssignmentInvitationGraph(ctx context.Context, a *en
 			return err
 		}
 		if ms.ID != "" {
+			var mFiles []entity.ManuscriptFile
+			if err := db.Raw(
+				`SELECT * FROM manuscript_files WHERE manuscript_id = '` + mid.String() + `'::uuid ORDER BY version ASC, uploaded_at ASC`,
+			).Scan(&mFiles).Error; err != nil {
+				return err
+			}
+			ms.Files = mFiles
+
 			round.Manuscript = &ms
 			if jid, err := uuid.Parse(strings.TrimSpace(ms.JournalID)); err == nil {
 				var j entity.Journal

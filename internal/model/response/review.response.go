@@ -159,16 +159,17 @@ type ReviewerWorkspaceRound struct {
 
 // ReviewerWorkspaceManuscript is manuscript + journal + handling editor context for the workspace page.
 type ReviewerWorkspaceManuscript struct {
-	ID              string               `json:"id"`
-	Title           string               `json:"title"`
-	Status          string               `json:"status"`
-	Section         string               `json:"section"`
-	Abstract        string               `json:"abstract"`
-	ReferenceNumber *int64               `json:"reference_number,omitempty"`
-	JournalName     string               `json:"journal_name,omitempty"`
-	ReceivedAt      time.Time            `json:"received_at"`
-	HandlingEditor  string               `json:"handling_editor_name,omitempty"`
+	ID              string                `json:"id"`
+	Title           string                `json:"title"`
+	Status          string                `json:"status"`
+	Section         string                `json:"section"`
+	Abstract        string                `json:"abstract"`
+	ReferenceNumber *int64                `json:"reference_number,omitempty"`
+	JournalName     string                `json:"journal_name,omitempty"`
+	ReceivedAt      time.Time             `json:"received_at"`
+	HandlingEditor  string                `json:"handling_editor_name,omitempty"`
 	Authors         []ReviewerAuthorBrief `json:"authors"`
+	Files           []ManuscriptFileResponse `json:"files,omitempty"`
 }
 
 // ReviewerWorkspaceResponse is GET /v1/reviewer/assignments/:id.
