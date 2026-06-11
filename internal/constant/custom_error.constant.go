@@ -331,6 +331,12 @@ var (
 		Message:    "You cannot decide this extension request",
 		Detail:     GetMessageDetail(MsgExtensionRequestForbidden),
 	}
+	ErrDueDateInPast = response.CustomError{
+		Code:       "DUE_DATE_IN_PAST",
+		StatusCode: http.StatusBadRequest,
+		Message:    "due date must be in the future",
+		Detail:     GetMessageDetail(MsgDueDateInPast),
+	}
 
 	// ====== Lain-lain yang masih direferensi di util/transport lama ======
 	ErrUnauthorizedUpdate = response.CustomError{

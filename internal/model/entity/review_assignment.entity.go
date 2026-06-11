@@ -24,10 +24,11 @@ type ReviewAssignment struct {
 	UpdatedAt            *time.Time                      `json:"updated_at" gorm:"type:timestamp"`
 
 	// Relationships
-	ReviewRound *ReviewRound `json:"review_round,omitempty" gorm:"foreignKey:ReviewRoundID;references:ID"`
-	Reviewer    *User        `json:"reviewer,omitempty" gorm:"foreignKey:ReviewerID;references:ID"`
-	Assigner    *User        `json:"assigner,omitempty" gorm:"foreignKey:AssignedBy;references:ID"`
-	Files       []ReviewFile `json:"files,omitempty" gorm:"foreignKey:ReviewAssignmentID;references:ID"`
+	ReviewRound *ReviewRound            `json:"review_round,omitempty" gorm:"foreignKey:ReviewRoundID;references:ID"`
+	Reviewer    *User                   `json:"reviewer,omitempty" gorm:"foreignKey:ReviewerID;references:ID"`
+	Assigner    *User                   `json:"assigner,omitempty" gorm:"foreignKey:AssignedBy;references:ID"`
+	Files       []ReviewFile            `json:"files,omitempty" gorm:"foreignKey:ReviewAssignmentID;references:ID"`
+	Report      *ReviewAssignmentReport `json:"report,omitempty" gorm:"foreignKey:ReviewAssignmentID;references:ID"`
 }
 
 func (ReviewAssignment) TableName() string {

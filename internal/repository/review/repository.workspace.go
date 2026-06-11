@@ -97,7 +97,7 @@ SELECT ra.id AS assignment_id, ra.review_round_id AS review_round_id, m.id AS ma
        m.reference_number AS reference_number, rr.round_number AS round_number,
        rr.status AS round_status, ra.status AS assignment_status, ra.due_date AS due_date, ra.created_at AS created_at
 ` + baseFrom + `
-ORDER BY ra.due_date ASC, ra.created_at ASC
+ORDER BY ra.created_at DESC
 LIMIT ? OFFSET ?
 `
 	var rows []ReviewerAssignmentSummaryRow

@@ -510,6 +510,56 @@ func (s *Service) UploadReviewerAssignmentPDF(ctx context.Context, reviewerID, a
 	return rf, nil
 }
 
+// AcceptReviewerAssignment marks an INVITED assignment as ACCEPTED for a logged-in reviewer.
+func (s *Service) AcceptReviewerAssignment(ctx context.Context, reviewerID, assignmentID string) error {
+	a, err := s.reviewRepo.GetAssignmentByID(ctx, assignmentID)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return constant.ErrRecordNotFound
+	}
+	if err := assertReviewerOwnsAssignment(a, reviewerID); err != nil {
+		return err
+	}
+	if a.Status != constant.ReviewAssignmentStatusInvited {
+		return constant.ErrReviewerAssignmentNotAllowed
+	}
+
+	now := time.Now().UTC()
+	updates := map[string]any{
+		"status":                 constant.ReviewAssignmentStatusAccepted,
+		"invitation_accepted_at": now,
+		"updated_at":             now,
+	}
+	return s.reviewRepo.UpdateAssignment(ctx, a.ID, updates)
+}
+
+// DeclineReviewerAssignment marks an INVITED assignment as DECLINED for a logged-in reviewer.
+func (s *Service) DeclineReviewerAssignment(ctx context.Context, reviewerID, assignmentID, reason string) error {
+	a, err := s.reviewRepo.GetAssignmentByID(ctx, assignmentID)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return constant.ErrRecordNotFound
+	}
+	if err := assertReviewerOwnsAssignment(a, reviewerID); err != nil {
+		return err
+	}
+	if a.Status != constant.ReviewAssignmentStatusInvited {
+		return constant.ErrReviewerAssignmentNotAllowed
+	}
+
+	now := time.Now().UTC()
+	updates := map[string]any{
+		"status":     constant.ReviewAssignmentStatusDeclined,
+		"comments":   strings.TrimSpace(reason),
+		"updated_at": now,
+	}
+	return s.reviewRepo.UpdateAssignment(ctx, a.ID, updates)
+}
+
 func assertReviewerOwnsAssignment(a *entity.ReviewAssignment, reviewerID string) error {
 	if a == nil || a.ReviewerID == nil || *a.ReviewerID != reviewerID {
 		return constant.ErrForbidden

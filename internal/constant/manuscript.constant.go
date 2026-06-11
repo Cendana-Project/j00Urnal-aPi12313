@@ -11,6 +11,9 @@ const (
 	ManuscriptStatusRevisionRequired ManuscriptStatus = "REVISION_REQUIRED"
 	ManuscriptStatusRevised          ManuscriptStatus = "REVISED"
 
+	// Production
+	ManuscriptStatusInProduction     ManuscriptStatus = "IN_PRODUCTION"
+
 	// Archived
 	ManuscriptStatusAccepted  ManuscriptStatus = "ACCEPTED"
 	ManuscriptStatusRejected  ManuscriptStatus = "REJECTED"
@@ -64,6 +67,8 @@ const (
 	ManuscriptFileTypeRevision    ManuscriptFileType = "REVISION"
 	ManuscriptFileTypeTurnitin    ManuscriptFileType = "TURNITIN"
 	ManuscriptFileTypeCoverLetter ManuscriptFileType = "COVER_LETTER"
+	ManuscriptFileTypeCopyedited  ManuscriptFileType = "COPYEDITED"
+	ManuscriptFileTypeCopyeditedRevision ManuscriptFileType = "COPYEDITED_REVISION"
 )
 
 // ====== Review Round ======

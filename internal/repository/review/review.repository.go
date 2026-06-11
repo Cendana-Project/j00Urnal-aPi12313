@@ -32,7 +32,8 @@ func (r *Repository) GetRoundByID(ctx context.Context, id string) (*entity.Revie
 	var round entity.ReviewRound
 	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Assignments.Reviewer").
-		Preload("Assignments.Files").
+		Preload("Assignments.Files.Uploader").
+		Preload("Assignments.Report").
 		Preload("Manuscript.Journal").
 		Preload("Creator").
 		Preload("Files").
@@ -49,7 +50,8 @@ func (r *Repository) GetLatestRoundByManuscript(ctx context.Context, manuscriptI
 		Where("manuscript_id = ?", manuscriptID).
 		Order("round_number DESC").
 		Preload("Assignments.Reviewer").
-		Preload("Assignments.Files").
+		Preload("Assignments.Files.Uploader").
+		Preload("Assignments.Report").
 		Preload("Creator").
 		First(&round).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -64,7 +66,8 @@ func (r *Repository) ListRoundsByManuscript(ctx context.Context, manuscriptID st
 		Where("manuscript_id = ?", manuscriptID).
 		Order("round_number ASC").
 		Preload("Assignments.Reviewer").
-		Preload("Assignments.Files").
+		Preload("Assignments.Files.Uploader").
+		Preload("Assignments.Report").
 		Preload("Creator").
 		Preload("Files").
 		Find(&rounds).Error

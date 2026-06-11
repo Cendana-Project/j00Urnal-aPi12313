@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"mime/multipart"
 	"strings"
 	"time"
 
@@ -296,6 +297,22 @@ func (s *Service) GetReviewDetails(ctx context.Context, manuscriptID string) (*e
 	return m, rounds, nil
 }
 
+// UploadCopyeditedFile allows an editor to upload a revised manuscript file.
+func (s *Service) UploadCopyeditedFile(ctx context.Context, manuscriptID, editorID string, fh *multipart.FileHeader) (*entity.ManuscriptFile, error) {
+	m, err := s.manuscripts.GetByID(ctx, manuscriptID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, constant.ErrRecordNotFound
+	}
+	if err := s.validateEditorAssignment(m, editorID); err != nil {
+		return nil, err
+	}
+
+	return s.manuscripts.UploadFile(ctx, manuscriptID, constant.ManuscriptFileTypeCopyedited, fh)
+}
+
 // ListReviewerCandidates returns users with REVIEWER role.
 func (s *Service) ListReviewerCandidates(ctx context.Context, search string, pg *pagination.Pagination) ([]reviewRepo.ReviewerCandidate, int64, error) {
 	return s.reviewRepo.ListReviewerCandidates(ctx, search, pg)
@@ -306,8 +323,8 @@ func (s *Service) ListReviewerCandidates(ctx context.Context, search string, pg 
 // ====================================================================
 
 // InviteReviewer invites a prospective reviewer by email for the manuscript's current review round
-// (latest round with status PENDING or IN_REVIEW). Invitation and review due date both default to 7 days from now.
-func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail, editorID string) (*entity.ReviewAssignment, error) {
+// (latest round with status PENDING or IN_REVIEW). Invitation and review due date are taken from request.
+func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail, editorID string, dueDate time.Time) (*entity.ReviewAssignment, error) {
 	m, err := s.manuscripts.GetByID(ctx, manuscriptID)
 	if err != nil {
 		return nil, err
@@ -317,6 +334,11 @@ func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail,
 	}
 	if err := s.validateEditorAssignment(m, editorID); err != nil {
 		return nil, err
+	}
+
+	dueUTC := dueDate.UTC()
+	if !dueUTC.After(time.Now().UTC()) {
+		return nil, constant.ErrDueDateInPast
 	}
 
 	latest, err := s.reviewRepo.GetLatestRoundByManuscript(ctx, manuscriptID)
@@ -352,8 +374,8 @@ func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail,
 	}
 
 	token := util.GenerateSecureToken(32)
-	now := time.Now()
-	dueDate := now.Add(invitationExpiryDays * 24 * time.Hour)
+	now := time.Now().UTC()
+	expiry := dueUTC
 
 	assignment := &entity.ReviewAssignment{
 		ReviewRoundID:       round.ID,
@@ -362,8 +384,8 @@ func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail,
 		AssignedBy:          editorID,
 		Status:              constant.ReviewAssignmentStatusInvited,
 		InvitationToken:     &token,
-		InvitationExpiresAt: dueDate,
-		DueDate:             dueDate,
+		InvitationExpiresAt: expiry,
+		DueDate:             dueUTC,
 		CreatedAt:           now,
 	}
 
@@ -377,7 +399,7 @@ func (s *Service) InviteReviewer(ctx context.Context, manuscriptID, inviteEmail,
 		})
 	}
 
-	util.SafeGo(func() { s.sendReviewerInviteEmail(round, editorID, emailNorm, token, dueDate) })
+	util.SafeGo(func() { s.sendReviewerInviteEmail(round, editorID, emailNorm, token, dueUTC) })
 
 	return s.reviewRepo.GetAssignmentByID(ctx, assignment.ID)
 }
@@ -414,7 +436,7 @@ func (s *Service) InviteRegisteredReviewer(ctx context.Context, roundID, reviewe
 
 	dueUTC := dueDate.UTC()
 	if !dueUTC.After(time.Now().UTC()) {
-		return nil, constant.ErrValidationFailed
+		return nil, constant.ErrDueDateInPast
 	}
 
 	reviewer, err := s.userRepo.GetByID(reviewerUserID)
@@ -453,17 +475,16 @@ func (s *Service) InviteRegisteredReviewer(ctx context.Context, roundID, reviewe
 	}
 
 	now := time.Now().UTC()
-	acceptedAt := now
 	rvID := reviewerUserID
 	assignment := &entity.ReviewAssignment{
 		ReviewRoundID:        roundID,
 		ReviewerID:           &rvID,
 		InvitedEmail:         emailNorm,
 		AssignedBy:           editorID,
-		Status:               constant.ReviewAssignmentStatusAccepted,
+		Status:               constant.ReviewAssignmentStatusInvited,
 		InvitationToken:      nil,
 		InvitationExpiresAt:  dueUTC,
-		InvitationAcceptedAt: &acceptedAt,
+		InvitationAcceptedAt: nil,
 		DueDate:              dueUTC,
 		CreatedAt:            now,
 	}
@@ -918,10 +939,22 @@ func (s *Service) MakeRoundDecision(ctx context.Context, roundID, editorID, deci
 // ====================================================================
 
 func (s *Service) validateEditorAssignment(m *entity.Manuscript, editorID string) error {
-	if m.AssignedEditorID == nil || *m.AssignedEditorID != editorID {
-		return constant.ErrEditorNotAssigned
+	// 1. If user is the assigned editor, allow
+	if m.AssignedEditorID != nil && *m.AssignedEditorID == editorID {
+		return nil
 	}
-	return nil
+
+	// 2. If user is Chief Editor or Super Admin, allow (bypassing specific assignment)
+	isChief, _ := s.roleRepo.UserHasRole(editorID, constant.RoleChiefEditor)
+	if isChief {
+		return nil
+	}
+	isSA, _ := s.roleRepo.UserHasRole(editorID, constant.RoleSuperAdmin)
+	if isSA {
+		return nil
+	}
+
+	return constant.ErrEditorNotAssigned
 }
 
 func (s *Service) notifyAuthorDecision(m *entity.Manuscript, decision, comments string) {

@@ -20,7 +20,7 @@ type ManuscriptResponse struct {
 	UpdatedAt          *time.Time                 `json:"updated_at"`
 	Authors            []ManuscriptAuthorResponse `json:"authors,omitempty"`
 	AuthorsSorted      []string                   `json:"authors_sorted,omitempty"`
-	Files              []ManuscriptFileResponse   `json:"files,omitempty"`
+	File               *ManuscriptFileResponse    `json:"file,omitempty"`
 }
 
 // ManuscriptSubmitterBrief is the account that submitted the manuscript (notifikasi & ownership).

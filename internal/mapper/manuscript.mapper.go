@@ -75,9 +75,10 @@ func ToManuscriptResponse(m *entity.Manuscript) response.ManuscriptResponse {
 		}
 	}
 
-	files := make([]response.ManuscriptFileResponse, len(m.Files))
-	for i, f := range m.Files {
-		files[i] = response.ManuscriptFileResponse{
+	var mFile *response.ManuscriptFileResponse
+	if len(m.Files) > 0 {
+		f := m.Files[0] // absolute latest
+		mFile = &response.ManuscriptFileResponse{
 			ID:         f.ID,
 			FileType:   string(f.FileType),
 			FilePath:   f.FilePath,
@@ -123,7 +124,7 @@ func ToManuscriptResponse(m *entity.Manuscript) response.ManuscriptResponse {
 		UpdatedAt:          m.UpdatedAt,
 		Authors:            allAuthors,
 		AuthorsSorted:      allAuthorsSorted,
-		Files:              files,
+		File:               mFile,
 	}
 }
 
