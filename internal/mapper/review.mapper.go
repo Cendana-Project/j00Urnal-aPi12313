@@ -72,6 +72,14 @@ func ToReviewAssignmentResponse(a *entity.ReviewAssignment) response.ReviewAssig
 		resp.ReviewerEmail = a.Reviewer.Email
 	}
 
+	if a.Report != nil {
+		resp.Report = ToReviewerSavedReportResponse(a.Report)
+	}
+
+	if len(a.Files) > 0 {
+		resp.Files = ToReviewerAssignmentFileResponses(a.Files)
+	}
+
 	return resp
 }
 
@@ -384,9 +392,10 @@ func ToReviewerWorkspaceResponse(
 		if m.AssignedEditor != nil {
 			editorName = formatUserName(m.AssignedEditor)
 		}
-		mFiles := make([]response.ManuscriptFileResponse, len(m.Files))
-		for i, f := range m.Files {
-			mFiles[i] = response.ManuscriptFileResponse{
+		var mFile *response.ManuscriptFileResponse
+		if len(m.Files) > 0 {
+			f := m.Files[0] // absolute latest based on repo ordering
+			mFile = &response.ManuscriptFileResponse{
 				ID:         f.ID,
 				FileType:   string(f.FileType),
 				FilePath:   f.FilePath,
@@ -408,7 +417,7 @@ func ToReviewerWorkspaceResponse(
 			ReceivedAt:      m.CreatedAt,
 			HandlingEditor:  editorName,
 			Authors:         ToReviewerAuthorBriefs(authors),
-			Files:           mFiles,
+			File:            mFile,
 		}
 	} else {
 		out.Manuscript = response.ReviewerWorkspaceManuscript{
@@ -421,12 +430,29 @@ func ToReviewerWorkspaceResponse(
 // ====== Review Detail ======
 
 func ToReviewDetailResponse(m *entity.Manuscript, rounds []entity.ReviewRound) response.ReviewDetailResponse {
-	return response.ReviewDetailResponse{
+	resp := response.ReviewDetailResponse{
 		ManuscriptID: m.ID,
 		Title:        m.Title,
 		Status:       string(m.Status),
 		Rounds:       ToReviewRoundListResponse(rounds),
+		File:         nil,
 	}
+
+	if len(m.Files) > 0 {
+		f := m.Files[0] // absolute latest
+		resp.File = &response.ManuscriptFileResponse{
+			ID:         f.ID,
+			FileType:   string(f.FileType),
+			FilePath:   f.FilePath,
+			Filename:   f.Filename,
+			MimeType:   f.MimeType,
+			SizeBytes:  f.SizeBytes,
+			Version:    f.Version,
+			UploadedAt: f.UploadedAt,
+		}
+	}
+
+	return resp
 }
 
 // ====== Helpers ======

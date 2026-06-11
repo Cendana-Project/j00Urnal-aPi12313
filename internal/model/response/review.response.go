@@ -16,21 +16,23 @@ type ReviewRoundResponse struct {
 }
 
 type ReviewAssignmentResponse struct {
-	ID                   string     `json:"id"`
-	ReviewRoundID        string     `json:"review_round_id"`
-	ReviewerID           string     `json:"reviewer_id,omitempty"`
-	InvitedEmail         string     `json:"invited_email,omitempty"`
-	ReviewerName         string     `json:"reviewer_name"`
-	ReviewerEmail        string     `json:"reviewer_email"`
-	AssignedBy           string     `json:"assigned_by"`
-	Status               string     `json:"status"`
-	InvitationExpiresAt  time.Time  `json:"invitation_expires_at"`
-	InvitationAcceptedAt *time.Time `json:"invitation_accepted_at,omitempty"`
-	DueDate              time.Time  `json:"due_date"`
-	Recommendation       *string    `json:"recommendation,omitempty"`
-	Comments             *string    `json:"comments,omitempty"`
-	CompletedAt          *time.Time `json:"completed_at,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
+	ID                   string                           `json:"id"`
+	ReviewRoundID        string                           `json:"review_round_id"`
+	ReviewerID           string                           `json:"reviewer_id,omitempty"`
+	InvitedEmail         string                           `json:"invited_email,omitempty"`
+	ReviewerName         string                           `json:"reviewer_name"`
+	ReviewerEmail        string                           `json:"reviewer_email"`
+	AssignedBy           string                           `json:"assigned_by"`
+	Status               string                           `json:"status"`
+	InvitationExpiresAt  time.Time                        `json:"invitation_expires_at"`
+	InvitationAcceptedAt *time.Time                       `json:"invitation_accepted_at,omitempty"`
+	DueDate              time.Time                        `json:"due_date"`
+	Recommendation       *string                          `json:"recommendation,omitempty"`
+	Comments             *string                          `json:"comments,omitempty"`
+	CompletedAt          *time.Time                       `json:"completed_at,omitempty"`
+	CreatedAt            time.Time                        `json:"created_at"`
+	Report               *ReviewerSavedReportResponse     `json:"report,omitempty"`
+	Files                []ReviewerAssignmentFileResponse `json:"files,omitempty"`
 }
 
 type ReviewerCandidateResponse struct {
@@ -64,10 +66,11 @@ type SubmissionListItemResponse struct {
 }
 
 type ReviewDetailResponse struct {
-	ManuscriptID string                `json:"manuscript_id"`
-	Title        string                `json:"title"`
-	Status       string                `json:"status"`
-	Rounds       []ReviewRoundResponse `json:"rounds"`
+	ManuscriptID string                  `json:"manuscript_id"`
+	Title        string                  `json:"title"`
+	Status       string                  `json:"status"`
+	Rounds       []ReviewRoundResponse   `json:"rounds"`
+	File         *ManuscriptFileResponse `json:"file,omitempty"`
 }
 
 // ReviewerInvitationPreviewResponse is a public, non-sensitive view for the invitation landing page.
@@ -118,14 +121,14 @@ type ReviewerAuthorBrief struct {
 
 // ReviewerAssignmentFileResponse is metadata for a file linked to the assignment.
 type ReviewerAssignmentFileResponse struct {
-	ID          string    `json:"id"`
-	FileType    string    `json:"file_type"`
-	Filename    string    `json:"filename"`
-	MimeType    string    `json:"mime_type"`
-	SizeBytes   int64     `json:"size_bytes"`
-	UploadedAt  time.Time `json:"uploaded_at"`
-	UploadedBy  string    `json:"uploaded_by"`
-	UploaderName string   `json:"uploader_name,omitempty"`
+	ID           string    `json:"id"`
+	FileType     string    `json:"file_type"`
+	Filename     string    `json:"filename"`
+	MimeType     string    `json:"mime_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	UploadedAt   time.Time `json:"uploaded_at"`
+	UploadedBy   string    `json:"uploaded_by"`
+	UploaderName string    `json:"uploader_name,omitempty"`
 }
 
 // ReviewerSavedReportResponse is structured answers loaded from review_assignment_reports.
@@ -159,17 +162,17 @@ type ReviewerWorkspaceRound struct {
 
 // ReviewerWorkspaceManuscript is manuscript + journal + handling editor context for the workspace page.
 type ReviewerWorkspaceManuscript struct {
-	ID              string                `json:"id"`
-	Title           string                `json:"title"`
-	Status          string                `json:"status"`
-	Section         string                `json:"section"`
-	Abstract        string                `json:"abstract"`
-	ReferenceNumber *int64                `json:"reference_number,omitempty"`
-	JournalName     string                `json:"journal_name,omitempty"`
-	ReceivedAt      time.Time             `json:"received_at"`
-	HandlingEditor  string                `json:"handling_editor_name,omitempty"`
-	Authors         []ReviewerAuthorBrief `json:"authors"`
-	Files           []ManuscriptFileResponse `json:"files,omitempty"`
+	ID              string                  `json:"id"`
+	Title           string                  `json:"title"`
+	Status          string                  `json:"status"`
+	Section         string                  `json:"section"`
+	Abstract        string                  `json:"abstract"`
+	ReferenceNumber *int64                  `json:"reference_number,omitempty"`
+	JournalName     string                  `json:"journal_name,omitempty"`
+	ReceivedAt      time.Time               `json:"received_at"`
+	HandlingEditor  string                  `json:"handling_editor_name,omitempty"`
+	Authors         []ReviewerAuthorBrief   `json:"authors"`
+	File            *ManuscriptFileResponse `json:"file,omitempty"`
 }
 
 // ReviewerWorkspaceResponse is GET /v1/reviewer/assignments/:id.
@@ -186,12 +189,12 @@ type ReviewerWorkspaceResponse struct {
 
 // EditorExtensionRequestListItemResponse is one row in GET /v1/editor/extension-requests.
 type EditorExtensionRequestListItemResponse struct {
-	ID                string     `json:"id"`
+	ID                 string    `json:"id"`
 	ReviewAssignmentID string    `json:"review_assignment_id"`
 	RequestedDue       time.Time `json:"requested_due"`
-	Reason            *string    `json:"reason,omitempty"`
-	Status            string     `json:"status"`
-	CreatedAt         time.Time  `json:"created_at"`
+	Reason             *string   `json:"reason,omitempty"`
+	Status             string    `json:"status"`
+	CreatedAt          time.Time `json:"created_at"`
 
 	AssignmentDueDate time.Time `json:"assignment_due_date"`
 	AssignmentStatus  string    `json:"assignment_status"`
@@ -209,15 +212,15 @@ type EditorExtensionRequestListItemResponse struct {
 // ReviewerHistoryItemResponse matches reviewer History table columns:
 // ID, MM-DD ASSIGNED, SEC, TITLE, REVIEW, EDITOR DECISION (+ ids for navigation).
 type ReviewerHistoryItemResponse struct {
-	ID                   int        `json:"id"` // 1-based row number (table ID column)
-	AssignmentID         string     `json:"assignment_id"`
-	ManuscriptID         string     `json:"manuscript_id"`
-	MMDDAssigned         string     `json:"mm_dd_assigned"` // e.g. "05-24" (UTC)
-	Sec                  string     `json:"sec"`
-	Title                string     `json:"title"`
-	Review               string     `json:"review"`            // reviewer recommendation (display)
-	EditorDecision       string     `json:"editor_decision"`   // editor decision (display)
-	RecommendationCode   *string    `json:"recommendation_code,omitempty"`
-	EditorDecisionCode   *string    `json:"editor_decision_code,omitempty"`
-	CompletedAt          *time.Time `json:"completed_at,omitempty"`
+	ID                 int        `json:"id"` // 1-based row number (table ID column)
+	AssignmentID       string     `json:"assignment_id"`
+	ManuscriptID       string     `json:"manuscript_id"`
+	MMDDAssigned       string     `json:"mm_dd_assigned"` // e.g. "05-24" (UTC)
+	Sec                string     `json:"sec"`
+	Title              string     `json:"title"`
+	Review             string     `json:"review"`          // reviewer recommendation (display)
+	EditorDecision     string     `json:"editor_decision"` // editor decision (display)
+	RecommendationCode *string    `json:"recommendation_code,omitempty"`
+	EditorDecisionCode *string    `json:"editor_decision_code,omitempty"`
+	CompletedAt        *time.Time `json:"completed_at,omitempty"`
 }

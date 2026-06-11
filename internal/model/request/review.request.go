@@ -8,8 +8,9 @@ type AssignEditorRequest struct {
 }
 
 type InviteReviewerRequest struct {
-	ManuscriptID string `json:"manuscript_id" binding:"required,uuid"`
-	Email        string `json:"email" binding:"required,email"`
+	ManuscriptID string    `json:"manuscript_id" binding:"required,uuid"`
+	Email        string    `json:"email" binding:"required,email"`
+	DueDate      time.Time `json:"due_date" binding:"required"`
 }
 
 // InviteRegisteredReviewerRequest assigns an existing user (REVIEWER role) to a review round with a due date.

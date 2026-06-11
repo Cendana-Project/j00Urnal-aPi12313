@@ -226,6 +226,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			editor.POST("/invite-reviewer", t.reviewController.InviteReviewer)
 			editor.POST("/invite-registered-reviewer", t.reviewController.InviteRegisteredReviewer)
 			editor.POST("/rounds/decision", t.reviewController.MakeRoundDecision)
+			editor.POST("/manuscripts/:id/files/copyedited", t.reviewController.UploadCopyeditedFile)
 		}
 
 		requireReviewer := transportmw.RequireReviewer(t.roleRepo)
@@ -235,6 +236,8 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			reviewer.GET("/history", t.reviewController.ListReviewerHistory)
 			reviewer.GET("/assignments", t.reviewController.ListReviewerAssignments)
 			reviewer.GET("/assignments/:id", t.reviewController.GetReviewerAssignmentWorkspace)
+			reviewer.POST("/assignments/:id/accept", t.reviewController.AcceptReviewAssignment)
+			reviewer.POST("/assignments/:id/decline", t.reviewController.DeclineReviewAssignment)
 			reviewer.GET("/review-form-schema", t.reviewController.GetReviewerFormSchema)
 			reviewer.PATCH("/assignments/:id/draft", t.reviewController.PatchReviewerReportDraft)
 			reviewer.POST("/assignments/:id/files", t.reviewController.UploadReviewerPDF)

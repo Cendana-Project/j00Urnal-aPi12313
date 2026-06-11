@@ -74,6 +74,7 @@ const (
 	MsgExtensionRequestNotFound         MessageCode = "EXTENSION_REQUEST_NOT_FOUND"
 	MsgExtensionRequestAlreadyDecided   MessageCode = "EXTENSION_REQUEST_ALREADY_DECIDED"
 	MsgExtensionRequestForbidden        MessageCode = "EXTENSION_REQUEST_FORBIDDEN"
+	MsgDueDateInPast                    MessageCode = "DUE_DATE_IN_PAST"
 )
 
 var MessageCatalog = map[MessageCode]response.MessageDetail{
@@ -259,6 +260,12 @@ var MessageCatalog = map[MessageCode]response.MessageDetail{
 		DescEng:  "You do not have permission to decide this extension request.",
 		TitleIdn: "Tidak Diizinkan",
 		DescIdn:  "Anda tidak memiliki izin untuk memutuskan permintaan perpanjangan ini.",
+	},
+	MsgDueDateInPast: {
+		TitleEng: "Invalid Due Date",
+		DescEng:  "Due date must be in the future.",
+		TitleIdn: "Tenggat Waktu Tidak Valid",
+		DescIdn:  "Tenggat waktu harus di masa depan.",
 	},
 }
 

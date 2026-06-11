@@ -33,7 +33,9 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*entity.Manuscript
 	var manuscript entity.Manuscript
 	err := infrastructure.GetDB().WithContext(ctx).
 		Preload("Authors").
-		Preload("Files").
+		Preload("Files", func(db *gorm.DB) *gorm.DB {
+			return db.Order("uploaded_at DESC")
+		}).
 		Preload("MainAuthor").
 		Preload("SubmittedBy").
 		Preload("AssignedEditor").

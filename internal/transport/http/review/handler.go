@@ -31,12 +31,33 @@ func NewController(svc *reviewSvc.Service) *Controller {
 
 // ListChiefEditorSubmissions lists manuscripts that need editor assignment.
 func (c *Controller) ListChiefEditorSubmissions(ctx *gin.Context) {
+	tab := ctx.DefaultQuery("tab", "active")
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 	pg := pagination.New(page, pageSize)
 
-	statuses := constant.StatusQueue
-	statuses = append(statuses, constant.ManuscriptStatusAccepted, constant.ManuscriptStatusRejected)
+	var statuses []constant.ManuscriptStatus
+	switch tab {
+	case "unassigned":
+		statuses = []constant.ManuscriptStatus{constant.ManuscriptStatusSubmitted}
+	case "active":
+		statuses = []constant.ManuscriptStatus{
+			constant.ManuscriptStatusAssignedToEditor,
+			constant.ManuscriptStatusUnderReview,
+			constant.ManuscriptStatusRevisionRequired,
+			constant.ManuscriptStatusRevised,
+		}
+	case "archives":
+		statuses = []constant.ManuscriptStatus{
+			constant.ManuscriptStatusAccepted,
+			constant.ManuscriptStatusRejected,
+			constant.ManuscriptStatusPublished,
+		}
+	default:
+		// Default: all non-published manuscripts
+		statuses = constant.StatusQueue
+		statuses = append(statuses, constant.ManuscriptStatusAccepted, constant.ManuscriptStatusRejected)
+	}
 
 	manuscripts, total, err := c.svc.ListSubmissions(ctx.Request.Context(), statuses, pg)
 	if err != nil {
@@ -342,7 +363,7 @@ func (c *Controller) InviteReviewer(ctx *gin.Context) {
 		return
 	}
 
-	assignment, err := c.svc.InviteReviewer(ctx.Request.Context(), req.ManuscriptID, req.Email, userID)
+	assignment, err := c.svc.InviteReviewer(ctx.Request.Context(), req.ManuscriptID, req.Email, userID, req.DueDate)
 	if err != nil {
 		util.HandleError(ctx, err)
 		return
@@ -407,6 +428,29 @@ func (c *Controller) MakeRoundDecision(ctx *gin.Context) {
 
 	res := response.NewResponseOK()
 	res.Message = "Decision recorded"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// UploadCopyeditedFile accepts a revised PDF/DOC from the editor (field "file").
+func (c *Controller) UploadCopyeditedFile(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	id := ctx.Param("id")
+	fh, err := ctx.FormFile("file")
+	if err != nil {
+		util.HandleError(ctx, constant.ErrValidationError)
+		return
+	}
+	f, err := c.svc.UploadCopyeditedFile(ctx.Request.Context(), id, userID, fh)
+	if err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Data = f
 	util.HandleResponse(ctx, res, nil)
 }
 
@@ -559,6 +603,8 @@ func (c *Controller) ListReviewerAssignments(ctx *gin.Context) {
 	statusStr := strings.ToUpper(strings.TrimSpace(ctx.DefaultQuery("status", "ACCEPTED")))
 	var st constant.ReviewAssignmentStatus
 	switch statusStr {
+	case "INVITED":
+		st = constant.ReviewAssignmentStatusInvited
 	case "ACCEPTED":
 		st = constant.ReviewAssignmentStatusAccepted
 	case "COMPLETED":
@@ -721,5 +767,43 @@ func (c *Controller) RequestReviewerExtension(ctx *gin.Context) {
 	}
 	res := response.NewResponseOK()
 	res.Message = "Extension request submitted"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// AcceptReviewAssignment marks an INVITED assignment as ACCEPTED for the logged-in reviewer.
+func (c *Controller) AcceptReviewAssignment(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	id := strings.TrimSpace(ctx.Param("id"))
+	if err := c.svc.AcceptReviewerAssignment(ctx.Request.Context(), userID, id); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Assignment accepted"
+	util.HandleResponse(ctx, res, nil)
+}
+
+// DeclineReviewAssignment marks an INVITED assignment as DECLINED for the logged-in reviewer.
+func (c *Controller) DeclineReviewAssignment(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+	id := strings.TrimSpace(ctx.Param("id"))
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = ctx.ShouldBindJSON(&req)
+	if err := c.svc.DeclineReviewerAssignment(ctx.Request.Context(), userID, id, req.Reason); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+	res := response.NewResponseOK()
+	res.Message = "Assignment declined"
 	util.HandleResponse(ctx, res, nil)
 }
