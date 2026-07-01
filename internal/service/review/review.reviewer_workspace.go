@@ -485,11 +485,10 @@ func (s *Service) UploadReviewerAssignmentPDF(ctx context.Context, reviewerID, a
 		safeName = "review.pdf"
 	}
 	storagePath := path.Join("reviews", assignmentID, uuid.New().String()+"_"+safeName)
-	urlOrPath, err := s.UploadReviewFileToStorage(ctx, body, storagePath, "application/pdf")
+	publicURL, err := s.UploadReviewFileToStorage(ctx, body, storagePath, "application/pdf")
 	if err != nil {
 		return nil, err
 	}
-	_ = urlOrPath
 
 	aid := assignmentID
 	rf := &entity.ReviewFile{
@@ -498,7 +497,7 @@ func (s *Service) UploadReviewerAssignmentPDF(ctx context.Context, reviewerID, a
 		ReviewRoundID:      a.ReviewRoundID,
 		UploadedBy:         reviewerID,
 		FileType:           string(constant.ReviewFileTypeReviewerPDF),
-		FilePath:           storagePath,
+		FilePath:           publicURL,
 		Filename:           safeName,
 		MimeType:           "application/pdf",
 		SizeBytes:          int64(len(body)),

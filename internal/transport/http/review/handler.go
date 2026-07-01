@@ -46,6 +46,12 @@ func (c *Controller) ListChiefEditorSubmissions(ctx *gin.Context) {
 			constant.ManuscriptStatusUnderReview,
 			constant.ManuscriptStatusRevisionRequired,
 			constant.ManuscriptStatusRevised,
+			constant.ManuscriptStatusAccepted,
+			constant.ManuscriptStatusInProduction,
+		}
+	case "production":
+		statuses = []constant.ManuscriptStatus{
+			constant.ManuscriptStatusInProduction,
 		}
 	case "archives":
 		statuses = []constant.ManuscriptStatus{
@@ -236,6 +242,30 @@ func (c *Controller) SendToReview(ctx *gin.Context) {
 	if round != nil {
 		res.Data = mapper.ToReviewRoundResponse(round)
 	}
+	util.HandleResponse(ctx, res, nil)
+}
+
+// SendToProduction moves an accepted manuscript to production.
+func (c *Controller) SendToProduction(ctx *gin.Context) {
+	userID := util.GetUserID(ctx)
+	if userID == "" {
+		util.HandleError(ctx, constant.ErrUnauthorized)
+		return
+	}
+
+	manuscriptID := strings.TrimSpace(ctx.Param("id"))
+	if manuscriptID == "" {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+
+	if err := c.svc.SendToProduction(ctx.Request.Context(), manuscriptID, userID); err != nil {
+		util.HandleError(ctx, err)
+		return
+	}
+
+	res := response.NewResponseOK()
+	res.Message = "Manuscript moved to production"
 	util.HandleResponse(ctx, res, nil)
 }
 
@@ -444,6 +474,21 @@ func (c *Controller) UploadCopyeditedFile(ctx *gin.Context) {
 		util.HandleError(ctx, constant.ErrValidationError)
 		return
 	}
+
+	allowedMimes := []string{
+		"application/pdf",
+		"application/msword",
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	}
+	if err := util.ValidateFile(fh, 20*1024*1024, allowedMimes); err != nil {
+		util.HandleError(ctx, response.CustomError{
+			Code:       constant.ErrValidationFailed.Code,
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+		})
+		return
+	}
+
 	f, err := c.svc.UploadCopyeditedFile(ctx.Request.Context(), id, userID, fh)
 	if err != nil {
 		util.HandleError(ctx, err)
@@ -600,7 +645,7 @@ func (c *Controller) ListReviewerAssignments(ctx *gin.Context) {
 	page, pageSize = pagination.NormalizeQuery(page, pageSize)
 	pg := pagination.New(page, pageSize)
 
-	statusStr := strings.ToUpper(strings.TrimSpace(ctx.DefaultQuery("status", "ACCEPTED")))
+	statusStr := strings.ToUpper(strings.TrimSpace(ctx.DefaultQuery("status", "INVITED")))
 	var st constant.ReviewAssignmentStatus
 	switch statusStr {
 	case "INVITED":
