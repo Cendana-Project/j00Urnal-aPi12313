@@ -359,6 +359,21 @@ func (s *Service) ListByAssignedEditor(ctx context.Context, editorID string, sta
 	return s.manuscriptRepo.ListByAssignedEditor(ctx, editorID, statuses, pg)
 }
 
+// MoveToProduction transitions an ACCEPTED manuscript to IN_PRODUCTION status.
+func (s *Service) MoveToProduction(ctx context.Context, id string) error {
+	m, err := s.manuscriptRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return constant.ErrRecordNotFound
+	}
+	if m.Status != constant.ManuscriptStatusAccepted {
+		return constant.ErrInvalidManuscriptStatus
+	}
+	return s.manuscriptRepo.UpdateStatus(ctx, id, constant.ManuscriptStatusInProduction)
+}
+
 func (s *Service) UpdateAuthors(ctx context.Context, manuscriptID string, authors []entity.ManuscriptAuthor) error {
 	m, err := s.manuscriptRepo.GetByID(ctx, manuscriptID)
 	if err != nil {

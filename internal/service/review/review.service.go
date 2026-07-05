@@ -137,6 +137,12 @@ func (s *Service) ListEditorSubmissions(ctx context.Context, editorID string, ta
 			constant.ManuscriptStatusUnderReview,
 			constant.ManuscriptStatusRevisionRequired,
 			constant.ManuscriptStatusRevised,
+			constant.ManuscriptStatusAccepted,
+			constant.ManuscriptStatusInProduction,
+		}
+	case "production":
+		statuses = []constant.ManuscriptStatus{
+			constant.ManuscriptStatusInProduction,
 		}
 	case "archives":
 		statuses = []constant.ManuscriptStatus{
@@ -277,6 +283,24 @@ func (s *Service) RequestRevision(ctx context.Context, manuscriptID, editorID, c
 	util.SafeGo(func() { s.notifyAuthorDecision(m, "REVISION_REQUIRED", comments) })
 
 	return nil
+}
+
+// SendToProduction transitions an ACCEPTED manuscript to IN_PRODUCTION status.
+func (s *Service) SendToProduction(ctx context.Context, manuscriptID, editorID string) error {
+	m, err := s.manuscripts.GetByID(ctx, manuscriptID)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return constant.ErrRecordNotFound
+	}
+	if err := s.validateEditorAssignment(m, editorID); err != nil {
+		return err
+	}
+	if m.Status != constant.ManuscriptStatusAccepted {
+		return constant.ErrInvalidManuscriptStatus
+	}
+	return s.manuscripts.MoveToProduction(ctx, manuscriptID)
 }
 
 // GetReviewDetails returns all review rounds and assignments for a manuscript.
@@ -914,7 +938,7 @@ func (s *Service) MakeRoundDecision(ctx context.Context, roundID, editorID, deci
 	// Update manuscript status based on decision
 	var newStatus constant.ManuscriptStatus
 	switch decision {
-	case "ACCEPT":
+	case "ACCEPT", "SKIP_ACCEPT":
 		newStatus = constant.ManuscriptStatusAccepted
 	case "REJECT":
 		newStatus = constant.ManuscriptStatusRejected

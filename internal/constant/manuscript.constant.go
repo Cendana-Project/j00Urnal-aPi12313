@@ -27,6 +27,8 @@ var (
 		ManuscriptStatusUnderReview,
 		ManuscriptStatusRevisionRequired,
 		ManuscriptStatusRevised,
+		ManuscriptStatusAccepted,
+		ManuscriptStatusInProduction,
 	}
 
 	StatusArchives = []ManuscriptStatus{

@@ -208,6 +208,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			chiefEditor.GET("/submissions", t.reviewController.ListChiefEditorSubmissions)
 			chiefEditor.GET("/editor-candidates", t.reviewController.ListEditorCandidates)
 			chiefEditor.POST("/manuscripts/assign-editor", t.reviewController.AssignEditor)
+			chiefEditor.POST("/manuscripts/:id/send-to-production", t.reviewController.SendToProduction)
 		}
 
 		// Editor: manage assigned manuscripts & review workflow
@@ -219,6 +220,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			editor.GET("/extension-requests", t.reviewController.ListEditorExtensionRequests)
 			editor.POST("/extension-requests/:id/decision", t.reviewController.DecideExtensionRequest)
 			editor.POST("/manuscripts/send-to-review", t.reviewController.SendToReview)
+			editor.POST("/manuscripts/:id/send-to-production", t.reviewController.SendToProduction)
 			editor.POST("/manuscripts/accept", t.reviewController.AcceptManuscript)
 			editor.POST("/manuscripts/decline", t.reviewController.DeclineManuscript)
 			editor.POST("/manuscripts/request-revision", t.reviewController.RequestRevision)

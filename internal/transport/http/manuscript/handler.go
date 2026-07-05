@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/mapper"
 	"github.com/api-monolith-template/internal/model/entity"
@@ -61,6 +63,34 @@ func (c *Controller) checkAccess(ctx *gin.Context, manuscriptID string) error {
 	}
 
 	return constant.ErrForbidden
+}
+
+// tryParseUserID attempts to extract user ID from a Bearer JWT token.
+// Returns empty string if token is missing or invalid.
+func tryParseUserID(authHeader string) string {
+	if !strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+		return ""
+	}
+	raw := strings.TrimSpace(authHeader[7:])
+	if raw == "" {
+		return ""
+	}
+	secret := []byte(config.Env.Token.AccessTokenSecret)
+	tok, err := jwt.Parse(raw, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return secret, nil
+	})
+	if err != nil || !tok.Valid {
+		return ""
+	}
+	claims, ok := tok.Claims.(jwt.MapClaims)
+	if !ok {
+		return ""
+	}
+	sub, _ := claims["sub"].(string)
+	return sub
 }
 
 // Submit handles manuscript submission by authors
@@ -188,6 +218,20 @@ func (c *Controller) GetByID(ctx *gin.Context) {
 	if m == nil {
 		util.HandleError(ctx, constant.ErrRecordNotFound)
 		return
+	}
+
+	// Published manuscripts are publicly accessible.
+	// Non-published manuscripts require authentication.
+	if m.Status != constant.ManuscriptStatusPublished {
+		userID := util.GetUserID(ctx)
+		if userID == "" {
+			// Route is public, try to parse JWT from header manually
+			userID = tryParseUserID(ctx.GetHeader("Authorization"))
+			if userID == "" {
+				util.HandleError(ctx, constant.ErrUnauthorized)
+				return
+			}
+		}
 	}
 
 	res := response.NewResponseOK()
