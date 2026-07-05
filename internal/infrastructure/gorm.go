@@ -190,11 +190,17 @@ func logPoolStats(db *sql.DB) {
 	}).Debug("database connection pool stats")
 }
 
-// GetDB returns the current database connection.
+// GetDB returns a new isolated session from the current database connection.
+// Each call creates a fresh GORM session with NewDB: true, ensuring
+// concurrent goroutines never share internal GORM statement state
+// (preloads, clauses, etc.), which prevents race conditions under load.
 // Use this instead of storing the DB pointer in long-lived structs
 // to ensure you always have the latest connection after a reconnect.
 func GetDB() *gorm.DB {
-	return DB
+	if DB == nil {
+		return nil
+	}
+	return DB.Session(&gorm.Session{NewDB: true})
 }
 
 // reconnectDBConn attempts to reconnect to database with exponential backoff
