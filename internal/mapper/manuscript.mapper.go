@@ -76,9 +76,9 @@ func ToManuscriptResponse(m *entity.Manuscript) response.ManuscriptResponse {
 	}
 
 	var mFile *response.ManuscriptFileResponse
-	if len(m.Files) > 0 {
-		f := m.Files[0] // absolute latest
-		mFile = &response.ManuscriptFileResponse{
+	mFiles := make([]response.ManuscriptFileResponse, 0, len(m.Files))
+	for _, f := range m.Files {
+		mapped := response.ManuscriptFileResponse{
 			ID:         f.ID,
 			FileType:   string(f.FileType),
 			FilePath:   f.FilePath,
@@ -87,6 +87,11 @@ func ToManuscriptResponse(m *entity.Manuscript) response.ManuscriptResponse {
 			SizeBytes:  f.SizeBytes,
 			Version:    f.Version,
 			UploadedAt: f.UploadedAt,
+		}
+		mFiles = append(mFiles, mapped)
+		// Keep singular File set to the single latest (first after ordering by uploaded_at DESC)
+		if mFile == nil {
+			mFile = &mapped
 		}
 	}
 
@@ -124,6 +129,7 @@ func ToManuscriptResponse(m *entity.Manuscript) response.ManuscriptResponse {
 		UpdatedAt:          m.UpdatedAt,
 		Authors:            allAuthors,
 		AuthorsSorted:      allAuthorsSorted,
+		Files:              mFiles,
 		File:               mFile,
 	}
 }
