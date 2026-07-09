@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/mapper"
@@ -446,12 +447,25 @@ func (c *Controller) MakeRoundDecision(ctx *gin.Context) {
 	}
 
 	var req request.RoundDecisionRequest
-	if err := util.BindAndValidate(ctx, &req); err != nil {
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		util.HandleError(ctx, err)
 		return
 	}
 
-	if err := c.svc.MakeRoundDecision(ctx.Request.Context(), req.RoundID, userID, req.Decision, req.Comments); err != nil {
+	roundID := req.RoundID
+	if roundID == "" {
+		roundID = req.ReviewRoundID
+	}
+	if roundID == "" {
+		util.HandleError(ctx, constant.ErrValidationError)
+		return
+	}
+	if _, err := uuid.Parse(roundID); err != nil {
+		util.HandleError(ctx, constant.ErrInvalidUUIDFormat)
+		return
+	}
+
+	if err := c.svc.MakeRoundDecision(ctx.Request.Context(), roundID, userID, req.Decision, req.Comments); err != nil {
 		util.HandleError(ctx, err)
 		return
 	}
@@ -645,9 +659,12 @@ func (c *Controller) ListReviewerAssignments(ctx *gin.Context) {
 	page, pageSize = pagination.NormalizeQuery(page, pageSize)
 	pg := pagination.New(page, pageSize)
 
-	statusStr := strings.ToUpper(strings.TrimSpace(ctx.DefaultQuery("status", "INVITED")))
+	statusStr := strings.ToUpper(strings.TrimSpace(ctx.DefaultQuery("status", "ALL")))
 	var st constant.ReviewAssignmentStatus
+	var showAll bool
 	switch statusStr {
+	case "ALL", "":
+		showAll = true
 	case "INVITED":
 		st = constant.ReviewAssignmentStatusInvited
 	case "ACCEPTED":
@@ -659,7 +676,15 @@ func (c *Controller) ListReviewerAssignments(ctx *gin.Context) {
 		return
 	}
 
-	items, total, err := c.svc.ListReviewerAssignments(ctx.Request.Context(), userID, st, pg)
+	var items []response.ReviewerAssignmentListItemResponse
+	var total int64
+	var err error
+
+	if showAll {
+		items, total, err = c.svc.ListReviewerAssignmentsAll(ctx.Request.Context(), userID, pg)
+	} else {
+		items, total, err = c.svc.ListReviewerAssignments(ctx.Request.Context(), userID, st, pg)
+	}
 	if err != nil {
 		util.HandleError(ctx, err)
 		return

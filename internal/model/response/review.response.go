@@ -124,6 +124,7 @@ type ReviewerAssignmentFileResponse struct {
 	ID           string    `json:"id"`
 	FileType     string    `json:"file_type"`
 	Filename     string    `json:"filename"`
+	FileURL      string    `json:"file_url"`
 	MimeType     string    `json:"mime_type"`
 	SizeBytes    int64     `json:"size_bytes"`
 	UploadedAt   time.Time `json:"uploaded_at"`

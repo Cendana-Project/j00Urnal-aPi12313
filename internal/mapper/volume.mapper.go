@@ -16,6 +16,11 @@ func ToVolumeResponse(v *entity.Volume) response.VolumeResponse {
 		UpdatedAt: v.UpdatedAt,
 	}
 
+	if v.Journal != nil {
+		jResp := ToJournalResponse(v.Journal)
+		resp.Journal = &jResp
+	}
+
 	if len(v.Issues) > 0 {
 		resp.Issues = make([]response.IssueResponse, len(v.Issues))
 		for k, i := range v.Issues {

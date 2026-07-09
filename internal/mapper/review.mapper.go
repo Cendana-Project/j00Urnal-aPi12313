@@ -330,6 +330,7 @@ func ToReviewerAssignmentFileResponses(files []entity.ReviewFile) []response.Rev
 			ID:           f.ID,
 			FileType:     f.FileType,
 			Filename:     f.Filename,
+			FileURL:      f.FilePath,
 			MimeType:     f.MimeType,
 			SizeBytes:    f.SizeBytes,
 			UploadedAt:   f.UploadedAt,

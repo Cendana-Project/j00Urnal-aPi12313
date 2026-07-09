@@ -107,6 +107,60 @@ LIMIT ? OFFSET ?
 	return rows, total, nil
 }
 
+// ListReviewerAssignmentsAll lists assignments for a reviewer across all active statuses
+// (INVITED, ACCEPTED, COMPLETED), excluding DECLINED / EXPIRED / WITHDRAWN.
+func (r *Repository) ListReviewerAssignmentsAll(ctx context.Context, reviewerID string, pg *pagination.Pagination) ([]ReviewerAssignmentSummaryRow, int64, error) {
+	rid, err := uuid.Parse(strings.TrimSpace(reviewerID))
+	if err != nil {
+		return nil, 0, nil
+	}
+	ridLit := rid.String()
+
+	limit := pagination.DefaultPageSize
+	page := 1
+	if pg != nil {
+		if pg.PageSize > 0 {
+			limit = pg.PageSize
+			if limit > pagination.MaxPageSize {
+				limit = pagination.MaxPageSize
+			}
+		}
+		if pg.Page > 0 {
+			page = pg.Page
+		}
+	}
+	offset := (page - 1) * limit
+
+	baseFrom := `
+FROM review_assignments ra
+JOIN review_rounds rr ON rr.id = ra.review_round_id
+JOIN manuscripts m ON m.id = rr.manuscript_id
+WHERE ra.reviewer_id = '` + ridLit + `'::uuid
+  AND ra.status IN ('INVITED', 'ACCEPTED', 'COMPLETED')
+  AND m.deleted_at IS NULL
+`
+	countSQL := `SELECT COUNT(1) ` + baseFrom
+	var total int64
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(countSQL).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	selectSQL := `
+SELECT ra.id AS assignment_id, ra.review_round_id AS review_round_id, m.id AS manuscript_id,
+       m.title AS manuscript_title, COALESCE(NULLIF(TRIM(m.section), ''), '') AS manuscript_section,
+       m.reference_number AS reference_number, rr.round_number AS round_number,
+       rr.status AS round_status, ra.status AS assignment_status, ra.due_date AS due_date, ra.created_at AS created_at
+` + baseFrom + `
+ORDER BY ra.created_at DESC
+LIMIT ? OFFSET ?
+`
+	var rows []ReviewerAssignmentSummaryRow
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(selectSQL, limit, offset).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
 // GetReportByAssignmentID loads the single report row for an assignment.
 func (r *Repository) GetReportByAssignmentID(ctx context.Context, assignmentID string) (*entity.ReviewAssignmentReport, error) {
 	return r.GetReportByAssignmentDB(ctx, infrastructure.GetDB().WithContext(ctx), assignmentID)

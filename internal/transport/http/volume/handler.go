@@ -7,6 +7,7 @@ import (
 
 	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/mapper"
+	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
 	"github.com/api-monolith-template/internal/repository/role"
@@ -45,29 +46,34 @@ func (c *Controller) Create(ctx *gin.Context) {
 
 func (c *Controller) GetAll(ctx *gin.Context) {
 	userID := util.GetUserID(ctx)
-	roles, err := c.roleRepo.ListRolesByUser(ctx.Request.Context(), userID)
-	if err != nil {
-		util.HandleError(ctx, err)
-		return
-	}
-
-	isAllowed := false
-	for _, r := range roles {
-		if r.Slug == constant.RoleSuperAdmin || r.Slug == constant.RoleChiefEditor {
-			isAllowed = true
-			break
+	isPrivileged := false
+	if userID != "" {
+		roles, err := c.roleRepo.ListRolesByUser(ctx.Request.Context(), userID)
+		if err == nil {
+			for _, r := range roles {
+				if r.Slug == constant.RoleSuperAdmin || r.Slug == constant.RoleChiefEditor {
+					isPrivileged = true
+					break
+				}
+			}
 		}
-	}
-
-	if !isAllowed {
-		util.HandleError(ctx, constant.ErrForbidden)
-		return
 	}
 
 	volumes, err := c.svc.GetAll(ctx.Request.Context())
 	if err != nil {
 		util.HandleError(ctx, err)
 		return
+	}
+
+	// Filter to PUBLISHED only for public users
+	if !isPrivileged {
+		filtered := make([]*entity.Volume, 0, len(volumes))
+		for _, v := range volumes {
+			if v != nil && v.Status == constant.PublicationStatusPublished {
+				filtered = append(filtered, v)
+			}
+		}
+		volumes = filtered
 	}
 
 	res := response.NewResponseOK()

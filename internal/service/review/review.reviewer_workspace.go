@@ -75,6 +75,15 @@ func (s *Service) ListReviewerAssignments(ctx context.Context, reviewerID string
 	return mapper.ToReviewerAssignmentListResponse(rows), total, nil
 }
 
+// ListReviewerAssignmentsAll returns the reviewer's assignments across all active statuses.
+func (s *Service) ListReviewerAssignmentsAll(ctx context.Context, reviewerID string, pg *pagination.Pagination) ([]response.ReviewerAssignmentListItemResponse, int64, error) {
+	rows, total, err := s.reviewRepo.ListReviewerAssignmentsAll(ctx, reviewerID, pg)
+	if err != nil {
+		return nil, 0, err
+	}
+	return mapper.ToReviewerAssignmentListResponse(rows), total, nil
+}
+
 // GetReviewerAssignmentWorkspace returns one assignment with round + manuscript context, report, files, and workflow stepper.
 // Form schema JSON: GET /v1/reviewer/review-form-schema (not duplicated here).
 func (s *Service) GetReviewerAssignmentWorkspace(ctx context.Context, reviewerID, assignmentID string) (*response.ReviewerWorkspaceResponse, error) {

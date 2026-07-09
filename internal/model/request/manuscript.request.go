@@ -38,7 +38,7 @@ type ManuscriptAuthorRequest struct {
 }
 
 type PublishManuscriptRequest struct {
-	IssueID string `json:"issue_id" binding:"required,uuid"`
+	IssueID string `json:"issue_id"`
 }
 
 type AuthorManuscriptFilterRequest struct {

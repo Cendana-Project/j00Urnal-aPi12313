@@ -17,6 +17,24 @@ func ToIssueResponse(i *entity.Issue) response.IssueResponse {
 		UpdatedAt:       i.UpdatedAt,
 	}
 
+	if i.Volume != nil {
+		v := i.Volume
+		volResp := response.VolumeResponse{
+			ID:        v.ID,
+			JournalID: v.JournalID,
+			Year:      v.Year,
+			Number:    v.Number,
+			Status:    string(v.Status),
+			CreatedAt: v.CreatedAt,
+			UpdatedAt: v.UpdatedAt,
+		}
+		if v.Journal != nil {
+			jResp := ToJournalResponse(v.Journal)
+			volResp.Journal = &jResp
+		}
+		resp.Volume = &volResp
+	}
+
 	if len(i.Manuscripts) > 0 {
 		resp.Manuscripts = make([]response.ManuscriptResponse, len(i.Manuscripts))
 		for k, m := range i.Manuscripts {

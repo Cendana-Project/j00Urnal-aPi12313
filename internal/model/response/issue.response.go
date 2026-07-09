@@ -7,6 +7,7 @@ import (
 type IssueResponse struct {
 	ID              string               `json:"id"`
 	VolumeID        string               `json:"volume_id"`
+	Volume          *VolumeResponse      `json:"volume,omitempty"`
 	Number          int                  `json:"number"`
 	PublicationDate string               `json:"publication_date"`
 	Status          string               `json:"status"`

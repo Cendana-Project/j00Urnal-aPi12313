@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
@@ -210,6 +211,10 @@ func (c *Controller) ListAuthorSubmissions(ctx *gin.Context) {
 
 func (c *Controller) GetByID(ctx *gin.Context) {
 	id := ctx.Param("id")
+	if _, err := uuid.Parse(id); err != nil {
+		util.HandleError(ctx, constant.ErrValidationError)
+		return
+	}
 	m, err := c.svc.GetByID(ctx.Request.Context(), id)
 	if err != nil {
 		util.HandleError(ctx, err)
@@ -407,12 +412,31 @@ func (c *Controller) UploadAttachment(ctx *gin.Context) {
 func (c *Controller) Publish(ctx *gin.Context) {
 	id := ctx.Param("id")
 	var req request.PublishManuscriptRequest
-	if err := util.BindAndValidate(ctx, &req); err != nil {
+	if err := util.BindJSONOrEmpty(ctx, &req); err != nil {
 		util.HandleError(ctx, err)
 		return
 	}
 
-	m, err := c.svc.PublishToIssue(ctx.Request.Context(), id, req.IssueID)
+	issueID := req.IssueID
+	// If issue_id is not provided, use the manuscript's current issue
+	if issueID == "" {
+		m, err := c.svc.GetByID(ctx.Request.Context(), id)
+		if err != nil {
+			util.HandleError(ctx, err)
+			return
+		}
+		if m == nil {
+			util.HandleError(ctx, constant.ErrRecordNotFound)
+			return
+		}
+		if m.IssueID == nil || *m.IssueID == "" {
+			util.HandleError(ctx, constant.ErrValidationError)
+			return
+		}
+		issueID = *m.IssueID
+	}
+
+	m, err := c.svc.PublishToIssue(ctx.Request.Context(), id, issueID)
 	if err != nil {
 		util.HandleError(ctx, err)
 		return

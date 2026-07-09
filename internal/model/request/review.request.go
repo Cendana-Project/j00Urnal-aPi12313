@@ -74,7 +74,9 @@ type EditorDecideExtensionRequestBody struct {
 }
 
 type RoundDecisionRequest struct {
-	RoundID  string `json:"round_id" binding:"required,uuid"`
+	RoundID  string `json:"round_id"`
+	// Alias: FE sends review_round_id on MakeRoundDecision
+	ReviewRoundID string `json:"review_round_id"`
 	Decision string `json:"decision" binding:"required,oneof=ACCEPT REJECT REVISION_REQUIRED SKIP_ACCEPT"`
 	Comments string `json:"comments"`
 }
