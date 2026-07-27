@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -78,8 +80,42 @@ func InitializeDBConn() *gorm.DB {
 		return sqlDB.Ping()
 	}
 
+	// Register a second, independent check that hits Supabase's PostgREST
+	// gateway directly. A raw Postgres ping through the pooler does NOT reset
+	// Supabase's free-tier inactivity timer - only requests through its own
+	// API surface (REST/Auth/Storage/Realtime) do. This keeps the project
+	// from auto-pausing even if the pooler connection above is not counted.
+	MapHealthCheck["supabase_rest"] = pingSupabaseRest
+
 	logrus.Info("database connection established successfully")
 	return DB
+}
+
+// pingSupabaseRest issues a lightweight request through Supabase's PostgREST
+// API gateway (not a direct Postgres connection), since Supabase's inactivity
+// tracker only counts requests going through its own API surface.
+func pingSupabaseRest(ctx context.Context) error {
+	url := fmt.Sprintf("%s/rest/v1/", config.Env.Supabase.URL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", config.Env.Supabase.ServiceRoleKey)
+	req.Header.Set("Authorization", "Bearer "+config.Env.Supabase.ServiceRoleKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("supabase REST ping failed: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
 
 // autoMigrate runs GORM AutoMigrate for development environments
