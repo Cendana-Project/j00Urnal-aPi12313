@@ -12,11 +12,13 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/api-monolith-template/internal/constant"
+	"github.com/api-monolith-template/internal/email"
 	"github.com/api-monolith-template/internal/infrastructure"
 	"github.com/api-monolith-template/internal/mapper"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
+	reviewRepo "github.com/api-monolith-template/internal/repository/review"
 	"github.com/api-monolith-template/internal/util"
 	"github.com/api-monolith-template/pkg/pagination"
 )
@@ -288,7 +290,7 @@ func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, re
 		// Legacy: no embedded form — recommendation + comments only.
 	}
 
-	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&entity.ReviewAssignment{}).Where("id = ?", a.ID).Updates(updates).Error; err != nil {
 			return err
 		}
@@ -296,7 +298,13 @@ func (s *Service) submitReviewerReviewWithOptionalReport(ctx context.Context, re
 			return nil
 		}
 		return s.reviewRepo.UpsertReviewReportDB(ctx, tx, repEntity)
-	})
+	}); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() { s.notifyEditorReportSubmitted(a, reviewerID) })
+
+	return nil
 }
 
 func reviewerSubmittedReportEntity(assignmentID string, existing *entity.ReviewAssignmentReport, merged reviewerStoredReport) (*entity.ReviewAssignmentReport, error) {
@@ -333,10 +341,16 @@ func (s *Service) WithdrawReviewerAssignment(ctx context.Context, reviewerID, as
 		return constant.ErrReviewerAssignmentNotAllowed
 	}
 	now := time.Now()
-	return s.reviewRepo.UpdateAssignment(ctx, a.ID, map[string]any{
+	if err := s.reviewRepo.UpdateAssignment(ctx, a.ID, map[string]any{
 		"status":     constant.ReviewAssignmentStatusWithdrawn,
 		"updated_at": now,
-	})
+	}); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() { s.notifyEditorReviewerWithdrawn(a, reviewerID) })
+
+	return nil
 }
 
 // RequestReviewerExtension creates a pending extension request for editors to approve later.
@@ -373,7 +387,13 @@ func (s *Service) RequestReviewerExtension(ctx context.Context, reviewerID, assi
 		Status:             constant.ReviewExtensionStatusPending,
 		CreatedAt:          now,
 	}
-	return s.reviewRepo.CreateExtensionRequest(ctx, row)
+	if err := s.reviewRepo.CreateExtensionRequest(ctx, row); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() { s.notifyEditorExtensionRequested(a, reviewerID, body.RequestedDue) })
+
+	return nil
 }
 
 // ListEditorExtensionRequests lists extension requests for manuscripts owned by the editor.
@@ -433,7 +453,7 @@ func (s *Service) DecideExtensionRequest(ctx context.Context, editorID, requestI
 	}
 
 	now := time.Now()
-	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		extUpdates := map[string]any{
 			"status":     newStatus,
 			"decided_by": editorID,
@@ -452,7 +472,13 @@ func (s *Service) DecideExtensionRequest(ctx context.Context, editorID, requestI
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() { s.notifyReviewerExtensionDecision(row, newStatus == constant.ReviewExtensionStatusApproved) })
+
+	return nil
 }
 
 // UploadReviewerAssignmentPDF stores a reviewer PDF attachment for the assignment.
@@ -540,7 +566,13 @@ func (s *Service) AcceptReviewerAssignment(ctx context.Context, reviewerID, assi
 		"invitation_accepted_at": now,
 		"updated_at":             now,
 	}
-	return s.reviewRepo.UpdateAssignment(ctx, a.ID, updates)
+	if err := s.reviewRepo.UpdateAssignment(ctx, a.ID, updates); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() { s.notifyEditorReviewerAccepted(a, reviewerID) })
+
+	return nil
 }
 
 // DeclineReviewerAssignment marks an INVITED assignment as DECLINED for a logged-in reviewer.
@@ -565,7 +597,19 @@ func (s *Service) DeclineReviewerAssignment(ctx context.Context, reviewerID, ass
 		"comments":   strings.TrimSpace(reason),
 		"updated_at": now,
 	}
-	return s.reviewRepo.UpdateAssignment(ctx, a.ID, updates)
+	if err := s.reviewRepo.UpdateAssignment(ctx, a.ID, updates); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() {
+		reviewerName := reviewerDisplayNameFromEmail(a.InvitedEmail)
+		if reviewer, err := s.userRepo.GetByID(reviewerID); err == nil && reviewer != nil {
+			reviewerName = formatUserName(reviewer)
+		}
+		s.notifyEditorReviewerDeclined(a, reviewerName, reason)
+	})
+
+	return nil
 }
 
 func assertReviewerOwnsAssignment(a *entity.ReviewAssignment, reviewerID string) error {
@@ -573,6 +617,91 @@ func assertReviewerOwnsAssignment(a *entity.ReviewAssignment, reviewerID string)
 		return constant.ErrForbidden
 	}
 	return nil
+}
+
+// notifyEditorReviewerAccepted emails the assigning editor that a reviewer accepted their invitation.
+func (s *Service) notifyEditorReviewerAccepted(a *entity.ReviewAssignment, reviewerID string) {
+	if s.emailSender == nil {
+		return
+	}
+	editor, title, ok := s.loadAssignmentEditor(context.Background(), a)
+	if !ok {
+		return
+	}
+	reviewer, err := s.userRepo.GetByID(reviewerID)
+	if err != nil || reviewer == nil {
+		return
+	}
+	body := email.RenderReviewerAccepted(formatUserName(editor), formatUserName(reviewer), title)
+	_ = s.emailSender.Send(editor.Email, "Reviewer Menerima Undangan - "+title, body)
+}
+
+// notifyEditorReviewerWithdrawn emails the assigning editor that a reviewer withdrew from an assignment.
+func (s *Service) notifyEditorReviewerWithdrawn(a *entity.ReviewAssignment, reviewerID string) {
+	if s.emailSender == nil {
+		return
+	}
+	editor, title, ok := s.loadAssignmentEditor(context.Background(), a)
+	if !ok {
+		return
+	}
+	reviewer, err := s.userRepo.GetByID(reviewerID)
+	if err != nil || reviewer == nil {
+		return
+	}
+	body := email.RenderReviewerWithdrawn(formatUserName(editor), formatUserName(reviewer), title)
+	_ = s.emailSender.Send(editor.Email, "Reviewer Mengundurkan Diri - "+title, body)
+}
+
+// notifyEditorReportSubmitted emails the assigning editor that a reviewer submitted their report.
+func (s *Service) notifyEditorReportSubmitted(a *entity.ReviewAssignment, reviewerID string) {
+	if s.emailSender == nil {
+		return
+	}
+	editor, title, ok := s.loadAssignmentEditor(context.Background(), a)
+	if !ok {
+		return
+	}
+	reviewer, err := s.userRepo.GetByID(reviewerID)
+	if err != nil || reviewer == nil {
+		return
+	}
+	body := email.RenderReviewerReportSubmitted(formatUserName(editor), formatUserName(reviewer), title)
+	_ = s.emailSender.Send(editor.Email, "Laporan Review Diserahkan - "+title, body)
+}
+
+// notifyEditorExtensionRequested emails the assigning editor that a reviewer requested a due-date extension.
+func (s *Service) notifyEditorExtensionRequested(a *entity.ReviewAssignment, reviewerID string, requestedDue time.Time) {
+	if s.emailSender == nil {
+		return
+	}
+	editor, title, ok := s.loadAssignmentEditor(context.Background(), a)
+	if !ok {
+		return
+	}
+	reviewer, err := s.userRepo.GetByID(reviewerID)
+	if err != nil || reviewer == nil {
+		return
+	}
+	body := email.RenderExtensionRequested(formatUserName(editor), formatUserName(reviewer), title, requestedDue.Format("2 January 2006"))
+	_ = s.emailSender.Send(editor.Email, "Permintaan Perpanjangan Review - "+title, body)
+}
+
+// notifyReviewerExtensionDecision emails the reviewer the editor's decision on their extension request.
+func (s *Service) notifyReviewerExtensionDecision(row *reviewRepo.EditorExtensionRequestRow, approved bool) {
+	if s.emailSender == nil || row.ReviewerEmail == nil {
+		return
+	}
+	reviewerName := strings.TrimSpace(strings.Join([]string{derefString(row.ReviewerFirstName), derefString(row.ReviewerLastName)}, " "))
+	if reviewerName == "" {
+		reviewerName = *row.ReviewerEmail
+	}
+	body := email.RenderExtensionDecision(reviewerName, row.ManuscriptTitle, approved, row.RequestedDue.Format("2 January 2006"))
+	subject := "Perpanjangan Review Ditolak - " + row.ManuscriptTitle
+	if approved {
+		subject = "Perpanjangan Review Disetujui - " + row.ManuscriptTitle
+	}
+	_ = s.emailSender.Send(*row.ReviewerEmail, subject, body)
 }
 
 func derefString(s *string) string {

@@ -300,7 +300,22 @@ func (s *Service) SendToProduction(ctx context.Context, manuscriptID, editorID s
 	if m.Status != constant.ManuscriptStatusAccepted {
 		return constant.ErrInvalidManuscriptStatus
 	}
-	return s.manuscripts.MoveToProduction(ctx, manuscriptID)
+	if err := s.manuscripts.MoveToProduction(ctx, manuscriptID); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() { s.notifyAuthorInProduction(m) })
+
+	return nil
+}
+
+func (s *Service) notifyAuthorInProduction(m *entity.Manuscript) {
+	if m.MainAuthor == nil || s.emailSender == nil {
+		return
+	}
+	authorName := formatUserName(m.MainAuthor)
+	body := email.RenderManuscriptInProduction(authorName, m.Title)
+	_ = s.emailSender.Send(m.MainAuthor.Email, "Manuskrip Memasuki Tahap Produksi - "+m.Title, body)
 }
 
 // GetReviewDetails returns all review rounds and assignments for a manuscript.
@@ -881,7 +896,13 @@ func (s *Service) DeclineReviewerInvitation(ctx context.Context, token, reason s
 		"invitation_token": gorm.Expr("NULL"),
 		"updated_at":       now,
 	}
-	return s.reviewRepo.UpdateAssignment(ctx, a.ID, updates)
+	if err := s.reviewRepo.UpdateAssignment(ctx, a.ID, updates); err != nil {
+		return err
+	}
+
+	util.SafeGo(func() { s.notifyEditorReviewerDeclined(a, reviewerDisplayNameFromEmail(a.InvitedEmail), reason) })
+
+	return nil
 }
 
 // ListReviewerHistory returns completed assignments for the reviewer portal.
@@ -990,6 +1011,38 @@ func (s *Service) notifyAuthorDecision(m *entity.Manuscript, decision, comments 
 	if s.emailSender != nil {
 		_ = s.emailSender.Send(m.MainAuthor.Email, "Keputusan Editorial - "+m.Title, body)
 	}
+}
+
+// loadAssignmentEditor hydrates the assignment's round/manuscript graph (if not already loaded) and
+// resolves the assigning editor. Shared by all editor-facing reviewer-action notifications below.
+func (s *Service) loadAssignmentEditor(ctx context.Context, a *entity.ReviewAssignment) (editor *entity.User, manuscriptTitle string, ok bool) {
+	if a.ReviewRound == nil || a.ReviewRound.Manuscript == nil {
+		if err := s.reviewRepo.HydrateAssignmentInvitationGraph(ctx, a); err != nil {
+			return nil, "", false
+		}
+	}
+	if a.ReviewRound == nil || a.ReviewRound.Manuscript == nil {
+		return nil, "", false
+	}
+	e, err := s.userRepo.GetByID(a.AssignedBy)
+	if err != nil || e == nil {
+		return nil, "", false
+	}
+	return e, a.ReviewRound.Manuscript.Title, true
+}
+
+// notifyEditorReviewerDeclined emails the assigning editor that a reviewer declined an invitation
+// (covers both the logged-in decline and the no-account token decline).
+func (s *Service) notifyEditorReviewerDeclined(a *entity.ReviewAssignment, reviewerName, reason string) {
+	if s.emailSender == nil {
+		return
+	}
+	editor, title, ok := s.loadAssignmentEditor(context.Background(), a)
+	if !ok {
+		return
+	}
+	body := email.RenderReviewerDeclined(formatUserName(editor), reviewerName, title, reason)
+	_ = s.emailSender.Send(editor.Email, "Undangan Review Ditolak - "+title, body)
 }
 
 // UploadReviewFileToStorage uploads file bytes to Supabase storage (DRY: reuses storage.Service).

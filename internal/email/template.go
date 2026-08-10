@@ -403,3 +403,115 @@ func RenderReviewResultToAuthor(authorName, manuscriptTitle string, roundNumber 
 	}
 	return buf.String()
 }
+
+// ====== Generic Workflow Notification (shared card layout) ======
+
+var simpleNotificationTmpl = template.Must(template.New("simpleNotification").Parse(`<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f6f9fc;padding:24px">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6ecf1;border-radius:12px;padding:24px">
+    <h2 style="margin:0 0 8px 0;color:#111">MedikaOne Journal</h2>
+    <p style="color:#555">Halo {{.RecipientName}},</p>
+    <p style="color:#555">{{.IntroLine}}</p>
+    <div style="background:#f0f7ff;border:1px solid #cce0ff;border-radius:8px;padding:16px;margin:16px 0">
+      <p style="margin:0;font-weight:700;color:#333">{{.ManuscriptTitle}}</p>
+      {{if .DetailLine}}<p style="margin:8px 0 0 0;color:#555;font-size:14px">{{.DetailLine}}</p>{{end}}
+    </div>
+    <p style="color:#555">Silakan login ke sistem untuk detail lebih lanjut.</p>
+  </div>
+  <div style="text-align:center;color:#99a;font-size:12px;margin-top:10px">© {{.Year}} MedikaOne. Semua hak dilindungi.</div>
+</body></html>`))
+
+func renderSimpleNotification(recipientName, introLine, manuscriptTitle, detailLine string) string {
+	if strings.TrimSpace(recipientName) == "" {
+		recipientName = "Pengguna"
+	}
+	data := struct {
+		RecipientName   string
+		IntroLine       string
+		ManuscriptTitle string
+		DetailLine      string
+		Year            int
+	}{recipientName, introLine, manuscriptTitle, detailLine, YearNow()}
+	var buf bytes.Buffer
+	if err := simpleNotificationTmpl.Execute(&buf, data); err != nil {
+		return ""
+	}
+	return buf.String()
+}
+
+// RenderManuscriptSubmitted confirms receipt of a new submission to the author.
+func RenderManuscriptSubmitted(authorName, manuscriptTitle string) string {
+	return renderSimpleNotification(authorName,
+		"Manuskrip Anda telah berhasil disubmit dan akan segera diperiksa oleh tim editorial kami.",
+		manuscriptTitle, "")
+}
+
+// RenderManuscriptInProduction notifies the author that their accepted manuscript entered production.
+func RenderManuscriptInProduction(authorName, manuscriptTitle string) string {
+	return renderSimpleNotification(authorName,
+		"Manuskrip Anda telah memasuki tahap produksi (copyediting & layout).",
+		manuscriptTitle, "")
+}
+
+// RenderManuscriptPublished notifies the author that their manuscript has been published.
+func RenderManuscriptPublished(authorName, manuscriptTitle, issueLabel string) string {
+	return renderSimpleNotification(authorName,
+		"Selamat! Manuskrip Anda telah dipublikasikan.",
+		manuscriptTitle, issueLabel)
+}
+
+// RenderNewSubmissionAlert notifies Chief Editor/Super Admin that a new manuscript needs editor assignment.
+func RenderNewSubmissionAlert(recipientName, manuscriptTitle, authorName string) string {
+	return renderSimpleNotification(recipientName,
+		"Manuskrip baru telah disubmit dan menunggu penugasan editor.",
+		manuscriptTitle, "Penulis: "+authorName)
+}
+
+// RenderReviewerAccepted notifies the editor that a reviewer accepted their invitation.
+func RenderReviewerAccepted(editorName, reviewerName, manuscriptTitle string) string {
+	return renderSimpleNotification(editorName,
+		reviewerName+" telah menerima undangan review untuk manuskrip berikut.",
+		manuscriptTitle, "")
+}
+
+// RenderReviewerDeclined notifies the editor that a reviewer declined their invitation.
+func RenderReviewerDeclined(editorName, reviewerName, manuscriptTitle, reason string) string {
+	detail := ""
+	if strings.TrimSpace(reason) != "" {
+		detail = "Alasan: " + reason
+	}
+	return renderSimpleNotification(editorName,
+		reviewerName+" menolak undangan review untuk manuskrip berikut.",
+		manuscriptTitle, detail)
+}
+
+// RenderReviewerReportSubmitted notifies the editor that a reviewer submitted their report.
+func RenderReviewerReportSubmitted(editorName, reviewerName, manuscriptTitle string) string {
+	return renderSimpleNotification(editorName,
+		reviewerName+" telah menyerahkan laporan review untuk manuskrip berikut. Silakan tinjau dan buat keputusan editorial.",
+		manuscriptTitle, "")
+}
+
+// RenderReviewerWithdrawn notifies the editor that a reviewer withdrew from an assignment.
+func RenderReviewerWithdrawn(editorName, reviewerName, manuscriptTitle string) string {
+	return renderSimpleNotification(editorName,
+		reviewerName+" mengundurkan diri dari penugasan review untuk manuskrip berikut.",
+		manuscriptTitle, "")
+}
+
+// RenderExtensionRequested notifies the editor that a reviewer requested a due-date extension.
+func RenderExtensionRequested(editorName, reviewerName, manuscriptTitle, requestedDue string) string {
+	return renderSimpleNotification(editorName,
+		reviewerName+" mengajukan perpanjangan batas waktu review untuk manuskrip berikut.",
+		manuscriptTitle, "Batas waktu yang diminta: "+requestedDue)
+}
+
+// RenderExtensionDecision notifies the reviewer of the editor's decision on their extension request.
+func RenderExtensionDecision(reviewerName, manuscriptTitle string, approved bool, dueDate string) string {
+	intro := "Permintaan perpanjangan batas waktu review Anda telah ditolak."
+	detail := ""
+	if approved {
+		intro = "Permintaan perpanjangan batas waktu review Anda telah disetujui."
+		detail = "Batas waktu baru: " + dueDate
+	}
+	return renderSimpleNotification(reviewerName, intro, manuscriptTitle, detail)
+}

@@ -53,6 +53,9 @@ func StartServer() {
 
 	// Infra
 	gormDB := infrastructure.InitializeDBConn()
+	if gormDB == nil {
+		logrus.Warn("starting without a live database connection — will keep retrying in the background; DB-dependent endpoints will error until it reconnects")
+	}
 
 	// Apply pending SQL migrations (goose) in non-production so local/staging DBs stay in sync
 	// (e.g. review_assignments.invited_email). Production should run migrations in CI/deploy.
@@ -67,12 +70,6 @@ func StartServer() {
 		_, err := rdb.Ping(ctx).Result()
 		util.ContinueOrFatal(err)
 	}
-
-	// Get database connection for shutdown
-	db, err := gormDB.DB()
-	util.ContinueOrFatal(err)
-	err = db.Ping()
-	util.ContinueOrFatal(err)
 
 	r := infrastructure.NewGinEngine()
 
@@ -189,7 +186,7 @@ func StartServer() {
 
 	// Services
 	storageService := storageSvc.NewService()
-	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, jRepo, tRepo, uRepo, storageService)
+	manuscriptService := manuscriptSvc.NewService(mRepo, iRepo, jRepo, tRepo, uRepo, storageService, rRepo, sender)
 	authService := authSvc.NewService(uRepo, rRepo, rdb, sender, manuscriptService)
 	termService := termSvc.NewService(tRepo)
 	reviewerForm, err := reviewerform.Load()
@@ -254,7 +251,15 @@ func StartServer() {
 	wait := gracefulShutdown(ctx, config.Env.GracefulShutdownTimeout, map[string]operation{
 		"database connection": func(ctx context.Context) error {
 			infrastructure.StopTickerCh <- true
-			return db.Close()
+			gdb := infrastructure.GetDB()
+			if gdb == nil {
+				return nil
+			}
+			sqlDB, err := gdb.DB()
+			if err != nil {
+				return nil
+			}
+			return sqlDB.Close()
 		},
 		"redis connection": func(ctx context.Context) error {
 			if rdb != nil {
