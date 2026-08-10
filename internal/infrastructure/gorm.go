@@ -30,8 +30,25 @@ var (
 	StopTickerCh chan bool
 )
 
-// InitializeDBConn initializes database connection with production-ready settings
+// healthCheckTimeout bounds every individual health-check probe (DB ping, Supabase REST call)
+// so a hanging dependency can never wedge /_internal/healthz — Render polls that endpoint to
+// decide whether this service is alive.
+const healthCheckTimeout = 5 * time.Second
+
+// supabaseHTTPClient is used only for the supabase_rest health probe; it must have its own
+// bounded timeout since http.DefaultClient has none and would otherwise let a slow/stuck
+// Supabase gateway hang the request forever.
+var supabaseHTTPClient = &http.Client{Timeout: healthCheckTimeout}
+
+// InitializeDBConn initializes the database connection with production-ready settings.
+// A failed initial connection does NOT crash the process: health checks are registered and the
+// server starts anyway (so /_internal/healthz and the keep-alive cron stay reachable), and the
+// periodic checkConnection ticker keeps retrying in the background until Postgres/Supabase comes
+// back — no manual restart needed once the dependency recovers.
 func InitializeDBConn() *gorm.DB {
+	StopTickerCh = make(chan bool)
+	registerDBHealthChecks()
+
 	conn, err := openDBConn(config.Env.Database.DSN)
 	if err != nil {
 		fields := logrus.Fields{"error": err}
@@ -39,17 +56,22 @@ func InitializeDBConn() *gorm.DB {
 		if strings.Contains(errStr, "no such host") || strings.Contains(strings.ToUpper(errStr), "NXDOMAIN") {
 			fields["hint"] = "Database hostname could not be resolved — check DATABASE_DSN matches Supabase Dashboard → Project Settings → Database (use current pooler host). Verify network/VPN/firewall."
 		}
-		logrus.WithFields(fields).Fatal("failed to connect to database")
+		logrus.WithFields(fields).Error("failed to connect to database at startup; server will start anyway and keep retrying in the background")
+		go checkConnection(time.NewTicker(config.Env.Database.PingInterval))
+		return nil
 	}
 
 	DB = conn
-	StopTickerCh = make(chan bool)
-
-	// Start background health check
+	finishDBConnSetup(DB)
 	go checkConnection(time.NewTicker(config.Env.Database.PingInterval))
+	logrus.Info("database connection established successfully")
+	return DB
+}
 
-	// Set log level
-	setLogLevel(DB)
+// finishDBConnSetup runs the one-time setup that only makes sense once a connection is live:
+// log level and (dev-only) AutoMigrate. Called on both first connect and successful reconnect.
+func finishDBConnSetup(db *gorm.DB) {
+	setLogLevel(db)
 
 	// AutoMigrate only in development and NOT using PgBouncer
 	// In production or pooled environments, use explicit migrations via goose
@@ -57,7 +79,7 @@ func InitializeDBConn() *gorm.DB {
 
 	if config.Env.Env != constant.ProductionEnvironment && !isPooled {
 		logrus.Info("running GORM AutoMigrate...")
-		if err := autoMigrate(DB); err != nil {
+		if err := autoMigrate(db); err != nil {
 			logrus.WithError(err).Warn("GORM AutoMigrate failed (this is common with PgBouncer). Skipping auto-migrate...")
 		}
 	} else {
@@ -67,8 +89,12 @@ func InitializeDBConn() *gorm.DB {
 			logrus.Info("skipping GORM AutoMigrate in production (use explicit migrations)")
 		}
 	}
+}
 
-	// Register health check
+// registerDBHealthChecks wires the "database" and "supabase_rest" checks used by
+// /_internal/healthz. Registered unconditionally, even before a connection exists, so the
+// endpoint always reports accurate status instead of missing entries during an outage.
+func registerDBHealthChecks() {
 	MapHealthCheck["database"] = func(ctx context.Context) error {
 		if DB == nil {
 			return errors.New("database connection is nil")
@@ -77,24 +103,25 @@ func InitializeDBConn() *gorm.DB {
 		if err != nil {
 			return err
 		}
-		return sqlDB.Ping()
+		ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
+		defer cancel()
+		return sqlDB.PingContext(ctx)
 	}
 
-	// Register a second, independent check that hits Supabase's PostgREST
-	// gateway directly. A raw Postgres ping through the pooler does NOT reset
-	// Supabase's free-tier inactivity timer - only requests through its own
-	// API surface (REST/Auth/Storage/Realtime) do. This keeps the project
-	// from auto-pausing even if the pooler connection above is not counted.
+	// Second, independent check that hits Supabase's PostgREST gateway directly. A raw
+	// Postgres ping through the pooler does NOT reset Supabase's free-tier inactivity timer -
+	// only requests through its own API surface (REST/Auth/Storage/Realtime) do. This keeps
+	// the project from auto-pausing even if the pooler connection above is not counted.
 	MapHealthCheck["supabase_rest"] = pingSupabaseRest
-
-	logrus.Info("database connection established successfully")
-	return DB
 }
 
-// pingSupabaseRest issues a lightweight request through Supabase's PostgREST
-// API gateway (not a direct Postgres connection), since Supabase's inactivity
-// tracker only counts requests going through its own API surface.
+// pingSupabaseRest issues a lightweight, time-bounded request through Supabase's PostgREST
+// API gateway (not a direct Postgres connection), since Supabase's inactivity tracker only
+// counts requests going through its own API surface.
 func pingSupabaseRest(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
+	defer cancel()
+
 	url := fmt.Sprintf("%s/rest/v1/", config.Env.Supabase.URL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -104,7 +131,7 @@ func pingSupabaseRest(ctx context.Context) error {
 	req.Header.Set("apikey", config.Env.Supabase.ServiceRoleKey)
 	req.Header.Set("Authorization", "Bearer "+config.Env.Supabase.ServiceRoleKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := supabaseHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -196,9 +223,12 @@ func checkConnection(ticker *time.Ticker) {
 				continue
 			}
 
-			// Ping to verify connection
-			if err := sqlDB.Ping(); err != nil {
-				logrus.WithError(err).Error("database ping failed, attempting reconnect...")
+			// Ping (time-bounded) to verify connection
+			pingCtx, cancel := context.WithTimeout(context.Background(), healthCheckTimeout)
+			pingErr := sqlDB.PingContext(pingCtx)
+			cancel()
+			if pingErr != nil {
+				logrus.WithError(pingErr).Error("database ping failed, attempting reconnect...")
 				reconnectDBConn()
 				continue
 			}
@@ -239,16 +269,22 @@ func GetDB() *gorm.DB {
 	return DB.Session(&gorm.Session{NewDB: true})
 }
 
-// reconnectDBConn attempts to reconnect to database with exponential backoff
+// reconnectDBConn attempts to reconnect to the database with exponential backoff. It never
+// crashes the process: if every attempt in this pass fails, it logs and returns — the periodic
+// checkConnection ticker calls it again on the next tick, so retries continue indefinitely until
+// Postgres/Supabase comes back, and the server self-heals without a manual restart.
 func reconnectDBConn() {
 	logrus.Warn("attempting to reconnect to database...")
 
-	// Close existing connection to free up resources
+	// Close existing connection to free up resources, and clear DB so health checks and any
+	// code reading infrastructure.GetDB() during this window see an explicit "down" state
+	// instead of a session over a connection we just closed.
 	if DB != nil {
 		if sqlDB, err := DB.DB(); err == nil {
 			logrus.Info("closing stale database connection before reconnecting...")
 			sqlDB.Close()
 		}
+		DB = nil
 	}
 
 	b := backoff.Backoff{
@@ -283,13 +319,15 @@ func reconnectDBConn() {
 
 		// Successfully reconnected
 		DB = conn
+		finishDBConnSetup(DB)
 		logrus.Info("successfully reconnected to database")
 		b.Reset()
 		return
 	}
 
-	// All retries exhausted
-	logrus.WithError(lastErr).Fatal("maximum retry attempts reached, failed to reconnect")
+	// Give up for this pass only — not fatal. The periodic checkConnection ticker will retry
+	// again on its next tick.
+	logrus.WithError(lastErr).Error("reconnect attempts exhausted for this pass; will retry again on the next health check tick")
 }
 
 // openDBConn opens a new GORM database connection with optimized settings
@@ -324,8 +362,10 @@ func openDBConn(dsn string) (*gorm.DB, error) {
 	// Configure connection pool
 	configureConnectionPool(sqlDB)
 
-	// Test connection
-	if err := sqlDB.Ping(); err != nil {
+	// Test connection (time-bounded — a network blackhole must not hang boot/reconnect forever)
+	pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := sqlDB.PingContext(pingCtx); err != nil {
 		sqlDB.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
@@ -385,7 +425,7 @@ func buildDSN(dsn string) string {
 	// Don't modify if it's already properly configured
 	if strings.Contains(dsn, "pgbouncer=true") {
 		// Supabase connection pooler - already optimized
-		return dsn
+		return ensureConnectTimeout(dsn)
 	}
 
 	params := []string{}
@@ -399,7 +439,7 @@ func buildDSN(dsn string) string {
 	// No additional parameters needed - PrepareStmt: false handles everything
 
 	if len(params) == 0 {
-		return dsn
+		return ensureConnectTimeout(dsn)
 	}
 
 	separator := "?"
@@ -407,5 +447,19 @@ func buildDSN(dsn string) string {
 		separator = "&"
 	}
 
-	return dsn + separator + strings.Join(params, "&")
+	return ensureConnectTimeout(dsn + separator + strings.Join(params, "&"))
+}
+
+// ensureConnectTimeout guarantees a libpq connect_timeout is present so a network blackhole
+// (packets silently dropped, e.g. a paused/misrouted host) can't hang the TCP+auth phase of a
+// connection attempt indefinitely — capped here, PingContext bounds the phase after that.
+func ensureConnectTimeout(dsn string) string {
+	if strings.Contains(dsn, "connect_timeout") {
+		return dsn
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + "connect_timeout=10"
 }

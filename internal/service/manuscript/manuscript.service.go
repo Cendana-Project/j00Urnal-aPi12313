@@ -12,15 +12,18 @@ import (
 
 	"github.com/api-monolith-template/internal/config"
 	"github.com/api-monolith-template/internal/constant"
+	"github.com/api-monolith-template/internal/email"
 	"github.com/api-monolith-template/internal/model/entity"
 	"github.com/api-monolith-template/internal/model/request"
 	"github.com/api-monolith-template/internal/model/response"
 	"github.com/api-monolith-template/internal/repository/issue"
 	"github.com/api-monolith-template/internal/repository/journal"
 	"github.com/api-monolith-template/internal/repository/manuscript"
+	roleRepo "github.com/api-monolith-template/internal/repository/role"
 	"github.com/api-monolith-template/internal/repository/term"
 	userrepo "github.com/api-monolith-template/internal/repository/user"
 	"github.com/api-monolith-template/internal/service/storage"
+	"github.com/api-monolith-template/internal/util"
 	"github.com/api-monolith-template/pkg/pagination"
 )
 
@@ -43,17 +46,21 @@ type Service struct {
 	journalRepo    *journal.Repository
 	termRepo       *term.Repository
 	userRepo       *userrepo.Repository
+	roleRepo       *roleRepo.Repository
 	storage        *storage.Service
+	emailSender    email.Sender
 }
 
-func NewService(mr *manuscript.Repository, ir *issue.Repository, jr *journal.Repository, tr *term.Repository, ur *userrepo.Repository, s *storage.Service) *Service {
+func NewService(mr *manuscript.Repository, ir *issue.Repository, jr *journal.Repository, tr *term.Repository, ur *userrepo.Repository, s *storage.Service, rlr *roleRepo.Repository, es email.Sender) *Service {
 	return &Service{
 		manuscriptRepo: mr,
 		issueRepo:      ir,
 		journalRepo:    jr,
 		termRepo:       tr,
 		userRepo:       ur,
+		roleRepo:       rlr,
 		storage:        s,
+		emailSender:    es,
 	}
 }
 
@@ -141,7 +148,51 @@ func (s *Service) Submit(ctx context.Context, userID string, req request.CreateM
 		return nil, err
 	}
 
+	util.SafeGo(func() { s.notifySubmissionReceived(submitterRow, manuscript.Title) })
+	util.SafeGo(func() { s.notifyEditorialLeadsOfNewSubmission(manuscript.Title, formatUserName(submitterRow)) })
+
 	return s.manuscriptRepo.GetByID(ctx, manuscript.ID)
+}
+
+func (s *Service) notifySubmissionReceived(author *entity.User, manuscriptTitle string) {
+	if author == nil || s.emailSender == nil {
+		return
+	}
+	body := email.RenderManuscriptSubmitted(formatUserName(author), manuscriptTitle)
+	_ = s.emailSender.Send(author.Email, "Manuskrip Diterima - "+manuscriptTitle, body)
+}
+
+func (s *Service) notifyEditorialLeadsOfNewSubmission(manuscriptTitle, authorName string) {
+	if s.roleRepo == nil || s.emailSender == nil {
+		return
+	}
+	leads, err := s.roleRepo.ListActiveEditorialLeads(context.Background())
+	if err != nil {
+		return
+	}
+	for _, lead := range leads {
+		body := email.RenderNewSubmissionAlert(formatUserName(&lead), manuscriptTitle, authorName)
+		_ = s.emailSender.Send(lead.Email, "Manuskrip Baru Menunggu Penugasan Editor - "+manuscriptTitle, body)
+	}
+}
+
+func formatUserName(u *entity.User) string {
+	if u == nil {
+		return "Pengguna"
+	}
+	firstName := ""
+	if u.FirstName != nil {
+		firstName = *u.FirstName
+	}
+	lastName := ""
+	if u.LastName != nil {
+		lastName = *u.LastName
+	}
+	name := strings.TrimSpace(fmt.Sprintf("%s %s", firstName, lastName))
+	if name == "" {
+		return u.Email
+	}
+	return name
 }
 
 // Create (Admin/Legacy) - Keeping for now but potentially deprecated or updated
@@ -303,8 +354,26 @@ func (s *Service) PublishToIssue(ctx context.Context, manuscriptID string, issue
 		return nil, err
 	}
 
+	util.SafeGo(func() { s.notifyManuscriptPublished(m, iss) })
+
 	// 5. Return updated object
 	return m, nil
+}
+
+func (s *Service) notifyManuscriptPublished(m *entity.Manuscript, iss *entity.Issue) {
+	if m == nil || m.MainAuthorID == nil || s.emailSender == nil {
+		return
+	}
+	author, err := s.userRepo.GetByID(*m.MainAuthorID)
+	if err != nil || author == nil {
+		return
+	}
+	issueLabel := ""
+	if iss != nil {
+		issueLabel = fmt.Sprintf("Issue No. %d", iss.Number)
+	}
+	body := email.RenderManuscriptPublished(formatUserName(author), m.Title, issueLabel)
+	_ = s.emailSender.Send(author.Email, "Manuskrip Dipublikasikan - "+m.Title, body)
 }
 
 func (s *Service) GetByID(ctx context.Context, id string) (*entity.Manuscript, error) {

@@ -90,6 +90,21 @@ WHERE ur.user_id = ? AND r.slug = ?` // <=== changed (pakai placeholder)
 	return out.C > 0, nil
 }
 
+// ListActiveEditorialLeads returns active Chief Editor and Super Admin users, used to broadcast
+// notifications (e.g. new manuscript submitted, needs editor assignment) to whoever can act on them.
+func (r *Repository) ListActiveEditorialLeads(ctx context.Context) ([]entity.User, error) {
+	var users []entity.User
+	const q = `
+SELECT DISTINCT u.* FROM users u
+JOIN user_roles ur ON ur.user_id = u.id
+JOIN roles rl ON rl.id = ur.role_id
+WHERE rl.slug IN (?, ?) AND u.deleted_at IS NULL AND u.status = 'active'`
+	if err := infrastructure.GetDB().WithContext(ctx).Raw(q, constant.RoleChiefEditor, constant.RoleSuperAdmin).Scan(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 // ListRolesByUser: daftar role global (aktif) milik user
 func (r *Repository) ListRolesByUser(ctx context.Context, userID string) ([]entity.Role, error) {
 	var roles []entity.Role
