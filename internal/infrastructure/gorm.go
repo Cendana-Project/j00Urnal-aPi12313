@@ -41,30 +41,41 @@ const healthCheckTimeout = 5 * time.Second
 var supabaseHTTPClient = &http.Client{Timeout: healthCheckTimeout}
 
 // InitializeDBConn initializes the database connection with production-ready settings.
-// A failed initial connection does NOT crash the process: health checks are registered and the
-// server starts anyway (so /_internal/healthz and the keep-alive cron stay reachable), and the
-// periodic checkConnection ticker keeps retrying in the background until Postgres/Supabase comes
-// back — no manual restart needed once the dependency recovers.
+// A failed initial connection does NOT crash the process, and — critically — does NOT leave DB
+// nil either: openDBConn hands back a valid *gorm.DB even when the startup ping failed, because
+// database/sql's pool re-dials lazily on every future query. That means DB-backed handlers never
+// see a nil connection and never panic; they just get a normal query error until Postgres/Supabase
+// becomes reachable, at which point requests (and the periodic checkConnection ticker below) start
+// succeeding again on their own — no manual restart needed.
 func InitializeDBConn() *gorm.DB {
 	StopTickerCh = make(chan bool)
 	registerDBHealthChecks()
 
 	conn, err := openDBConn(config.Env.Database.DSN)
-	if err != nil {
+	if conn == nil {
+		// Only nil when gorm.Open/db.DB() itself failed (bad DSN, driver misconfigured) — not
+		// recoverable by retrying the same DSN, but we still must not crash the process.
 		fields := logrus.Fields{"error": err}
-		errStr := err.Error()
+		errStr := ""
+		if err != nil {
+			errStr = err.Error()
+		}
 		if strings.Contains(errStr, "no such host") || strings.Contains(strings.ToUpper(errStr), "NXDOMAIN") {
 			fields["hint"] = "Database hostname could not be resolved — check DATABASE_DSN matches Supabase Dashboard → Project Settings → Database (use current pooler host). Verify network/VPN/firewall."
 		}
-		logrus.WithFields(fields).Error("failed to connect to database at startup; server will start anyway and keep retrying in the background")
+		logrus.WithFields(fields).Error("failed to initialize database driver; DB-backed endpoints will error until DATABASE_DSN is fixed and the process is restarted")
 		go checkConnection(time.NewTicker(config.Env.Database.PingInterval))
 		return nil
 	}
 
 	DB = conn
+	if err != nil {
+		logrus.WithError(err).Error("database not reachable at startup; server will start anyway — queries will retry automatically as connectivity recovers")
+	} else {
+		logrus.Info("database connection established successfully")
+	}
 	finishDBConnSetup(DB)
 	go checkConnection(time.NewTicker(config.Env.Database.PingInterval))
-	logrus.Info("database connection established successfully")
 	return DB
 }
 
@@ -273,19 +284,14 @@ func GetDB() *gorm.DB {
 // crashes the process: if every attempt in this pass fails, it logs and returns — the periodic
 // checkConnection ticker calls it again on the next tick, so retries continue indefinitely until
 // Postgres/Supabase comes back, and the server self-heals without a manual restart.
+//
+// Deliberately does NOT null out DB while retrying: the previous connection (even if currently
+// unreachable) is left in place until a confirmed-good replacement is ready to swap in, so
+// GetDB() never hands callers a nil *gorm.DB mid-reconnect — that used to cause every DB-backed
+// handler to panic instead of returning a normal query error.
 func reconnectDBConn() {
 	logrus.Warn("attempting to reconnect to database...")
-
-	// Close existing connection to free up resources, and clear DB so health checks and any
-	// code reading infrastructure.GetDB() during this window see an explicit "down" state
-	// instead of a session over a connection we just closed.
-	if DB != nil {
-		if sqlDB, err := DB.DB(); err == nil {
-			logrus.Info("closing stale database connection before reconnecting...")
-			sqlDB.Close()
-		}
-		DB = nil
-	}
+	old := DB
 
 	b := backoff.Backoff{
 		Factor: config.Env.Database.ReconnectFactor,
@@ -302,72 +308,94 @@ func reconnectDBConn() {
 		if err != nil {
 			lastErr = err
 			logrus.WithError(err).WithField("attempt", int(b.Attempt())+1).Error("reconnection failed")
+			// openDBConn may still hand back a usable-but-unreachable *gorm.DB alongside the
+			// error; close it before discarding so retries don't leak pool goroutines.
+			closeGormDB(conn)
 			time.Sleep(b.Duration())
 			continue
 		}
 
-		// Verify connection works
-		if sqlDB, err := conn.DB(); err == nil {
-			if err := sqlDB.Ping(); err != nil {
-				lastErr = err
-				logrus.WithError(err).Error("reconnected but ping failed")
-				sqlDB.Close()
-				time.Sleep(b.Duration())
-				continue
-			}
-		}
-
-		// Successfully reconnected
+		// Successfully reconnected — swap in the new connection, then close the old one.
 		DB = conn
 		finishDBConnSetup(DB)
 		logrus.Info("successfully reconnected to database")
+		closeGormDB(old)
 		b.Reset()
 		return
 	}
 
 	// Give up for this pass only — not fatal. The periodic checkConnection ticker will retry
-	// again on its next tick.
+	// again on its next tick. DB still points at the previous connection, so callers keep
+	// getting normal query errors instead of a nil-DB panic in the meantime.
 	logrus.WithError(lastErr).Error("reconnect attempts exhausted for this pass; will retry again on the next health check tick")
 }
 
-// openDBConn opens a new GORM database connection with optimized settings
+// closeGormDB closes the underlying *sql.DB of db if non-nil, ignoring errors (best-effort
+// cleanup when discarding a stale or failed connection object).
+func closeGormDB(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.Close()
+	}
+}
+
+// openDBConn opens a new GORM database connection with optimized settings.
+//
+// Builds the *sql.DB via plain database/sql.Open first, then wraps it into GORM via
+// postgres.Config{Conn: sqlDB} instead of handing GORM the DSN directly. database/sql.Open is
+// documented to never dial the network — it only validates arguments — so this guarantees the
+// object-construction step itself can't fail for connectivity reasons (e.g. DNS not resolving
+// because Supabase is paused). Handing GORM the DSN directly used to skip that guarantee: its
+// postgres dialector's own Initialize() dials eagerly, so a DNS failure made gorm.Open itself
+// return nil, which is exactly the case that used to leave the global DB nil and made every
+// DB-backed handler panic instead of returning a normal query error.
 func openDBConn(dsn string) (*gorm.DB, error) {
 	// Enhance DSN with necessary parameters
 	dsnWithParams := buildDSN(dsn)
 
-	// CRITICAL: Use postgres.New with PreferSimpleProtocol to force lib/pq behavior
-	// This completely avoids pgx's aggressive statement caching
-	dialector := postgres.New(postgres.Config{
-		DriverName:           "postgres", // Use lib/pq driver (imported with _)
-		DSN:                  dsnWithParams,
-		PreferSimpleProtocol: true, // Force simple protocol - NO prepared statements
-	})
-
-	// Configure GORM
-	db, err := gorm.Open(dialector, &gorm.Config{
-		PrepareStmt:    false, // Double safety: disable at GORM level too
-		TranslateError: true,
-		NowFunc:        func() time.Time { return time.Now().UTC() },
-	})
+	// lib/pq is registered under driver name "postgres" (blank-imported in this package).
+	sqlDB, err := sql.Open("postgres", dsnWithParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	// Get underlying *sql.DB
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
 	}
 
 	// Configure connection pool
 	configureConnectionPool(sqlDB)
 
-	// Test connection (time-bounded — a network blackhole must not hang boot/reconnect forever)
+	// CRITICAL: Use postgres.New with PreferSimpleProtocol to force lib/pq behavior
+	// This completely avoids pgx's aggressive statement caching
+	dialector := postgres.New(postgres.Config{
+		Conn:                 sqlDB, // pre-opened pool — see comment above for why
+		PreferSimpleProtocol: true,  // Force simple protocol - NO prepared statements
+	})
+
+	// Configure GORM. DisableAutomaticPing: gorm.Open() otherwise pings internally with no
+	// timeout/context of its own and, on failure, still returns a fully-valid *gorm.DB — but
+	// relying on that undocumented detail is fragile. We run our own bounded PingContext right
+	// after instead, so connectivity failures here can only come from dialector.Initialize()
+	// itself, which (with a pre-opened Conn) never touches the network.
+	db, err := gorm.Open(dialector, &gorm.Config{
+		PrepareStmt:          false, // Double safety: disable at GORM level too
+		TranslateError:       true,
+		NowFunc:              func() time.Time { return time.Now().UTC() },
+		DisableAutomaticPing: true,
+	})
+	if err != nil {
+		sqlDB.Close()
+		return nil, fmt.Errorf("failed to initialize gorm: %w", err)
+	}
+
+	// Test connection (time-bounded — a network blackhole must not hang boot/reconnect forever).
+	// On failure we deliberately do NOT close/discard db: database/sql's pool re-dials lazily on
+	// every future query, so returning it anyway means callers always get a valid, usable
+	// *gorm.DB. This matters because a nil DB previously caused every DB-backed handler to panic
+	// (nil pointer dereference) instead of failing with a normal, cleanly-propagated query error.
 	pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := sqlDB.PingContext(pingCtx); err != nil {
-		sqlDB.Close()
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return db, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	logrus.Debug("database connection pool configured successfully")
