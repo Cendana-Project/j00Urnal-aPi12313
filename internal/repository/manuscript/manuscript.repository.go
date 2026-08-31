@@ -421,7 +421,7 @@ func (r *Repository) ListByStatuses(ctx context.Context, statuses []constant.Man
 	for i, st := range statuses {
 		inClause[i] = pqStrLit(string(st))
 	}
-	statusWhere := "m.status IN (" + strings.Join(inClause, ",") + ")"
+	statusWhere := "m.status IN (" + strings.Join(inClause, ",") + ") AND m.deleted_at IS NULL"
 
 	return r.listWithWhere(ctx, statusWhere, pg)
 }
@@ -456,10 +456,15 @@ func (r *Repository) listWithWhere(ctx context.Context, where string, pg *pagina
 		return nil, 0, err
 	}
 
-	// Fetch manuscripts (inline limit/offset as integers — no bind params)
+	// Fetch manuscripts (inline limit/offset as integers — no bind params).
+	// Order by last-updated (falling back to created_at for rows never updated) rather than
+	// created_at alone: sorting by created_at means a manuscript that just changed status (e.g.
+	// submitted -> under review, or accepted) never moves toward the top of an "active" list —
+	// it stays buried at its original submission position, which made status changes look like
+	// the submission had vanished from every chief-editor/editor tab.
 	var manuscripts []entity.Manuscript
 	selectSQL := `SELECT m.* FROM manuscripts m WHERE ` + where +
-		` ORDER BY m.created_at DESC LIMIT ` + fmt.Sprintf("%d", pageSize) + ` OFFSET ` + fmt.Sprintf("%d", offset)
+		` ORDER BY COALESCE(m.updated_at, m.created_at) DESC LIMIT ` + fmt.Sprintf("%d", pageSize) + ` OFFSET ` + fmt.Sprintf("%d", offset)
 
 	if err := db(ctx).Raw(selectSQL).Scan(&manuscripts).Error; err != nil {
 		return nil, 0, err

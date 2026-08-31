@@ -430,7 +430,7 @@ func (c *Controller) Publish(ctx *gin.Context) {
 			return
 		}
 		if m.IssueID == nil || *m.IssueID == "" {
-			util.HandleError(ctx, constant.ErrValidationError)
+			util.HandleError(ctx, manuscript.ErrManuscriptNoIssueAssigned)
 			return
 		}
 		issueID = *m.IssueID
