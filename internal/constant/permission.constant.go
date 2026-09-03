@@ -88,6 +88,11 @@ var DefaultRolePermissions = map[string][]string{
 		PermissionManuscriptManage,
 		PermissionJournalManage,
 		PermissionSubmissionAssignEditor,
+		// Chief Editor is already special-cased in validateEditorAssignment() to bypass the
+		// assigned-editor check for accept/decline/round-decision — without this permission
+		// they could never reach that code at all, including the read-only review-detail
+		// endpoint that shows who's reviewing (see migration 20260901120000).
+		PermissionReviewManage,
 	},
 
 	RoleAuthor: {
