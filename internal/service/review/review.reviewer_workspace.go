@@ -560,14 +560,12 @@ func (s *Service) AcceptReviewerAssignment(ctx context.Context, reviewerID, assi
 		return constant.ErrReviewerAssignmentNotAllowed
 	}
 
-	now := time.Now().UTC()
-	updates := map[string]any{
-		"status":                 constant.ReviewAssignmentStatusAccepted,
-		"invitation_accepted_at": now,
-		"updated_at":             now,
-	}
-	if err := s.reviewRepo.UpdateAssignment(ctx, a.ID, updates); err != nil {
+	transitioned, err := s.reviewRepo.AcceptInvitedAssignment(ctx, a.ID, reviewerID)
+	if err != nil {
 		return err
+	}
+	if !transitioned {
+		return constant.ErrReviewerAssignmentNotAllowed
 	}
 
 	util.SafeGo(func() { s.notifyEditorReviewerAccepted(a, reviewerID) })

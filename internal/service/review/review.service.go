@@ -767,7 +767,8 @@ func (s *Service) CompleteReviewerInvitation(ctx context.Context, token, passwor
 	}
 
 	now := time.Now()
-	return infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var reviewerID string
+	transactionErr := infrastructure.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var userID string
 
 		if existing == nil {
@@ -823,19 +824,35 @@ func (s *Service) CompleteReviewerInvitation(ctx context.Context, token, passwor
 			return err
 		}
 
-		accepted := now
-		up := map[string]any{
-			"reviewer_id":            userID,
-			"status":                 constant.ReviewAssignmentStatusAccepted,
-			"invitation_accepted_at": accepted,
-			"invitation_token":       gorm.Expr("NULL"),
-			"updated_at":             now,
-		}
-		if err := tx.Model(&entity.ReviewAssignment{}).Where("id = ?", a.ID).Updates(up).Error; err != nil {
+		transitioned, err := s.reviewRepo.ClaimInvitedAssignmentTx(tx, a.ID, userID)
+		if err != nil {
 			return err
 		}
+		if !transitioned {
+			return constant.ErrInvitationAlreadyAccepted
+		}
+		reviewerID = userID
 		return nil
 	})
+
+	return notifyReviewerAcceptedAfterTransaction(transactionErr, reviewerID, func(reviewerID string) {
+		s.notifyEditorReviewerAccepted(a, reviewerID)
+	})
+}
+
+// notifyReviewerAcceptedAfterTransaction dispatches only after GORM reports that the transaction,
+// including its commit, succeeded. The logged-in acceptance path dispatches independently.
+func notifyReviewerAcceptedAfterTransaction(
+	transactionErr error,
+	reviewerID string,
+	notify func(reviewerID string),
+) error {
+	if transactionErr != nil {
+		return transactionErr
+	}
+
+	util.SafeGo(func() { notify(reviewerID) })
+	return nil
 }
 
 func (s *Service) pickUsernameForInvitation(ctx context.Context, invitedEmail string, existing *entity.User) (string, error) {

@@ -25,12 +25,22 @@ services:
         value: info
       - key: GRACEFUL_SHUTDOWN_TIMEOUT
         value: 30s
+
+      # Public URLs (set in Render dashboard for CORS and links in reviewer emails)
+      # - SERVER_BASE_URL: Public API URL, e.g. https://journal-api.onrender.com
+      # - SERVER_FRONTEND_URL: Public frontend origin. Multiple origins may be comma-separated;
+      #   the first origin is used when generating email links.
       
       # Database Configuration (set in Render dashboard)
       # - DATABASE_DSN: Pooled connection (use Supabase pooler URL port 6543 with pgbouncer=true)
       #   Example: postgresql://postgres.xxx:[PASSWORD]@aws-0-region.pooler.supabase.com:6543/postgres?pgbouncer=true
       # - DATABASE_DIRECT_DSN: Direct connection for migrations (port 5432, no pgbouncer)
       #   Example: postgresql://postgres.xxx:[PASSWORD]@aws-0-region.pooler.supabase.com:5432/postgres
+
+      # Supabase API settings (required for storage and the supabase_rest health probe)
+      # - SUPABASE_URL: Project API URL, e.g. https://project-ref.supabase.co
+      # - SUPABASE_SERVICE_ROLE_KEY: Service-role API key (secret; set in Render dashboard)
+      # - SUPABASE_BUCKET: Storage bucket name (defaults to publication)
       
       # Database connection pool settings (optional - using defaults)
       - key: DATABASE_MAX_IDLE_CONNS
@@ -58,6 +68,9 @@ services:
         value: 720h
       
       # SMTP Email Configuration (optional - set if using email features)
+      # - EMAIL_ENABLED: Set to true to enable delivery
+      # - EMAIL_PROVIDER: brevo-api or smtp
+      # - EMAIL_TIMEOUT_SECONDS: HTTP/SMTP timeout in seconds (defaults to 10)
       # - SMTP_HOST: SMTP server hostname
       # - SMTP_PORT: SMTP port (587 for TLS, 465 for SSL)
       # - SMTP_USERNAME: SMTP username

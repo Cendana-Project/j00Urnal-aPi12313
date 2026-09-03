@@ -38,6 +38,11 @@ var (
 		StatusCode: http.StatusBadRequest,
 		Message:    "Terms and Conditions must be accepted.",
 	}
+	ErrManuscriptNoIssueAssigned = response.CustomError{
+		Code:       "MANUSCRIPT_NO_ISSUE_ASSIGNED",
+		StatusCode: http.StatusBadRequest,
+		Message:    "This manuscript is not assigned to an issue yet. Select an issue to publish it to.",
+	}
 )
 
 type Service struct {

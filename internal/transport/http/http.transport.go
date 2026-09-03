@@ -95,7 +95,9 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 	// ========== PUBLIC READ ACCESS ==========
 	v1.GET("/journals/:id", t.journalController.GetByID)
 	v1.GET("/journals", t.journalController.GetAll)
+	v1.GET("/volumes", transportmw.AuthOptional(rdb), t.volumeController.GetAll)
 	v1.GET("/volumes/:id", t.volumeController.GetByID)
+	v1.GET("/issues", transportmw.AuthOptional(rdb), t.issueController.GetAll)
 	v1.GET("/issues/:id", t.issueController.GetByID)
 	v1.GET("/manuscripts/:id", t.manuscriptController.GetByID)
 	v1.GET("/manuscripts", t.manuscriptController.GetAll)
@@ -145,9 +147,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			journals.POST("/:id/volumes", requireJournalManage, t.volumeController.Create)
 		}
 
-		// Volumes (public read, protected write)
-		v1.GET("/volumes", t.volumeController.GetAll)
-
+		// Volumes (protected write)
 		volumes := protected.Group("/volumes")
 		{
 			volumes.PUT("/:id", requireJournalManage, t.volumeController.Update)
@@ -157,9 +157,7 @@ func (t *Transport) InitRoute(rdb *redis.Client) {
 			volumes.POST("/:id/issues", requireJournalManage, t.issueController.Create)
 		}
 
-		// Issues (public read, protected write)
-		v1.GET("/issues", t.issueController.GetAll)
-
+		// Issues (protected write)
 		issues := protected.Group("/issues")
 		{
 			issues.PUT("/:id", requireJournalManage, t.issueController.UpdateMetadata)

@@ -394,8 +394,15 @@ func ToReviewerWorkspaceResponse(
 			editorName = formatUserName(m.AssignedEditor)
 		}
 		var mFile *response.ManuscriptFileResponse
-		if len(m.Files) > 0 {
-			f := m.Files[0] // absolute latest based on repo ordering
+		// m.Files holds every file type (main text, cover letter, figures, ...) ordered
+		// ASC by version/uploaded_at; only non-MAIN types are hardcoded to version 1, so
+		// picking Files[0] blindly could hand the reviewer a cover letter instead of the
+		// manuscript. Walk in order and keep the latest MAIN match (last one wins = highest
+		// version, since the slice is ascending).
+		for _, f := range m.Files {
+			if f.FileType != constant.ManuscriptFileTypeMain {
+				continue
+			}
 			mFile = &response.ManuscriptFileResponse{
 				ID:         f.ID,
 				FileType:   string(f.FileType),
