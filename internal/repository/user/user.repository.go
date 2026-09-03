@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/api-monolith-template/internal/constant"
 	"github.com/api-monolith-template/internal/infrastructure"
 	"github.com/api-monolith-template/internal/model/entity"
 )
@@ -179,18 +180,65 @@ func (r *Repository) InsertActiveFull(ctx context.Context, in InsertUserFull) er
 // ====== Untuk /v1/me (global) ======
 
 func (r *Repository) GetUserRoleSlug(userID string) (string, error) { // role global (opsional)
-	var slug string
-	err := infrastructure.GetDB().Raw(`
+	uid, err := uuid.Parse(strings.TrimSpace(userID))
+	if err != nil {
+		return "", nil
+	}
+
+	// A user may legitimately have more than one role (for example AUTHOR + REVIEWER).
+	// Fetch every active role without bound parameters so the result does not depend on
+	// PostgreSQL's unspecified LIMIT order or PgBouncer prepared-statement state.
+	var rows []struct {
+		Slug string
+	}
+	err = infrastructure.GetDB().Raw(`
 		SELECT r.slug
 		FROM user_roles ur
 		JOIN roles r ON r.id = ur.role_id
-		WHERE ur.user_id = ?
-		LIMIT 1
-	`, userID).Scan(&slug).Error
+		WHERE ur.user_id = '` + uid.String() + `'::uuid
+		  AND r.active = TRUE
+		  AND r.deleted_at IS NULL
+	`).Scan(&rows).Error
 	if err != nil {
 		return "", err
 	}
-	return strings.ToUpper(slug), nil // <=== changed: pastikan UPPERCASE
+
+	slugs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		slugs = append(slugs, row.Slug)
+	}
+	return PrimaryGlobalRoleSlug(slugs), nil
+}
+
+// PrimaryGlobalRoleSlug defines the product's deterministic role used by clients that still
+// consume the legacy single `role` field. Authorization continues to check the complete role
+// set; this priority only controls navigation/presentation in /v1/me and auth responses.
+func PrimaryGlobalRoleSlug(slugs []string) string {
+	priority := map[string]int{
+		constant.RoleSuperAdmin:  0,
+		constant.RoleChiefEditor: 1,
+		constant.RoleEditor:      2,
+		constant.RoleReviewer:    3,
+		constant.RoleAuthor:      4,
+	}
+
+	bestSlug := ""
+	bestPriority := int(^uint(0) >> 1)
+	for _, slug := range slugs {
+		normalized := strings.ToUpper(strings.TrimSpace(slug))
+		if normalized == "" {
+			continue
+		}
+		p, known := priority[normalized]
+		if !known {
+			p = len(priority)
+		}
+		if p < bestPriority || (p == bestPriority && (bestSlug == "" || normalized < bestSlug)) {
+			bestSlug = normalized
+			bestPriority = p
+		}
+	}
+	return bestSlug
 }
 
 type HospitalBrief struct {

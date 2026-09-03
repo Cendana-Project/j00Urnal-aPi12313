@@ -532,6 +532,51 @@ func (r *Repository) UpdateAssignment(ctx context.Context, id string, updates ma
 		Where("id = ?", id).Updates(updates).Error
 }
 
+// ClaimInvitedAssignmentTx atomically claims a token-based invitation for a newly-created or
+// existing reviewer account. The INVITED predicate makes the caller that changes the state the
+// sole owner of the acceptance notification.
+func (r *Repository) ClaimInvitedAssignmentTx(tx *gorm.DB, assignmentID, reviewerID string) (bool, error) {
+	result := tx.Exec(claimInvitedAssignmentQuery(assignmentID, reviewerID))
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// AcceptInvitedAssignment atomically accepts an invitation already owned by a logged-in reviewer.
+func (r *Repository) AcceptInvitedAssignment(ctx context.Context, assignmentID, reviewerID string) (bool, error) {
+	result := db(ctx).Exec(acceptInvitedAssignmentQuery(assignmentID, reviewerID))
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
+}
+
+func claimInvitedAssignmentQuery(assignmentID, reviewerID string) string {
+	return `
+UPDATE review_assignments
+SET reviewer_id = ` + pqLit(reviewerID) + `,
+    status = 'ACCEPTED',
+    invitation_accepted_at = NOW(),
+    invitation_token = NULL,
+    updated_at = NOW()
+WHERE id = ` + pqLit(assignmentID) + `
+  AND status = 'INVITED'
+  AND reviewer_id IS NULL
+  AND invitation_token IS NOT NULL`
+}
+
+func acceptInvitedAssignmentQuery(assignmentID, reviewerID string) string {
+	return `
+UPDATE review_assignments
+SET status = 'ACCEPTED',
+    invitation_accepted_at = NOW(),
+    updated_at = NOW()
+WHERE id = ` + pqLit(assignmentID) + `
+  AND reviewer_id = ` + pqLit(reviewerID) + `
+  AND status = 'INVITED'`
+}
+
 // ====== Review File ======
 
 func (r *Repository) CreateReviewFile(ctx context.Context, file *entity.ReviewFile) error {

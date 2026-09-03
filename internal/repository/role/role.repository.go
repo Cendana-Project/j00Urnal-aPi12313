@@ -137,7 +137,7 @@ func (r *Repository) ListRolesByUser(ctx context.Context, userID string) ([]enti
 SELECT r.id, r.name, r.slug, r.description, r.active, r.created_at, r.updated_at, r.deleted_at
 FROM user_roles ur
 JOIN roles r ON r.id = ur.role_id
-WHERE ur.user_id = ` + pqLit(userID) + ` AND r.active = TRUE
+WHERE ur.user_id = ` + pqLit(userID) + ` AND r.active = TRUE AND r.deleted_at IS NULL
 ORDER BY r.name`
 	if err := infrastructure.GetDB().WithContext(ctx).Raw(q).Scan(&roles).Error; err != nil {
 		return nil, err

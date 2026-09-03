@@ -31,11 +31,11 @@ RUN adduser -D -s /bin/sh appuser
 # Health check script (create before switching users)
 # Use wget if available, otherwise use nc (netcat) as fallback
 RUN echo '#!/bin/sh' > /healthcheck.sh && \
-    echo 'PORT=${PORT:-8080}' >> /healthcheck.sh && \
+    echo 'APP_PORT=${SERVER_PORT:-${PORT:-8080}}' >> /healthcheck.sh && \
     echo 'if command -v wget > /dev/null 2>&1; then' >> /healthcheck.sh && \
-    echo '  wget --no-verbose --tries=1 --spider http://localhost:${PORT}/_internal/healthz || exit 1' >> /healthcheck.sh && \
+    echo '  wget --no-verbose --tries=1 --spider http://localhost:${APP_PORT}/_internal/healthz || exit 1' >> /healthcheck.sh && \
     echo 'elif command -v nc > /dev/null 2>&1; then' >> /healthcheck.sh && \
-    echo '  echo "GET /_internal/healthz HTTP/1.1\r\nHost: localhost\r\n\r\n" | nc localhost ${PORT} | grep -q "200 OK" || exit 1' >> /healthcheck.sh && \
+    echo '  echo "GET /_internal/healthz HTTP/1.1\r\nHost: localhost\r\n\r\n" | nc localhost ${APP_PORT} | grep -q "200 OK" || exit 1' >> /healthcheck.sh && \
     echo 'else' >> /healthcheck.sh && \
     echo '  exit 0' >> /healthcheck.sh && \
     echo 'fi' >> /healthcheck.sh && \
@@ -70,12 +70,22 @@ RUN echo '#!/bin/sh' > /entrypoint.sh && \
     echo '  log "⚠ Migration exited with code $MIGRATION_EXIT (may be OK if migrations are current)"' >> /entrypoint.sh && \
     echo 'fi' >> /entrypoint.sh && \
     echo '' >> /entrypoint.sh && \
-    echo 'log "Running database seeding..."' >> /entrypoint.sh && \
-    echo './main seed' >> /entrypoint.sh && \
-    echo 'log "✓ Database seeding completed"' >> /entrypoint.sh && \
+    echo '# Never seed production automatically. In non-production, seeding is best-effort so a' >> /entrypoint.sh && \
+    echo '# temporary database outage cannot prevent the API server from starting.' >> /entrypoint.sh && \
+    echo 'if [ "${ENV:-development}" = "production" ]; then' >> /entrypoint.sh && \
+    echo '  log "Skipping automatic database seeding in production"' >> /entrypoint.sh && \
+    echo 'else' >> /entrypoint.sh && \
+    echo '  log "Running database seeding (best effort)..."' >> /entrypoint.sh && \
+    echo '  if ./main seed; then' >> /entrypoint.sh && \
+    echo '    log "Database seeding completed"' >> /entrypoint.sh && \
+    echo '  else' >> /entrypoint.sh && \
+    echo '    SEED_EXIT=$?' >> /entrypoint.sh && \
+    echo '    log "Database seeding exited with code $SEED_EXIT; continuing server startup"' >> /entrypoint.sh && \
+    echo '  fi' >> /entrypoint.sh && \
+    echo 'fi' >> /entrypoint.sh && \
     echo '' >> /entrypoint.sh && \
     echo 'log "=========================================="' >> /entrypoint.sh && \
-    echo 'log "Starting server on port ${PORT:-8080}..."' >> /entrypoint.sh && \
+    echo 'log "Starting server on port ${SERVER_PORT:-${PORT:-8080}}..."' >> /entrypoint.sh && \
     echo 'log "=========================================="' >> /entrypoint.sh && \
     echo 'exec ./main server' >> /entrypoint.sh && \
     chmod +x /entrypoint.sh
@@ -99,7 +109,7 @@ USER appuser
 EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=15s --start-period=15s --retries=3 \
   CMD /healthcheck.sh
 
 # Run migrations then start server

@@ -282,15 +282,15 @@ func (c *EnvConfig) Validate() error {
 		errs = append(errs, fmt.Sprintf("ENV must be one of: development, staging, production (got: %s)", c.Env))
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
-	}
-
-	if c.Supabase.URL == "" {
+	if strings.TrimSpace(c.Supabase.URL) == "" {
 		errs = append(errs, "SUPABASE_URL is required")
 	}
-	if c.Supabase.ServiceRoleKey == "" {
+	if strings.TrimSpace(c.Supabase.ServiceRoleKey) == "" {
 		errs = append(errs, "SUPABASE_SERVICE_ROLE_KEY is required")
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 
 	return nil

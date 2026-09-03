@@ -81,7 +81,7 @@ func (ctl *Controller) VerifyPIN(c *gin.Context) {
 	}
 
 	// Samakan struktur dengan LoginPublic: gunakan response.LoginResponse  // <=== changed
-	roleSlug := "" // Jika ingin ada role, tambahkan pengambilan role di service VerifyPIN  // <=== changed
+	roleSlug := ctl.primaryRoleForIssuedToken(tokens.AccessToken)
 
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
@@ -114,10 +114,11 @@ func (ctl *Controller) LoginPublic(c *gin.Context) {
 		return
 	}
 
-	roleSlug := ""
-	if len(roles) > 0 {
-		roleSlug = roles[0].Slug
+	roleSlugs := make([]string, 0, len(roles))
+	for _, role := range roles {
+		roleSlugs = append(roleSlugs, role.Slug)
 	}
+	roleSlug := userrepo.PrimaryGlobalRoleSlug(roleSlugs)
 
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
@@ -144,13 +145,7 @@ func (ctl *Controller) Refresh(c *gin.Context) {
 	}
 
 	// --- Ambil user_id (sub) dari access token baru, lalu dapatkan role slug --- // <=== added
-	userID, _ := extractSubFromJWT(tokens.AccessToken)
-	roleSlug := ""
-	if userID != "" && ctl.userRepo != nil {
-		if slug, err := ctl.userRepo.GetUserRoleSlug(userID); err == nil {
-			roleSlug = slug
-		}
-	}
+	roleSlug := ctl.primaryRoleForIssuedToken(tokens.AccessToken)
 
 	resp := response.NewResponseOK()
 	resp.StatusCode = http.StatusOK
@@ -264,4 +259,16 @@ func extractSubFromJWT(tok string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(claims.Sub), nil
+}
+
+func (ctl *Controller) primaryRoleForIssuedToken(token string) string {
+	userID, err := extractSubFromJWT(token)
+	if err != nil || userID == "" || ctl.userRepo == nil {
+		return ""
+	}
+	slug, err := ctl.userRepo.GetUserRoleSlug(userID)
+	if err != nil {
+		return ""
+	}
+	return slug
 }
